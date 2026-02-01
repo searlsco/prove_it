@@ -361,7 +361,7 @@ function main() {
       } else {
         // Soft reminder for non-git repos
         emitJson({
-          decision: "allow",
+          decision: "approve",
           reason: softStopReminder(),
         });
       }
@@ -399,7 +399,7 @@ function main() {
     // If last run for this exact state passed recently, allow stop with reminder.
     if (cacheFresh && sameInputs && last.ok === true) {
       emitJson({
-        decision: "allow",
+        decision: "approve",
         reason: softStopReminder(),
       });
       process.exit(0);
@@ -444,7 +444,7 @@ function main() {
     if (run.code === 0) {
       // Soft reminder even on success - prompt reconsideration
       emitJson({
-        decision: "allow",
+        decision: "approve",
         reason: softStopReminder(),
       });
       process.exit(0);
