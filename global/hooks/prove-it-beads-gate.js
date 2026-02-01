@@ -98,8 +98,15 @@ function loadEffectiveConfig(projectDir) {
 }
 
 function isBeadsRepo(dir) {
-  // Check if .beads directory exists
-  return fs.existsSync(path.join(dir, ".beads"));
+  // Check if .beads directory exists AND is a project (not just global config)
+  // A beads project has config.yaml or beads.db; the global ~/.beads/ only has registry.json
+  const beadsDir = path.join(dir, ".beads");
+  if (!fs.existsSync(beadsDir)) return false;
+  return (
+    fs.existsSync(path.join(beadsDir, "config.yaml")) ||
+    fs.existsSync(path.join(beadsDir, "beads.db")) ||
+    fs.existsSync(path.join(beadsDir, "metadata.json"))
+  );
 }
 
 function getInProgressBeads(dir) {

@@ -506,9 +506,14 @@ function cmdDiagnose() {
     log(`  [ ] Local config missing (optional): .claude/verifiability.local.json`);
   }
 
-  // Check beads
+  // Check beads - must be a project .beads/, not the global ~/.beads/ config
   const beadsDir = path.join(repoRoot, ".beads");
-  if (fs.existsSync(beadsDir)) {
+  const isBeadsProject =
+    fs.existsSync(beadsDir) &&
+    (fs.existsSync(path.join(beadsDir, "config.yaml")) ||
+      fs.existsSync(path.join(beadsDir, "beads.db")) ||
+      fs.existsSync(path.join(beadsDir, "metadata.json")));
+  if (isBeadsProject) {
     log("  [x] Beads directory exists: .beads/");
     log("      (beads enforcement is active for this repo)");
   } else {

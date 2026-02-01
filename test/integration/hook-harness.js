@@ -121,11 +121,15 @@ function createSuiteGate(dir, shouldPass = true) {
 
 /**
  * Initialize beads in the given directory.
+ * Creates the minimal structure that proves it's a beads project.
  *
  * @param {string} dir - Path to the directory
  */
 function initBeads(dir) {
-  fs.mkdirSync(path.join(dir, ".beads"), { recursive: true });
+  const beadsDir = path.join(dir, ".beads");
+  fs.mkdirSync(beadsDir, { recursive: true });
+  // Create config.yaml to indicate this is a beads project (not just global config)
+  fs.writeFileSync(path.join(beadsDir, "config.yaml"), "# beads config\n", "utf8");
 }
 
 module.exports = {
