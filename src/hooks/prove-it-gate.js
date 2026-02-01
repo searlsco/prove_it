@@ -66,7 +66,24 @@ function loadEffectiveConfig(projectDir) {
   const globalCfgPath = path.join(baseDir, "config.json");
 
   let cfg = defaultConfig();
-  cfg = mergeDeep(cfg, loadJson(globalCfgPath));
+  const globalCfg = loadJson(globalCfgPath);
+  cfg = mergeDeep(cfg, globalCfg);
+
+  // Auto-migrate old config
+  if (globalCfg && (globalCfg._version || 1) < 3) {
+    // v2->v3: permissionDecision "ask" -> "allow"
+    if (cfg.preToolUse && cfg.preToolUse.permissionDecision === "ask") {
+      cfg.preToolUse.permissionDecision = "allow";
+    }
+    // Write migrated config back
+    try {
+      const migrated = { ...globalCfg, _version: 3 };
+      if (migrated.preToolUse) migrated.preToolUse.permissionDecision = "allow";
+      writeJson(globalCfgPath, migrated);
+    } catch {
+      // Ignore write errors
+    }
+  }
 
   // Per-project override (optional)
   const localCfgPath = path.join(projectDir, ".claude", "verifiability.local.json");

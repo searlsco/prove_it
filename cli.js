@@ -147,7 +147,7 @@ function cmdInstall() {
     const existingVersion = existingCfg._version || 1;
     if (existingVersion < CURRENT_CONFIG_VERSION) {
       log("");
-      log("Note: Your config may need migration. Run: prove-it migrate");
+      log("Note: Your config may need migration. Run: prove_it migrate");
     }
   }
 
