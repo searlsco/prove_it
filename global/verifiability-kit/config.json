@@ -1,0 +1,21 @@
+{
+  "suiteGate": {
+    "command": "./scripts/test",
+    "require": true
+  },
+  "preToolUse": {
+    "enabled": true,
+    "permissionDecision": "ask",
+    "gatedCommandRegexes": [
+      "(^|\\s)git\\s+commit\\b",
+      "(^|\\s)git\\s+push\\b",
+      "(^|\\s)(beads|bd)\\s+(done|finish|close)\\b"
+    ]
+  },
+  "stop": {
+    "enabled": true,
+    "cacheSeconds": 900,
+    "maxOutputLines": 200,
+    "maxOutputChars": 12000
+  }
+}

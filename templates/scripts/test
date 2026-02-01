@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# CCVK suite gate stub.
+#
+# Replace this with the REAL full-suite command for this repository.
+# This script is intentionally a single entrypoint so Claude (and humans) have one deterministic gate.
+#
+# Examples (choose what applies):
+#   - Node:   npm test && npm run lint
+#   - Python: python -m pytest && ruff check . && mypy .
+#   - Go:     go test ./... && golangci-lint run
+#   - Rust:   cargo test && cargo fmt --check && cargo clippy -- -D warnings
+#
+# IMPORTANT:
+# - Keep this script deterministic and CI-compatible.
+# - Avoid interactive prompts.
+# - Make it fast enough to run frequently; add a separate scripts/test-fast if needed.
+
+echo "ERROR: scripts/test is a stub. Implement the repository suite gate here." >&2
+exit 1

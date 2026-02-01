@@ -1,0 +1,12 @@
+{
+  "suiteGate": {
+    "command": "./scripts/test",
+    "require": true
+  },
+  "preToolUse": {
+    "permissionDecision": "ask"
+  },
+  "stop": {
+    "cacheSeconds": 900
+  }
+}
