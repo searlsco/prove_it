@@ -15,7 +15,7 @@ const os = require("os");
 const path = require("path");
 
 // Current config version
-const CURRENT_CONFIG_VERSION = 2;
+const CURRENT_CONFIG_VERSION = 3;
 
 // ============================================================================
 // Shared utilities
@@ -209,9 +209,9 @@ function cmdInstall() {
   log(`  Config: ${dstCfg}`);
   log(`  Settings merged: ${settingsPath}`);
   log("");
-  log("══════════════════════════════════════════════════");
+  log("════════════════════════════════════════════════════════════════════");
   log("IMPORTANT: Restart Claude Code for hooks to take effect.");
-  log("══════════════════════════════════════════════════");
+  log("════════════════════════════════════════════════════════════════════");
   log("");
   log("Next steps:");
   log("  1. Restart Claude Code (required)");
@@ -565,6 +565,16 @@ function cmdMigrate() {
       log("    - Changed suiteGate.command from ./scripts/test to ./script/test");
     }
     config._version = 2;
+  }
+
+  // Migration v2 -> v3: permissionDecision "ask" -> "allow"
+  if (config._version < 3) {
+    log("  v2 -> v3: Changing permissionDecision from 'ask' to 'allow'");
+    if (config.preToolUse && config.preToolUse.permissionDecision === "ask") {
+      config.preToolUse.permissionDecision = "allow";
+      log("    - Suite gate provides safety; no need to also require user confirmation");
+    }
+    config._version = 3;
   }
 
   // Write updated config

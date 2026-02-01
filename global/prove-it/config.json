@@ -1,12 +1,12 @@
 {
-  "_version": 2,
+  "_version": 3,
   "suiteGate": {
     "command": "./script/test",
     "require": true
   },
   "preToolUse": {
     "enabled": true,
-    "permissionDecision": "ask",
+    "permissionDecision": "allow",
     "gatedCommandRegexes": [
       "(^|\\s)git\\s+commit\\b",
       "(^|\\s)git\\s+push\\b",
