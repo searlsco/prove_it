@@ -7,10 +7,15 @@
  *   uninstall - Remove prove-it from global config
  *   init      - Initialize prove-it in current repository
  *   deinit    - Remove prove-it files from current repository
+ *   diagnose  - Check installation status and report issues
+ *   migrate   - Upgrade config to latest version
  */
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+
+// Current config version
+const CURRENT_CONFIG_VERSION = 2;
 
 // ============================================================================
 // Shared utilities
@@ -133,10 +138,17 @@ function cmdInstall() {
     chmodX(dst);
   }
 
-  // Create config if missing
+  // Create config if missing, or check if migration needed
   ensureDir(dstKitDir);
-  if (!fs.existsSync(dstCfg)) {
+  const existingCfg = readJson(dstCfg);
+  if (!existingCfg) {
     fs.copyFileSync(srcCfg, dstCfg);
+  } else {
+    const existingVersion = existingCfg._version || 1;
+    if (existingVersion < CURRENT_CONFIG_VERSION) {
+      log("");
+      log("Note: Your config may need migration. Run: prove-it migrate");
+    }
   }
 
   // Merge settings.json hooks
@@ -146,6 +158,7 @@ function cmdInstall() {
 
   const hookVerifGate = path.join(dstHooksDir, "prove-it-gate.js");
   const hookSessionStart = path.join(dstHooksDir, "prove-it-session-start.js");
+  const hookBeadsGate = path.join(dstHooksDir, "prove-it-beads-gate.js");
 
   addHookGroup(settings.hooks, "SessionStart", {
     matcher: "startup|resume|clear|compact",
@@ -163,6 +176,17 @@ function cmdInstall() {
       {
         type: "command",
         command: `node "${hookVerifGate}"`,
+      },
+    ],
+  });
+
+  // Beads enforcement for Edit/Write/NotebookEdit
+  addHookGroup(settings.hooks, "PreToolUse", {
+    matcher: "Edit|Write|NotebookEdit|Bash",
+    hooks: [
+      {
+        type: "command",
+        command: `node "${hookBeadsGate}"`,
       },
     ],
   });
@@ -185,9 +209,14 @@ function cmdInstall() {
   log(`  Config: ${dstCfg}`);
   log(`  Settings merged: ${settingsPath}`);
   log("");
-  log("Next:");
-  log("  - Restart Claude Code (hooks snapshot at startup).");
-  log("  - (Optional) Run: prove-it init  in a repo to add local templates.");
+  log("══════════════════════════════════════════════════");
+  log("IMPORTANT: Restart Claude Code for hooks to take effect.");
+  log("══════════════════════════════════════════════════");
+  log("");
+  log("Next steps:");
+  log("  1. Restart Claude Code (required)");
+  log("  2. Run: prove-it init  in a repo to add local templates");
+  log("  3. Run: prove-it diagnose  to verify installation");
 }
 
 // ============================================================================
@@ -201,7 +230,8 @@ function removeProveItGroups(groups) {
     const serialized = JSON.stringify(hooks);
     return (
       !serialized.includes("prove-it-gate.js") &&
-      !serialized.includes("prove-it-session-start.js")
+      !serialized.includes("prove-it-session-start.js") &&
+      !serialized.includes("prove-it-beads-gate.js")
     );
   });
 }
@@ -225,6 +255,7 @@ function cmdUninstall() {
   rmIfExists(path.join(claudeDir, "prove-it"));
   rmIfExists(path.join(claudeDir, "hooks", "prove-it-gate.js"));
   rmIfExists(path.join(claudeDir, "hooks", "prove-it-session-start.js"));
+  rmIfExists(path.join(claudeDir, "hooks", "prove-it-beads-gate.js"));
 
   log("prove-it uninstalled (best-effort).");
   log(`  Settings updated: ${settingsPath}`);
@@ -245,20 +276,20 @@ function cmdInit() {
 
   copyDir(tpl, repoRoot);
 
-  // Create stub scripts/test if missing
-  const scriptsTest = path.join(repoRoot, "scripts", "test");
-  if (!fs.existsSync(scriptsTest)) {
-    ensureDir(path.dirname(scriptsTest));
-    fs.copyFileSync(path.join(srcRoot, "templates", "scripts", "test"), scriptsTest);
-    chmodX(scriptsTest);
+  // Create stub script/test if missing
+  const scriptTest = path.join(repoRoot, "script", "test");
+  if (!fs.existsSync(scriptTest)) {
+    ensureDir(path.dirname(scriptTest));
+    fs.copyFileSync(path.join(srcRoot, "templates", "script", "test"), scriptTest);
+    chmodX(scriptTest);
   }
 
   log("prove-it project templates copied (non-destructive).");
   log(`  Added (if missing): ${path.join(repoRoot, ".claude")}`);
-  log(`  Added (if missing): ${scriptsTest}`);
+  log(`  Added (if missing): ${scriptTest}`);
   log("");
   log("Next:");
-  log("  - Edit scripts/test to run your real suite gate.");
+  log("  - Edit script/test to run your real suite gate.");
   log("  - Fill in .claude/rules/project.md with repo-specific commands/oracles.");
   log("  - (Optional) Commit .claude/rules/* and .claude/ui-evals/* for team sharing.");
 }
@@ -276,11 +307,7 @@ const PROVE_IT_PROJECT_FILES = [
   ".claude/ui-evals/ui-evals.md",
 ];
 
-const PROVE_IT_PROJECT_DIRS = [
-  ".claude/verification",
-  ".claude/ui-evals",
-  ".claude/rules",
-];
+const PROVE_IT_PROJECT_DIRS = [".claude/verification", ".claude/ui-evals", ".claude/rules"];
 
 function cmdDeinit() {
   const repoRoot = process.cwd();
@@ -314,7 +341,31 @@ function cmdDeinit() {
     }
   }
 
-  // Check scripts/test - only remove if it's still the stub
+  // Check script/test - only remove if it's still the stub
+  const scriptTest = path.join(repoRoot, "script", "test");
+  if (fs.existsSync(scriptTest)) {
+    try {
+      const content = fs.readFileSync(scriptTest, "utf8");
+      if (content.includes("prove-it suite gate stub")) {
+        rmIfExists(scriptTest);
+        removed.push("script/test");
+        // Remove script/ dir if empty
+        const scriptDir = path.join(repoRoot, "script");
+        try {
+          if (fs.readdirSync(scriptDir).length === 0) {
+            fs.rmdirSync(scriptDir);
+            removed.push("script/");
+          }
+        } catch {}
+      } else {
+        skipped.push("script/test (customized)");
+      }
+    } catch {
+      skipped.push("script/test (error reading)");
+    }
+  }
+
+  // Legacy: also check scripts/test
   const scriptsTest = path.join(repoRoot, "scripts", "test");
   if (fs.existsSync(scriptsTest)) {
     try {
@@ -322,7 +373,6 @@ function cmdDeinit() {
       if (content.includes("prove-it suite gate stub")) {
         rmIfExists(scriptsTest);
         removed.push("scripts/test");
-        // Remove scripts/ dir if empty
         const scriptsDir = path.join(repoRoot, "scripts");
         try {
           if (fs.readdirSync(scriptsDir).length === 0) {
@@ -365,6 +415,164 @@ function cmdDeinit() {
 }
 
 // ============================================================================
+// Diagnose command
+// ============================================================================
+
+function cmdDiagnose() {
+  const claudeDir = getClaudeDir();
+  const repoRoot = process.cwd();
+  const issues = [];
+
+  log("prove-it diagnose\n");
+  log("Global installation:");
+
+  // Check global config
+  const configPath = path.join(claudeDir, "prove-it", "config.json");
+  const config = readJson(configPath);
+  if (config) {
+    const version = config._version || 1;
+    if (version >= CURRENT_CONFIG_VERSION) {
+      log(`  [x] Config exists (version ${version}): ${configPath}`);
+    } else {
+      log(`  [ ] Config outdated (version ${version}, current is ${CURRENT_CONFIG_VERSION}): ${configPath}`);
+      issues.push("Run 'prove-it migrate' to update config");
+    }
+  } else {
+    log(`  [ ] Config missing: ${configPath}`);
+    issues.push("Run 'prove-it install' to create config");
+  }
+
+  // Check hook files
+  const hookFiles = ["prove-it-gate.js", "prove-it-beads-gate.js", "prove-it-session-start.js"];
+  const hooksDir = path.join(claudeDir, "hooks");
+  for (const hook of hookFiles) {
+    const hookPath = path.join(hooksDir, hook);
+    if (fs.existsSync(hookPath)) {
+      log(`  [x] Hook exists: ${hook}`);
+    } else {
+      log(`  [ ] Hook missing: ${hook}`);
+      issues.push(`Run 'prove-it install' to create ${hook}`);
+    }
+  }
+
+  // Check settings.json for hook registration
+  const settingsPath = path.join(claudeDir, "settings.json");
+  const settings = readJson(settingsPath);
+  if (settings && settings.hooks) {
+    const hasSessionStart = JSON.stringify(settings.hooks).includes("prove-it-session-start.js");
+    const hasGate = JSON.stringify(settings.hooks).includes("prove-it-gate.js");
+    const hasBeadsGate = JSON.stringify(settings.hooks).includes("prove-it-beads-gate.js");
+
+    if (hasSessionStart && hasGate && hasBeadsGate) {
+      log("  [x] Hooks registered in settings.json");
+    } else {
+      log("  [ ] Hooks not fully registered in settings.json");
+      if (!hasSessionStart) issues.push("SessionStart hook not registered");
+      if (!hasGate) issues.push("Gate hook not registered");
+      if (!hasBeadsGate) issues.push("Beads gate hook not registered");
+    }
+  } else {
+    log("  [ ] settings.json missing or has no hooks");
+    issues.push("Run 'prove-it install' to register hooks");
+  }
+
+  log("\nCurrent repository:");
+
+  // Check suite gate
+  const suiteCmd = config?.suiteGate?.command || "./script/test";
+  let suiteGatePath;
+  if (suiteCmd === "./script/test") {
+    suiteGatePath = path.join(repoRoot, "script", "test");
+  } else if (suiteCmd === "./scripts/test") {
+    suiteGatePath = path.join(repoRoot, "scripts", "test");
+  } else {
+    suiteGatePath = null;
+  }
+
+  if (suiteGatePath && fs.existsSync(suiteGatePath)) {
+    log(`  [x] Suite gate exists: ${suiteCmd}`);
+  } else if (suiteGatePath) {
+    log(`  [ ] Suite gate missing: ${suiteCmd}`);
+    issues.push(`Create ${suiteCmd} for this repository`);
+  } else {
+    log(`  [?] Custom suite gate: ${suiteCmd} (cannot verify)`);
+  }
+
+  // Check local config
+  const localConfigPath = path.join(repoRoot, ".claude", "verifiability.local.json");
+  if (fs.existsSync(localConfigPath)) {
+    log(`  [x] Local config exists: .claude/verifiability.local.json`);
+  } else {
+    log(`  [ ] Local config missing (optional): .claude/verifiability.local.json`);
+  }
+
+  // Check beads
+  const beadsDir = path.join(repoRoot, ".beads");
+  if (fs.existsSync(beadsDir)) {
+    log("  [x] Beads directory exists: .beads/");
+    log("      (beads enforcement is active for this repo)");
+  } else {
+    log("  [ ] Beads not initialized (optional): .beads/");
+  }
+
+  // Summary
+  log("");
+  if (issues.length === 0) {
+    log("Status: All checks passed.");
+  } else {
+    log("Issues found:");
+    for (const issue of issues) {
+      log(`  - ${issue}`);
+    }
+  }
+}
+
+// ============================================================================
+// Migrate command
+// ============================================================================
+
+function cmdMigrate() {
+  const claudeDir = getClaudeDir();
+  const configPath = path.join(claudeDir, "prove-it", "config.json");
+  const config = readJson(configPath);
+
+  if (!config) {
+    log("No config found. Run 'prove-it install' first.");
+    return;
+  }
+
+  const currentVersion = config._version || 1;
+  log(`Current config version: ${currentVersion}`);
+  log(`Latest config version: ${CURRENT_CONFIG_VERSION}`);
+
+  if (currentVersion >= CURRENT_CONFIG_VERSION) {
+    log("\nConfig is already up to date. No migration needed.");
+    return;
+  }
+
+  log("\nApplying migrations...");
+
+  // Migration v1 -> v2: scripts/test -> script/test
+  if (currentVersion < 2) {
+    log("  v1 -> v2: Updating default suite gate path");
+    if (config.suiteGate && config.suiteGate.command === "./scripts/test") {
+      config.suiteGate.command = "./script/test";
+      log("    - Changed suiteGate.command from ./scripts/test to ./script/test");
+    }
+    config._version = 2;
+  }
+
+  // Write updated config
+  writeJsonWithBackup(configPath, config);
+  log(`\nMigration complete. Config updated to version ${CURRENT_CONFIG_VERSION}.`);
+  log("");
+  log("Note: If you have repos using ./scripts/test, you can either:");
+  log("  1. Rename scripts/test to script/test (recommended)");
+  log("  2. Override in .claude/verifiability.local.json:");
+  log('     { "suiteGate": { "command": "./scripts/test" } }');
+}
+
+// ============================================================================
 // Main CLI
 // ============================================================================
 
@@ -378,11 +586,14 @@ Commands:
   uninstall   Remove prove-it from global config
   init        Initialize prove-it in current repository
   deinit      Remove prove-it files from current repository
+  diagnose    Check installation status and report issues
+  migrate     Upgrade config to latest version
   help        Show this help message
 
 Examples:
   prove-it install      # Set up global hooks
   prove-it init         # Add templates to current repo
+  prove-it diagnose     # Check installation status
   prove-it deinit       # Remove prove-it from current repo
   prove-it uninstall    # Remove global hooks
 `);
@@ -404,6 +615,12 @@ function main() {
       break;
     case "deinit":
       cmdDeinit();
+      break;
+    case "diagnose":
+      cmdDiagnose();
+      break;
+    case "migrate":
+      cmdMigrate();
       break;
     case "help":
     case "--help":

@@ -16,103 +16,24 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { spawnSync } = require("child_process");
-const crypto = require("crypto");
 
-function emitJson(obj) {
-  process.stdout.write(JSON.stringify(obj));
-}
-
-function ensureDir(p) {
-  fs.mkdirSync(p, { recursive: true });
-}
-
-function tryRun(cmd, opts) {
-  const r = spawnSync(cmd, {
-    ...opts,
-    shell: true,
-    encoding: "utf8",
-    maxBuffer: 50 * 1024 * 1024,
-  });
-  return { code: r.status ?? 0, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
-}
-
-function shellEscape(str) {
-  if (typeof str !== "string") return String(str);
-  // Single-quote the string and escape any embedded single quotes
-  return "'" + str.replace(/'/g, "'\\''") + "'";
-}
-
-function gitHead(dir) {
-  const r = tryRun(`git -C ${shellEscape(dir)} rev-parse HEAD`, {});
-  if (r.code !== 0) return null;
-  return r.stdout.trim();
-}
-
-function gitRoot(dir) {
-  const r = tryRun(`git -C ${shellEscape(dir)} rev-parse --show-toplevel`, {});
-  if (r.code !== 0) return null;
-  return r.stdout.trim();
-}
-
-function gitStatus(dir) {
-  const r = tryRun(`git -C ${shellEscape(dir)} status --porcelain=v1`, {});
-  if (r.code !== 0) return null;
-  return r.stdout;
-}
-
-function isGitRepo(dir) {
-  const r = tryRun(`git -C ${shellEscape(dir)} rev-parse --is-inside-work-tree`, {});
-  return r.code === 0 && r.stdout.trim() === "true";
-}
-
-function loadJson(p) {
-  try {
-    return JSON.parse(fs.readFileSync(p, "utf8"));
-  } catch {
-    return null;
-  }
-}
-
-function mergeDeep(a, b) {
-  if (!b) return a;
-  if (Array.isArray(a) && Array.isArray(b)) return b; // override arrays
-  if (typeof a === "object" && a && typeof b === "object" && b) {
-    const out = { ...a };
-    for (const k of Object.keys(b)) out[k] = mergeDeep(a[k], b[k]);
-    return out;
-  }
-  return b;
-}
-
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function readStdin() {
-  return fs.readFileSync(0, "utf8");
-}
-
-function sha256(s) {
-  return crypto.createHash("sha256").update(s).digest("hex");
-}
-
-function tailLines(s, n) {
-  const lines = s.split(/\r?\n/);
-  const tail = lines.slice(Math.max(0, lines.length - n));
-  return tail.join("\n").trimEnd();
-}
-
-function truncateChars(s, maxChars) {
-  if (s.length <= maxChars) return s;
-  return s.slice(-maxChars);
-}
-
-function writeJson(p, obj) {
-  ensureDir(path.dirname(p));
-  fs.writeFileSync(p, JSON.stringify(obj, null, 2), "utf8");
-}
-
+const {
+  shellEscape,
+  readStdin,
+  loadJson,
+  writeJson,
+  mergeDeep,
+  sha256,
+  tryRun,
+  isGitRepo,
+  gitRoot,
+  gitHead,
+  gitStatus,
+  emitJson,
+  tailLines,
+  truncateChars,
+  nowIso,
+} = require("../lib/shared");
 
 function defaultConfig() {
   return {

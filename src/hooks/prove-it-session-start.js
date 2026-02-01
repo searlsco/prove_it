@@ -7,64 +7,16 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { spawnSync } = require("child_process");
-const crypto = require("crypto");
 
-function emitJson(obj) {
-  process.stdout.write(JSON.stringify(obj));
-}
-
-function ensureDir(p) {
-  fs.mkdirSync(p, { recursive: true });
-}
-
-function tryRun(cmd, opts) {
-  const r = spawnSync(cmd, {
-    ...opts,
-    shell: true,
-    encoding: "utf8",
-    maxBuffer: 50 * 1024 * 1024,
-  });
-  return { code: r.status ?? 0, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
-}
-
-function shellEscape(str) {
-  if (typeof str !== "string") return String(str);
-  // Single-quote the string and escape any embedded single quotes
-  return "'" + str.replace(/'/g, "'\\''") + "'";
-}
-
-function gitHead(dir) {
-  const r = tryRun(`git -C ${shellEscape(dir)} rev-parse HEAD`, {});
-  if (r.code !== 0) return null;
-  return r.stdout.trim();
-}
-
-function gitRoot(dir) {
-  const r = tryRun(`git -C ${shellEscape(dir)} rev-parse --show-toplevel`, {});
-  if (r.code !== 0) return null;
-  return r.stdout.trim();
-}
-
-function sha256(s) {
-  return crypto.createHash("sha256").update(s).digest("hex");
-}
-
-function gitStatusHash(dir) {
-  const r = tryRun(`git -C ${shellEscape(dir)} status --porcelain=v1`, {});
-  if (r.code !== 0) return null;
-  return sha256(r.stdout);
-}
-
-function isGitRepo(dir) {
-  const r = tryRun(`git -C ${shellEscape(dir)} rev-parse --is-inside-work-tree`, {});
-  return r.code === 0 && r.stdout.trim() === "true";
-}
-
-function readStdin() {
-  return fs.readFileSync(0, "utf8");
-}
-
+const {
+  readStdin,
+  ensureDir,
+  isGitRepo,
+  gitRoot,
+  gitHead,
+  gitStatusHash,
+  emitJson,
+} = require("../lib/shared");
 
 function main() {
   let input;

@@ -4,12 +4,12 @@
 
 1. **“Done” means “verified”.**
    - Never say *done*, *fixed*, *working*, *resolved*, *complete*, or equivalent unless the **suite gate** passed:
-     - Run: `./scripts/test` (from the project root)
+     - Run: `./script/test` (from the project root)
      - Exit code: **0**
    - Report verification in a **Verification** section with the exact command(s) run.
 
 2. **No ad‑hoc verification substitutes.**
-   - A one-off script is not verification unless it is part of the suite gate (directly or via `./scripts/test`).
+   - A one-off script is not verification unless it is part of the suite gate (directly or via `./script/test`).
 
 3. **If you cannot verify, say so explicitly.**
    - Use the label **UNVERIFIED**.
@@ -30,7 +30,7 @@
 ### 1) Choose an oracle (what will prove it works)
 Pick the smallest set of oracles that, together, make the change *high confidence*:
 
-- Suite gate: `./scripts/test` (required for “done”)
+- Suite gate: `./script/test` (required for “done”)
 - Targeted tests: focused unit/integration tests relevant to the change
 - Static checks: typecheck, lint, format, schema validation
 - Runtime checks: a reproduction script that becomes a real test, benchmarks, load tests
@@ -39,7 +39,7 @@ If a behavior is difficult to test directly, propose an alternative oracle (see 
 
 ### 2) Establish a baseline
 Before editing:
-- If feasible: run `./scripts/test` to ensure the baseline is green.
+- If feasible: run `./script/test` to ensure the baseline is green.
 - For bugs: create a failing test or a minimal reproduction that can be promoted into the suite.
 
 ### 3) Implement in small steps
@@ -53,7 +53,7 @@ After meaningful edits:
 - If it fails, fix immediately before continuing.
 
 ### 5) Gate with the full suite
-- Run `./scripts/test` from the project root.
+- Run `./script/test` from the project root.
 - Only after it passes can you claim completion.
 
 ### 6) Report back with verifiable artifacts
@@ -132,7 +132,7 @@ If unsure, explicitly ask for the missing information that would reduce uncertai
 When you finish a task, end with:
 
 ### Verification
-- `./scripts/test` (and any other commands actually run)
+- `./script/test` (and any other commands actually run)
 
 If verification did not happen:
 

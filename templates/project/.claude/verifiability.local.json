@@ -1,6 +1,6 @@
 {
   "suiteGate": {
-    "command": "./scripts/test",
+    "command": "./script/test",
     "require": true
   },
   "preToolUse": {
@@ -8,5 +8,8 @@
   },
   "stop": {
     "cacheSeconds": 900
+  },
+  "beads": {
+    "enabled": true
   }
 }

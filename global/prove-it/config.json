@@ -1,6 +1,7 @@
 {
+  "_version": 2,
   "suiteGate": {
-    "command": "./scripts/test",
+    "command": "./script/test",
     "require": true
   },
   "preToolUse": {
@@ -17,5 +18,17 @@
     "cacheSeconds": 900,
     "maxOutputLines": 200,
     "maxOutputChars": 12000
+  },
+  "beads": {
+    "enabled": true,
+    "gatedTools": ["Edit", "Write", "NotebookEdit"],
+    "gateBashWrites": true,
+    "bashWritePatterns": [
+      "\\bcat\\s+.*>",
+      "\\becho\\s+.*>",
+      "\\btee\\s",
+      "\\bsed\\s+-i",
+      "\\bawk\\s+.*-i\\s*inplace"
+    ]
   }
 }

@@ -1,97 +1,97 @@
 # prove-it
 
-A strict "verifiability-first" setup for Claude Code:
+Hooks for [Claude Code](https://claude.ai/code) that enforce test-gated workflows. If Claude says "done" but didn't run the tests, it wasn't actually done.
 
-- **Global CLAUDE.md**: forces a consistent, test-gated workflow for all programming work.
-- **Global hooks**:
-  - **Stop gate**: if anything changed, Claude cannot stop unless the suite gate passes (default: `./scripts/test`).
-  - **PreToolUse gate**: when Claude tries to run "completion" commands (e.g., `git commit`, `git push`, `beads done`), it auto-wraps them to run the suite gate first.
-  - **SessionStart baseline**: records the session's starting git state so Stop can decide if anything changed.
+## Why
 
-The goal is to prevent "looks done" behavior when the work was never actually verified.
+Claude Code is good at writing code but bad at knowing when it's finished. It'll say "done" or "fixed" without running the test suite, leaving you to discover the breakage later. prove-it fixes this by:
 
----
+1. **Blocking Stop** until the suite gate passes (if anything changed)
+2. **Wrapping completion commands** like `git commit` and `git push` with the test suite
+3. **Requiring a tracked task** before allowing code changes (if you use [beads](https://github.com/anthropics/beads))
+
+The suite gate is just an executable at `./script/test` in your repo. You decide what it runs.
 
 ## Installation
 
-### Homebrew (macOS)
-
 ```bash
-brew tap searlsco/tap
-brew install prove-it
+brew install searlsco/tap/prove-it
 prove-it install
 ```
 
-### npm / npx
+Or with npm:
 
 ```bash
 npx prove-it install
 ```
 
-### Manual
+**Important**: Restart Claude Code after installing. Hooks are loaded at startup.
+
+## What it installs
+
+- `~/.claude/CLAUDE.md` - instructions for Claude about verification requirements
+- `~/.claude/hooks/prove-it-*.js` - the actual enforcement hooks
+- `~/.claude/prove-it/config.json` - global configuration
+- Updates `~/.claude/settings.json` to register the hooks
+
+## Setting up a repo
 
 ```bash
-git clone https://github.com/searlsco/prove-it.git
-cd prove-it
-./cli.js install
+cd your-repo
+prove-it init
 ```
 
----
+This creates a stub at `./script/test`. Replace it with your actual test command:
+
+```bash
+#!/bin/bash
+npm test && npm run lint
+```
+
+Or whatever your stack needs. The only requirement is exit 0 for success.
 
 ## Commands
 
 ```
-prove-it install      # Install globally to ~/.claude/
-prove-it uninstall    # Remove from global config
-prove-it init         # Initialize current repo with templates
-prove-it deinit       # Remove prove-it files from current repo
-prove-it help         # Show help
+prove-it install    # Install globally
+prove-it uninstall  # Remove global hooks
+prove-it init       # Add templates to current repo
+prove-it deinit     # Remove templates from current repo
+prove-it diagnose   # Check what's working and what isn't
 ```
-
----
-
-## What `install` does
-
-- Copy `global/CLAUDE.md` → `~/.claude/CLAUDE.md` (with backup if exists)
-- Copy hooks → `~/.claude/hooks/`
-- Create `~/.claude/prove-it/config.json` (if missing)
-- Merge hook config into `~/.claude/settings.json` (with backup)
-
-> Claude Code settings scopes: `~/.claude/settings.json` (user), `.claude/settings.json` (project). See Claude Code docs for the full hierarchy.
-
----
-
-## What `init` does
-
-Copies template files into your repo:
-
-- `.claude/rules/` - project-specific verification rules
-- `.claude/verifiability.local.json` - project config overrides
-- `.claude/ui-evals/` - UI evaluation tracking
-- `.claude/verification/` - manual verification artifacts
-
-Also creates a **stub** `scripts/test` if one doesn't exist (you must implement it for your stack).
-
----
 
 ## Configuration
 
-**Global config:**
-- `~/.claude/prove-it/config.json`
+Global config lives at `~/.claude/prove-it/config.json`. Per-repo overrides go in `.claude/verifiability.local.json`.
 
-**Per-repo overrides (optional):**
-- `<repo>/.claude/verifiability.local.json`
+Key settings:
 
-**Key settings:**
-- `suiteGate.command` (default `./scripts/test`)
-- `preToolUse.permissionDecision` (`"ask"` or `"allow"`)
-- `preToolUse.gatedCommandRegexes` (regex list for "completion boundary" commands)
-- `stop.cacheSeconds` (avoid rerunning the suite repeatedly when nothing changed)
+- `suiteGate.command` - what to run (default: `./script/test`)
+- `suiteGate.require` - block if suite gate is missing (default: `true`)
+- `beads.enabled` - require a task before code changes (default: `true`)
 
----
+To disable the suite gate requirement for a specific repo:
 
-## Notes
+```json
+{
+  "suiteGate": {
+    "require": false
+  }
+}
+```
 
-- Hooks run as normal shell commands on your machine with your user privileges.
-- The Stop gate is the primary guarantee. If your Claude Code client has issues honoring PreToolUse "ask/deny", the Stop gate still prevents "done without verification".
-- After installing, **restart Claude Code** (hooks are loaded at startup).
+## How it works
+
+**Stop hook**: When Claude tries to stop, prove-it checks if anything changed since the session started. If so, it runs `./script/test`. Failure blocks the stop.
+
+**PreToolUse hook**: When Claude runs `git commit`, `git push`, or `beads done`, prove-it prepends the suite gate. The command only proceeds if tests pass.
+
+**Beads hook**: If your repo has a `.beads/` directory, prove-it blocks Edit/Write operations until there's an in-progress task. This prevents "I'll add the task after" behavior.
+
+## Troubleshooting
+
+```bash
+prove-it diagnose
+```
+
+This checks whether hooks are installed, registered, and whether your current repo has the expected suite gate.

@@ -1,7 +1,7 @@
 # Project-specific verifiability (fill this in)
 
 ## Suite gate (required for “done”)
-- Command: `./scripts/test`
+- Command: `./script/test`
 - What it runs (lint/typecheck/unit/integration/e2e):
   - TODO
 

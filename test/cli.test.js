@@ -69,11 +69,11 @@ describe("init/deinit", () => {
     assert.ok(fs.existsSync(path.join(tmpDir, ".claude", "verifiability.local.json")));
     assert.ok(fs.existsSync(path.join(tmpDir, ".claude", "rules", "project.md")));
     assert.ok(fs.existsSync(path.join(tmpDir, ".claude", "rules", "oracles.md")));
-    assert.ok(fs.existsSync(path.join(tmpDir, "scripts", "test")));
+    assert.ok(fs.existsSync(path.join(tmpDir, "script", "test")));
 
-    // Check scripts/test is executable
-    const stat = fs.statSync(path.join(tmpDir, "scripts", "test"));
-    assert.ok(stat.mode & fs.constants.S_IXUSR, "scripts/test should be executable");
+    // Check script/test is executable
+    const stat = fs.statSync(path.join(tmpDir, "script", "test"));
+    assert.ok(stat.mode & fs.constants.S_IXUSR, "script/test should be executable");
   });
 
   it("init is non-destructive", () => {
@@ -102,27 +102,27 @@ describe("init/deinit", () => {
     assert.ok(!fs.existsSync(path.join(tmpDir, ".claude", "rules", "project.md")));
   });
 
-  it("deinit preserves customized scripts/test", () => {
+  it("deinit preserves customized script/test", () => {
     // Init first
     runCli(["init"], { cwd: tmpDir });
 
-    // Customize scripts/test
-    fs.writeFileSync(path.join(tmpDir, "scripts", "test"), "#!/bin/bash\nnpm test\n");
+    // Customize script/test
+    fs.writeFileSync(path.join(tmpDir, "script", "test"), "#!/bin/bash\nnpm test\n");
 
     // Deinit
     runCli(["deinit"], { cwd: tmpDir });
 
-    // scripts/test should still exist since it was customized
-    assert.ok(fs.existsSync(path.join(tmpDir, "scripts", "test")));
+    // script/test should still exist since it was customized
+    assert.ok(fs.existsSync(path.join(tmpDir, "script", "test")));
   });
 
-  it("deinit removes stub scripts/test", () => {
+  it("deinit removes stub script/test", () => {
     // Init creates stub
     runCli(["init"], { cwd: tmpDir });
 
     // Deinit should remove it since it's still the stub
     runCli(["deinit"], { cwd: tmpDir });
 
-    assert.ok(!fs.existsSync(path.join(tmpDir, "scripts", "test")));
+    assert.ok(!fs.existsSync(path.join(tmpDir, "script", "test")));
   });
 });

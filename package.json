@@ -1,6 +1,6 @@
 {
   "name": "prove-it",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Verifiability-first hooks for Claude Code - enforce test-gated workflows",
   "author": "Justin Searls",
   "license": "MIT",
@@ -34,6 +34,9 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "build": "node scripts/build.js",
+    "test": "node --test test/*.test.js",
+    "test:integration": "node --test test/integration/*.test.js",
+    "test:all": "node --test test/*.test.js test/integration/*.test.js"
   }
 }

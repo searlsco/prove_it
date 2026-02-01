@@ -15,7 +15,7 @@ set -euo pipefail
 # IMPORTANT:
 # - Keep this script deterministic and CI-compatible.
 # - Avoid interactive prompts.
-# - Make it fast enough to run frequently; add a separate scripts/test-fast if needed.
+# - Make it fast enough to run frequently; add a separate script/test-fast if needed.
 
-echo "ERROR: scripts/test is a stub. Implement the repository suite gate here." >&2
+echo "ERROR: script/test is a stub. Implement the repository suite gate here." >&2
 exit 1
