@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CCVK: Verifiability gate
+ * prove-it: Verifiability gate
  *
  * Handles:
  * - PreToolUse (Bash): wraps selected "completion boundary" commands with the suite gate
@@ -112,7 +112,7 @@ function truncateChars(s, maxChars) {
 
 function loadEffectiveConfig(projectDir) {
   const home = os.homedir();
-  const baseDir = path.join(home, ".claude", "verifiability-kit");
+  const baseDir = path.join(home, ".claude", "prove-it");
   const globalCfgPath = path.join(baseDir, "config.json");
 
   let cfg = defaultConfig();
@@ -220,12 +220,12 @@ function main() {
 
     // If suite gate is required but missing, replace the tool call with a failing message.
     if (cfg.suiteGate.require && !suiteExists(rootDir, suiteCmd)) {
-      const msg = `CCVK blocked: suite gate '${suiteCmd}' not found.\nCreate it (recommended) or override suiteGate.require in .claude/verifiability.local.json.`;
+      const msg = `prove-it blocked: suite gate '${suiteCmd}' not found.\nCreate it (recommended) or override suiteGate.require in .claude/verifiability.local.json.`;
       emitJson({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: cfg.preToolUse.permissionDecision,
-          permissionDecisionReason: "CCVK: suite gate missing; blocking completion boundary",
+          permissionDecisionReason: "prove-it: suite gate missing; blocking completion boundary",
           updatedInput: {
             ...input.tool_input,
             command: `echo "${msg.replace(/"/g, '\\"')}" 1>&2; exit 1`
@@ -248,13 +248,13 @@ function main() {
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: cfg.preToolUse.permissionDecision,
-        permissionDecisionReason: `CCVK: running suite gate (${suiteCmd}) before this command`,
+        permissionDecisionReason: `prove-it: running suite gate (${suiteCmd}) before this command`,
         updatedInput: {
           ...input.tool_input,
           command: wrapped,
           description: input.tool_input && input.tool_input.description
-            ? `${input.tool_input.description} (CCVK: gated by ${suiteCmd})`
-            : `CCVK: gated by ${suiteCmd}`
+            ? `${input.tool_input.description} (prove-it: gated by ${suiteCmd})`
+            : `prove-it: gated by ${suiteCmd}`
         }
       }
     });
@@ -273,7 +273,7 @@ function main() {
         emitJson({
           decision: "block",
           reason:
-            `CCVK: suite gate '${suiteCmd}' is required but not present.\n\n` +
+            `prove-it: suite gate '${suiteCmd}' is required but not present.\n\n` +
             `Create ${suiteCmd} (recommended) or set suiteGate.require=false in <repo>/.claude/verifiability.local.json.\n\n` +
             `UNVERIFIED until a deterministic oracle exists.`
         });
@@ -297,7 +297,7 @@ function main() {
       emitJson({
         decision: "block",
         reason:
-          `CCVK: suite gate '${suiteCmd}' not found at repo root (${rootDir}).\n\n` +
+          `prove-it: suite gate '${suiteCmd}' not found at repo root (${rootDir}).\n\n` +
           `Create scripts/test (preferred), or override in <repo>/.claude/verifiability.local.json.\n\n` +
           `Cannot claim verification without the suite gate.`
       });
@@ -320,7 +320,7 @@ function main() {
       emitJson({
         decision: "block",
         reason:
-          `CCVK: suite gate still failing for current workspace state.\n\n` +
+          `prove-it: suite gate still failing for current workspace state.\n\n` +
           `Repo: ${rootDir}\n` +
           `Suite gate: ${suiteCmd}\n` +
           `Last run: ${last.ran_at}\n\n` +
@@ -355,7 +355,7 @@ function main() {
       emitJson({
         decision: "block",
         reason:
-          `CCVK: suite gate failed; cannot stop or claim completion.\n\n` +
+          `prove-it: suite gate failed; cannot stop or claim completion.\n\n` +
           `Repo: ${rootDir}\n` +
           `Command: ${suiteCmd}\n` +
           `Exit: ${run.code}\n` +

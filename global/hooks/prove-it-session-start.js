@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CCVK: SessionStart hook
+ * prove-it: SessionStart hook
  * - Records baseline git state for this session_id
  * - Optionally injects a small reminder into Claude's context
  */
@@ -62,7 +62,7 @@ function main() {
   const projectDir = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
 
   const home = os.homedir();
-  const baseDir = path.join(home, ".claude", "verifiability-kit");
+  const baseDir = path.join(home, ".claude", "prove-it");
   const sessionsDir = path.join(baseDir, "sessions");
   ensureDir(sessionsDir);
 
@@ -97,7 +97,7 @@ function main() {
 
   // Add minimal context (stdout becomes context for SessionStart)
   const reminder = [
-    "CCVK active: verifiability-first.",
+    "prove-it active: verifiability-first.",
     "Do not claim 'done' unless the suite gate passed (default: ./scripts/test).",
     "Prefer suite verification over ad-hoc scripts; if unverified, label UNVERIFIED."
   ].join("\n");

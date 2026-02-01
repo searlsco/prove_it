@@ -1,0 +1,39 @@
+{
+  "name": "prove-it",
+  "version": "0.1.0",
+  "description": "Verifiability-first hooks for Claude Code - enforce test-gated workflows",
+  "author": "Justin Searls",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/searlsco/prove-it.git"
+  },
+  "homepage": "https://github.com/searlsco/prove-it#readme",
+  "bugs": {
+    "url": "https://github.com/searlsco/prove-it/issues"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "testing",
+    "verification",
+    "hooks",
+    "ai",
+    "llm"
+  ],
+  "bin": {
+    "prove-it": "./cli.js"
+  },
+  "files": [
+    "cli.js",
+    "lib/",
+    "global/",
+    "templates/"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

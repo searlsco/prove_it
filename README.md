@@ -1,82 +1,97 @@
-# Claude Verifiability Kit (CCVK)
+# prove-it
 
-A strict “verifiability-first” setup for Claude Code:
+A strict "verifiability-first" setup for Claude Code:
 
 - **Global CLAUDE.md**: forces a consistent, test-gated workflow for all programming work.
 - **Global hooks**:
   - **Stop gate**: if anything changed, Claude cannot stop unless the suite gate passes (default: `./scripts/test`).
-  - **PreToolUse gate**: when Claude tries to run “completion” commands (e.g., `git commit`, `git push`, `beads done`), it auto-wraps them to run the suite gate first.
-  - **SessionStart baseline**: records the session’s starting git state so Stop can decide if anything changed.
+  - **PreToolUse gate**: when Claude tries to run "completion" commands (e.g., `git commit`, `git push`, `beads done`), it auto-wraps them to run the suite gate first.
+  - **SessionStart baseline**: records the session's starting git state so Stop can decide if anything changed.
 
-The goal is to prevent “looks done” behavior when the work was never actually verified.
+The goal is to prevent "looks done" behavior when the work was never actually verified.
 
 ---
 
-## Install (global)
+## Installation
 
-1. Unzip this folder somewhere.
-2. Run:
+### Homebrew (macOS)
 
-    node install.js
+```bash
+brew tap searlsco/tap
+brew install prove-it
+prove-it install
+```
 
-This will:
+### npm / npx
 
-- Copy `global/CLAUDE.md` → `~/.claude/CLAUDE.md` (with a backup if you already have one)
+```bash
+npx prove-it install
+```
+
+### Manual
+
+```bash
+git clone https://github.com/searlsco/prove-it.git
+cd prove-it
+./cli.js install
+```
+
+---
+
+## Commands
+
+```
+prove-it install      # Install globally to ~/.claude/
+prove-it uninstall    # Remove from global config
+prove-it init         # Initialize current repo with templates
+prove-it deinit       # Remove prove-it files from current repo
+prove-it help         # Show help
+```
+
+---
+
+## What `install` does
+
+- Copy `global/CLAUDE.md` → `~/.claude/CLAUDE.md` (with backup if exists)
 - Copy hooks → `~/.claude/hooks/`
-- Create `~/.claude/verifiability-kit/config.json` (if missing)
-- Merge hook config into `~/.claude/settings.json` (with a backup)
+- Create `~/.claude/prove-it/config.json` (if missing)
+- Merge hook config into `~/.claude/settings.json` (with backup)
 
-> Claude Code settings scopes and locations: `~/.claude/settings.json` (user scope), `.claude/settings.json` (project scope). See Claude Code docs for the full hierarchy.
-
----
-
-## Optional: initialize a repo (local assets)
-
-From a repo root:
-
-    node init-project.js
-
-This copies the template files into:
-
-- `.claude/rules/`
-- `.claude/verifiability.local.json` (project override template)
-- `.claude/ui-evals/`
-- `.claude/verification/`
-
-It will also create a **stub** `scripts/test` if one doesn’t exist (you must implement it for your stack), and mark it executable when possible.
+> Claude Code settings scopes: `~/.claude/settings.json` (user), `.claude/settings.json` (project). See Claude Code docs for the full hierarchy.
 
 ---
 
-## Configure
+## What `init` does
 
-Global config:
+Copies template files into your repo:
 
-- `~/.claude/verifiability-kit/config.json`
+- `.claude/rules/` - project-specific verification rules
+- `.claude/verifiability.local.json` - project config overrides
+- `.claude/ui-evals/` - UI evaluation tracking
+- `.claude/verification/` - manual verification artifacts
 
-Per-repo overrides (optional):
+Also creates a **stub** `scripts/test` if one doesn't exist (you must implement it for your stack).
 
+---
+
+## Configuration
+
+**Global config:**
+- `~/.claude/prove-it/config.json`
+
+**Per-repo overrides (optional):**
 - `<repo>/.claude/verifiability.local.json`
 
-Key settings:
-
+**Key settings:**
 - `suiteGate.command` (default `./scripts/test`)
 - `preToolUse.permissionDecision` (`"ask"` or `"allow"`)
-- `preToolUse.gatedCommandRegexes` (regex list for “completion boundary” commands)
+- `preToolUse.gatedCommandRegexes` (regex list for "completion boundary" commands)
 - `stop.cacheSeconds` (avoid rerunning the suite repeatedly when nothing changed)
-
----
-
-## Uninstall
-
-Run:
-
-    node uninstall.js
-
-This attempts to remove CCVK hook entries from `~/.claude/settings.json` and removes CCVK files (leaving backups).
 
 ---
 
 ## Notes
 
 - Hooks run as normal shell commands on your machine with your user privileges.
-- The Stop gate is the primary guarantee. If your Claude Code client has issues honoring PreToolUse “ask/deny”, the Stop gate still prevents “done without verification”.
+- The Stop gate is the primary guarantee. If your Claude Code client has issues honoring PreToolUse "ask/deny", the Stop gate still prevents "done without verification".
+- After installing, **restart Claude Code** (hooks are loaded at startup).

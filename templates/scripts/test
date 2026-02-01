@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# CCVK suite gate stub.
+# prove-it suite gate stub.
 #
 # Replace this with the REAL full-suite command for this repository.
 # This script is intentionally a single entrypoint so Claude (and humans) have one deterministic gate.
