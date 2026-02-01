@@ -111,6 +111,24 @@ function addHookGroup(hooksObj, eventName, group) {
   hooksObj[eventName].push(group);
 }
 
+function removeProveItHooks(hooksObj) {
+  for (const eventName of Object.keys(hooksObj)) {
+    if (Array.isArray(hooksObj[eventName])) {
+      hooksObj[eventName] = hooksObj[eventName].filter((g) => {
+        const serialized = JSON.stringify(g);
+        return (
+          !serialized.includes("prove-it-gate.js") &&
+          !serialized.includes("prove-it-session-start.js") &&
+          !serialized.includes("prove-it-beads-gate.js")
+        );
+      });
+      if (hooksObj[eventName].length === 0) {
+        delete hooksObj[eventName];
+      }
+    }
+  }
+}
+
 function cmdInstall() {
   const claudeDir = getClaudeDir();
   const srcRoot = getSrcRoot();
@@ -155,6 +173,9 @@ function cmdInstall() {
   const settingsPath = path.join(claudeDir, "settings.json");
   const settings = readJson(settingsPath) || {};
   if (!settings.hooks) settings.hooks = {};
+
+  // Remove existing prove-it hooks before adding (prevents duplicates on reinstall)
+  removeProveItHooks(settings.hooks);
 
   const hookVerifGate = path.join(dstHooksDir, "prove-it-gate.js");
   const hookSessionStart = path.join(dstHooksDir, "prove-it-session-start.js");
