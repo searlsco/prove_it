@@ -66,11 +66,17 @@ function main() {
     // ignore
   }
 
-  // Add minimal context (stdout becomes context for SessionStart)
+  // Add context that shapes verification mindset (stdout becomes context for SessionStart)
   const reminder = [
-    "prove-it active: verifiability-first.",
-    "Do not claim 'done' unless the suite gate passed (default: ./script/test).",
-    "Prefer suite verification over ad-hoc scripts; if unverified, label UNVERIFIED.",
+    "prove-it active: verifiability-first workflow.",
+    "",
+    "Before claiming done:",
+    "- Run ./script/test (or the configured suite gate)",
+    "- Verify to the last mile - if you can run it, run it",
+    "- Never say 'Try X to verify' - that's handing off your job",
+    "- If you can't verify something, mark it UNVERIFIED explicitly",
+    "",
+    "The user should receive verified, working code - not a verification checklist.",
   ].join("\n");
 
   // For SessionStart, stdout is appended to Claude context.

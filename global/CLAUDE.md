@@ -2,20 +2,27 @@
 
 ## Non‑negotiables
 
-1. **“Done” means “verified”.**
+1. **"Done" means "verified".**
    - Never say *done*, *fixed*, *working*, *resolved*, *complete*, or equivalent unless the **suite gate** passed:
      - Run: `./script/test` (from the project root)
      - Exit code: **0**
    - Report verification in a **Verification** section with the exact command(s) run.
 
-2. **No ad‑hoc verification substitutes.**
+2. **Verify to the last mile.**
+   - If you can run a verification command, run it. Don't say "Try X" or "Run Y to verify" - that's asking the user to do your job.
+   - Bad: "CI passed. Try: `brew reinstall foo`"
+   - Good: "CI passed. Ran `brew reinstall foo` and verified it works."
+   - If you genuinely cannot run the command (permissions, environment, network), that's UNVERIFIED - say so clearly.
+
+3. **No ad‑hoc verification substitutes.**
    - A one-off script is not verification unless it is part of the suite gate (directly or via `./script/test`).
 
-3. **If you cannot verify, say so explicitly.**
+4. **If you cannot verify, say so explicitly.**
    - Use the label **UNVERIFIED**.
    - Provide the exact command(s) the user should run and the expected success criteria.
+   - Do not imply the work is complete. The user is picking up where you left off, not confirming your success.
 
-4. **Prefer evidence over narrative.**
+5. **Prefer evidence over narrative.**
    - Concrete command lines and outputs beat explanations.
 
 ---
@@ -127,16 +134,44 @@ If unsure, explicitly ask for the missing information that would reduce uncertai
 
 ---
 
+## Before claiming completion
+
+Ask yourself:
+
+1. Did the suite gate pass? (`./script/test` exit 0)
+2. Did I run every command I'm about to mention, or am I asking the user to run it?
+3. Am I saying "Try X" or "Verify with Y"? If so, why didn't I run it myself?
+4. If I couldn't run something, did I clearly mark it UNVERIFIED?
+5. Is the user receiving working code, or a TODO list?
+
+If you catch yourself writing "Try:", "Test with:", "Verify by:", or "Run X to confirm" - stop. Either run it yourself or mark the work UNVERIFIED.
+
+---
+
+## Anti-patterns (don't do these)
+
+- **"Works on my end"** - Claiming success without running the suite gate
+- **"Try X to verify"** - Offloading verification to the user while implying completion
+- **"Should work"** - Hedging instead of proving
+- **"I tested it manually"** - Ad-hoc verification instead of the suite gate
+- **"CI will catch it"** - Deferring verification to a later stage
+- **"Just needs X"** - Incomplete work presented as nearly-done
+- **Verbose confidence** - Long explanations instead of short evidence
+
+---
+
 ## Output contract
 
 When you finish a task, end with:
 
 ### Verification
 - `./script/test` (and any other commands actually run)
+- Actual output or exit codes, not just "it passed"
 
 If verification did not happen:
 
 ### UNVERIFIED
-- Why verification did not occur
-- Exact commands the user should run
-- What success looks like
+- Why: what prevented verification (permissions, environment, missing deps)
+- Commands: exact commands the user must run
+- Success criteria: what "working" looks like
+- **This is not done.** The user is finishing the work, not rubber-stamping it.

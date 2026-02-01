@@ -222,6 +222,13 @@ function stopChangedSinceSessionStart(baseDir, sessionId, rootDir, head, statusH
   return false;
 }
 
+function softStopReminder() {
+  return `prove-it: Suite gate passed. Before finishing, verify:
+- Did you run every verification command yourself, or did you leave "Try X" for the user?
+- If you couldn't run something, did you clearly mark it UNVERIFIED?
+- Is the user receiving completed, verified work - or a verification TODO list?`;
+}
+
 function suiteGateMissingMessage(suiteCmd, rootDir) {
   return `prove-it: Suite gate not found.
 
@@ -334,6 +341,12 @@ function main() {
           decision: "block",
           reason: suiteGateMissingMessage(suiteCmd, rootDir),
         });
+      } else {
+        // Soft reminder for non-git repos
+        emitJson({
+          decision: "allow",
+          reason: softStopReminder(),
+        });
       }
       process.exit(0);
     }
@@ -366,8 +379,14 @@ function main() {
     const cacheFresh = last && (now - Date.parse(last.ran_at)) / 1000 <= cacheSeconds;
     const sameInputs = last && last.head === head && last.status_hash === statusHash;
 
-    // If last run for this exact state passed recently, allow stop.
-    if (cacheFresh && sameInputs && last.ok === true) process.exit(0);
+    // If last run for this exact state passed recently, allow stop with reminder.
+    if (cacheFresh && sameInputs && last.ok === true) {
+      emitJson({
+        decision: "allow",
+        reason: softStopReminder(),
+      });
+      process.exit(0);
+    }
 
     // Avoid rerunning repeatedly in Stop-hook loop when nothing changed.
     // When stop_hook_active is true, we're in a retry after a previous block.
@@ -406,6 +425,11 @@ function main() {
     saveCache(cachePath, newState);
 
     if (run.code === 0) {
+      // Soft reminder even on success - prompt reconsideration
+      emitJson({
+        decision: "allow",
+        reason: softStopReminder(),
+      });
       process.exit(0);
     } else {
       emitJson({
