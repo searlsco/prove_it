@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * prove-it CLI
+ * prove_it CLI
  *
  * Commands:
  *   install   - Install prove-it globally (~/.claude/)
@@ -203,7 +203,7 @@ function cmdInstall() {
 
   writeJsonWithBackup(settingsPath, settings);
 
-  log("prove-it installed.");
+  log("prove_it installed.");
   log(`  Global CLAUDE.md: ${dstClaudeMd}`);
   log(`  Hooks: ${dstHooksDir}`);
   log(`  Config: ${dstCfg}`);
@@ -215,8 +215,8 @@ function cmdInstall() {
   log("");
   log("Next steps:");
   log("  1. Restart Claude Code (required)");
-  log("  2. Run: prove-it init  in a repo to add local templates");
-  log("  3. Run: prove-it diagnose  to verify installation");
+  log("  2. Run: prove_it init  in a repo to add local templates");
+  log("  3. Run: prove_it diagnose  to verify installation");
 }
 
 // ============================================================================
@@ -257,7 +257,7 @@ function cmdUninstall() {
   rmIfExists(path.join(claudeDir, "hooks", "prove-it-session-start.js"));
   rmIfExists(path.join(claudeDir, "hooks", "prove-it-beads-gate.js"));
 
-  log("prove-it uninstalled (best-effort).");
+  log("prove_it uninstalled (best-effort).");
   log(`  Settings updated: ${settingsPath}`);
   log(`  Removed: ~/.claude/prove-it`);
   log(`  Removed: ~/.claude/hooks/prove-it-*.js`);
@@ -284,7 +284,7 @@ function cmdInit() {
     chmodX(scriptTest);
   }
 
-  log("prove-it project templates copied (non-destructive).");
+  log("prove_it project templates copied (non-destructive).");
   log(`  Added (if missing): ${path.join(repoRoot, ".claude")}`);
   log(`  Added (if missing): ${scriptTest}`);
   log("");
@@ -400,7 +400,7 @@ function cmdDeinit() {
     } catch {}
   }
 
-  log("prove-it project files removed.");
+  log("prove_it project files removed.");
   if (removed.length > 0) {
     log("  Removed:");
     for (const f of removed) log(`    - ${f}`);
@@ -423,7 +423,7 @@ function cmdDiagnose() {
   const repoRoot = process.cwd();
   const issues = [];
 
-  log("prove-it diagnose\n");
+  log("prove_it diagnose\n");
   log("Global installation:");
 
   // Check global config
@@ -435,11 +435,11 @@ function cmdDiagnose() {
       log(`  [x] Config exists (version ${version}): ${configPath}`);
     } else {
       log(`  [ ] Config outdated (version ${version}, current is ${CURRENT_CONFIG_VERSION}): ${configPath}`);
-      issues.push("Run 'prove-it migrate' to update config");
+      issues.push("Run 'prove_it migrate' to update config");
     }
   } else {
     log(`  [ ] Config missing: ${configPath}`);
-    issues.push("Run 'prove-it install' to create config");
+    issues.push("Run 'prove_it install' to create config");
   }
 
   // Check hook files
@@ -451,7 +451,7 @@ function cmdDiagnose() {
       log(`  [x] Hook exists: ${hook}`);
     } else {
       log(`  [ ] Hook missing: ${hook}`);
-      issues.push(`Run 'prove-it install' to create ${hook}`);
+      issues.push(`Run 'prove_it install' to create ${hook}`);
     }
   }
 
@@ -473,7 +473,7 @@ function cmdDiagnose() {
     }
   } else {
     log("  [ ] settings.json missing or has no hooks");
-    issues.push("Run 'prove-it install' to register hooks");
+    issues.push("Run 'prove_it install' to register hooks");
   }
 
   log("\nCurrent repository:");
@@ -537,7 +537,7 @@ function cmdMigrate() {
   const config = readJson(configPath);
 
   if (!config) {
-    log("No config found. Run 'prove-it install' first.");
+    log("No config found. Run 'prove_it install' first.");
     return;
   }
 
@@ -577,25 +577,25 @@ function cmdMigrate() {
 // ============================================================================
 
 function showHelp() {
-  log(`prove-it - Verifiability-first hooks for Claude Code
+  log(`prove_it - Verifiability-first hooks for Claude Code
 
-Usage: prove-it <command>
+Usage: prove_it <command>
 
 Commands:
-  install     Install prove-it globally (~/.claude/)
-  uninstall   Remove prove-it from global config
-  init        Initialize prove-it in current repository
-  deinit      Remove prove-it files from current repository
+  install     Install prove_it globally (~/.claude/)
+  uninstall   Remove prove_it from global config
+  init        Initialize prove_it in current repository
+  deinit      Remove prove_it files from current repository
   diagnose    Check installation status and report issues
   migrate     Upgrade config to latest version
   help        Show this help message
 
 Examples:
-  prove-it install      # Set up global hooks
-  prove-it init         # Add templates to current repo
-  prove-it diagnose     # Check installation status
-  prove-it deinit       # Remove prove-it from current repo
-  prove-it uninstall    # Remove global hooks
+  prove_it install      # Set up global hooks
+  prove_it init         # Add templates to current repo
+  prove_it diagnose     # Check installation status
+  prove_it deinit       # Remove prove_it from current repo
+  prove_it uninstall    # Remove global hooks
 `);
 }
 
@@ -630,7 +630,7 @@ function main() {
       break;
     default:
       console.error(`Unknown command: ${command}`);
-      console.error('Run "prove-it help" for usage.');
+      console.error('Run "prove_it help" for usage.');
       process.exit(1);
   }
 }

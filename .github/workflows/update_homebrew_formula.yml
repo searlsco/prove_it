@@ -1,0 +1,75 @@
+name: Update Homebrew Formula
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    env:
+      TAP_REPO: searlsco/homebrew-tap
+      FORMULA_PATH: Formula/prove_it.rb
+      OWNER_REPO: searlsco/prove_it
+
+    concurrency:
+      group: formula-update
+      cancel-in-progress: false
+
+    steps:
+      - name: Derive version + tarball URL from tag
+        id: meta
+        run: |
+          echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "tar_url=https://github.com/${OWNER_REPO}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Compute sha256
+        id: sha
+        run: |
+          set -euo pipefail
+          SHA256="$(
+            curl --fail --location --silent --show-error "${{ steps.meta.outputs.tar_url }}" \
+            | sha256sum | cut -d' ' -f1
+          )"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tap (write-enabled)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TAP_REPO }}
+          ref: main
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          persist-credentials: false
+
+      - name: Update formula url/sha256
+        run: |
+          set -euo pipefail
+          export TAR_URL="${{ steps.meta.outputs.tar_url }}"
+          export SHA256="${{ steps.sha.outputs.sha256 }}"
+          : "${TAR_URL:?missing TAR_URL from meta}"
+          : "${SHA256:?missing SHA256 from sha}"
+          perl -0777 -pe '
+            s{^(\s*url\s*")[^\"]*(")}{$1 . $ENV{TAR_URL} . $2}me;
+            s{^(\s*sha256\s*")[^\"]*(")}{$1 . $ENV{SHA256} . $2}me;
+          ' -i "${FORMULA_PATH}"
+          grep -En '^\s*(url|sha256)\s*"' "${FORMULA_PATH}"
+
+      - name: Commit & push to main
+        env:
+          GH_EMAIL: 208552577+Bitsly@users.noreply.github.com
+          GH_NAME:  bitsly
+        run: |
+          set -euo pipefail
+          git config user.email "$GH_EMAIL"
+          git config user.name "$GH_NAME"
+          if git diff --quiet -- "${FORMULA_PATH}"; then
+            echo "No changes to commit; skipping push."
+            exit 0
+          fi
+          git add "${FORMULA_PATH}"
+          git commit -m "prove_it ${{ steps.meta.outputs.version }}: bump formula"
+          git remote set-url origin "https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/${{ env.TAP_REPO }}.git"
+          git pull --rebase origin main
+          git push origin HEAD:main

@@ -23,7 +23,7 @@ describe("CLI", () => {
   describe("help", () => {
     it("shows help with no arguments", () => {
       const result = runCli([]);
-      assert.match(result.stdout, /prove-it.*Verifiability-first/s);
+      assert.match(result.stdout, /prove_it.*Verifiability-first/s);
       assert.match(result.stdout, /install/);
       assert.match(result.stdout, /uninstall/);
       assert.match(result.stdout, /init/);
@@ -32,12 +32,12 @@ describe("CLI", () => {
 
     it("shows help with help command", () => {
       const result = runCli(["help"]);
-      assert.match(result.stdout, /prove-it.*Verifiability-first/s);
+      assert.match(result.stdout, /prove_it.*Verifiability-first/s);
     });
 
     it("shows help with --help flag", () => {
       const result = runCli(["--help"]);
-      assert.match(result.stdout, /prove-it.*Verifiability-first/s);
+      assert.match(result.stdout, /prove_it.*Verifiability-first/s);
     });
   });
 
