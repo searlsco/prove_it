@@ -179,7 +179,7 @@ This is a safety block. You have three options:
    prove_it init
 
 2. USE A DIFFERENT COMMAND (e.g., npm test):
-   echo '{"suiteGate":{"command":"npm test"}}' > ~/.claude/prove-it/config.json
+   mkdir -p ${rootDir}/.claude && echo '{"suiteGate":{"command":"npm test"}}' > ${rootDir}/.claude/prove_it.local.json
 
 3. DISABLE FOR THIS REPO (use with caution):
    mkdir -p ${rootDir}/.claude && echo '{"suiteGate":{"require":false}}' > ${rootDir}/.claude/prove_it.local.json
