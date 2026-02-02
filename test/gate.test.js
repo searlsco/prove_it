@@ -126,7 +126,7 @@ describe("command gating regexes", () => {
 
 describe("config merging", () => {
   function mergeDeep(a, b) {
-    if (!b) return a;
+    if (b === undefined || b === null) return a;
     if (Array.isArray(a) && Array.isArray(b)) return b;
     if (typeof a === "object" && a && typeof b === "object" && b) {
       const out = { ...a };
@@ -169,5 +169,26 @@ describe("config merging", () => {
     const override = { cacheSeconds: 300 };
     const result = mergeDeep(base, override);
     assert.deepStrictEqual(result, { cacheSeconds: 300 });
+  });
+
+  it("merges false values correctly", () => {
+    const base = { suiteGate: { require: true, command: "./script/test" } };
+    const override = { suiteGate: { require: false } };
+    const result = mergeDeep(base, override);
+    assert.deepStrictEqual(result, { suiteGate: { require: false, command: "./script/test" } });
+  });
+
+  it("merges zero values correctly", () => {
+    const base = { cacheSeconds: 900 };
+    const override = { cacheSeconds: 0 };
+    const result = mergeDeep(base, override);
+    assert.deepStrictEqual(result, { cacheSeconds: 0 });
+  });
+
+  it("merges empty string values correctly", () => {
+    const base = { name: "foo" };
+    const override = { name: "" };
+    const result = mergeDeep(base, override);
+    assert.deepStrictEqual(result, { name: "" });
   });
 });
