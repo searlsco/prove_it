@@ -66,7 +66,7 @@ describe("init/deinit", () => {
     assert.strictEqual(result.exitCode, 0);
 
     // Check files exist
-    assert.ok(fs.existsSync(path.join(tmpDir, ".claude", "verifiability.local.json")));
+    assert.ok(fs.existsSync(path.join(tmpDir, ".claude", "prove_it.local.json")));
     assert.ok(fs.existsSync(path.join(tmpDir, ".claude", "rules", "project.md")));
     assert.ok(fs.existsSync(path.join(tmpDir, ".claude", "rules", "oracles.md")));
     assert.ok(fs.existsSync(path.join(tmpDir, "script", "test")));
@@ -91,14 +91,14 @@ describe("init/deinit", () => {
   it("deinit removes prove-it files", () => {
     // First init
     runCli(["init"], { cwd: tmpDir });
-    assert.ok(fs.existsSync(path.join(tmpDir, ".claude", "verifiability.local.json")));
+    assert.ok(fs.existsSync(path.join(tmpDir, ".claude", "prove_it.local.json")));
 
     // Then deinit
     const result = runCli(["deinit"], { cwd: tmpDir });
     assert.strictEqual(result.exitCode, 0);
 
     // Files should be gone
-    assert.ok(!fs.existsSync(path.join(tmpDir, ".claude", "verifiability.local.json")));
+    assert.ok(!fs.existsSync(path.join(tmpDir, ".claude", "prove_it.local.json")));
     assert.ok(!fs.existsSync(path.join(tmpDir, ".claude", "rules", "project.md")));
   });
 

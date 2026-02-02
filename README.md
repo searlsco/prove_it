@@ -64,7 +64,7 @@ prove_it diagnose   # Check what's working and what isn't
 
 ## Configuration
 
-Global config lives at `~/.claude/prove-it/config.json`. Per-repo overrides go in `.claude/verifiability.local.json`.
+Global config lives at `~/.claude/prove-it/config.json`. Per-repo overrides go in `.claude/prove_it.local.json`.
 
 Key settings:
 

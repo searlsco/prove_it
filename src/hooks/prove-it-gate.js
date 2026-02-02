@@ -86,7 +86,7 @@ function loadEffectiveConfig(projectDir) {
   }
 
   // Per-project override (optional)
-  const localCfgPath = path.join(projectDir, ".claude", "verifiability.local.json");
+  const localCfgPath = path.join(projectDir, ".claude", "prove_it.local.json");
   cfg = mergeDeep(cfg, loadJson(localCfgPath));
 
   return { cfg, baseDir };
@@ -176,16 +176,13 @@ The suite gate command '${suiteCmd}' does not exist at:
 This is a safety block. You have three options:
 
 1. CREATE THE SUITE GATE (recommended):
-   mkdir -p ${rootDir}/script
-   # Then create ${rootDir}/script/test with your test command
+   prove_it init
 
-2. USE A DIFFERENT COMMAND:
-   Edit ~/.claude/prove-it/config.json and set suiteGate.command to your test runner.
-   Example: "npm test", "make test", "./run_tests.sh"
+2. USE A DIFFERENT COMMAND (e.g., npm test):
+   echo '{"suiteGate":{"command":"npm test"}}' > ~/.claude/prove-it/config.json
 
 3. DISABLE FOR THIS REPO (use with caution):
-   Create ${rootDir}/.claude/verifiability.local.json with:
-   { "suiteGate": { "require": false } }
+   mkdir -p ${rootDir}/.claude && echo '{"suiteGate":{"require":false}}' > ${rootDir}/.claude/prove_it.local.json
 
 For more info: https://github.com/searlsco/prove-it#configuration`;
 }

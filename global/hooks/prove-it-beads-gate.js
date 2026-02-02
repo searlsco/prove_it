@@ -91,7 +91,7 @@ function loadEffectiveConfig(projectDir) {
   let cfg = defaultConfig();
   cfg = mergeDeep(cfg, loadJson(globalCfgPath));
 
-  const localCfgPath = path.join(projectDir, ".claude", "verifiability.local.json");
+  const localCfgPath = path.join(projectDir, ".claude", "prove_it.local.json");
   cfg = mergeDeep(cfg, loadJson(localCfgPath));
 
   return cfg;
@@ -228,7 +228,7 @@ Before making code changes, select or create a bead to track this work:
 Once you have an in_progress bead, this operation will be allowed.
 
 Tip: If this is exploratory work, you can disable beads enforcement in
-.claude/verifiability.local.json by setting beads.enabled: false`;
+.claude/prove_it.local.json by setting beads.enabled: false`;
 
   emitJson({
     hookSpecificOutput: {

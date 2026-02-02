@@ -305,7 +305,7 @@ function cmdInit() {
 
 // Files/directories that prove-it owns and can safely remove
 const PROVE_IT_PROJECT_FILES = [
-  ".claude/verifiability.local.json",
+  ".claude/prove_it.local.json",
   ".claude/rules/project.md",
   ".claude/rules/oracles.md",
   ".claude/verification/README.md",
@@ -504,11 +504,11 @@ function cmdDiagnose() {
   }
 
   // Check local config
-  const localConfigPath = path.join(repoRoot, ".claude", "verifiability.local.json");
+  const localConfigPath = path.join(repoRoot, ".claude", "prove_it.local.json");
   if (fs.existsSync(localConfigPath)) {
-    log(`  [x] Local config exists: .claude/verifiability.local.json`);
+    log(`  [x] Local config exists: .claude/prove_it.local.json`);
   } else {
-    log(`  [ ] Local config missing (optional): .claude/verifiability.local.json`);
+    log(`  [ ] Local config missing (optional): .claude/prove_it.local.json`);
   }
 
   // Check beads - must be a project .beads/, not the global ~/.beads/ config
@@ -588,7 +588,7 @@ function cmdMigrate() {
   log("");
   log("Note: If you have repos using ./scripts/test, you can either:");
   log("  1. Rename scripts/test to script/test (recommended)");
-  log("  2. Override in .claude/verifiability.local.json:");
+  log("  2. Override in .claude/prove_it.local.json:");
   log('     { "suiteGate": { "command": "./scripts/test" } }');
 }
 
