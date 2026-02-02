@@ -75,7 +75,7 @@ function loadJson(p) {
 }
 
 function mergeDeep(a, b) {
-  if (!b) return a;
+  if (b === undefined || b === null) return a;
   if (Array.isArray(a) && Array.isArray(b)) return b; // override arrays
   if (typeof a === "object" && a && typeof b === "object" && b) {
     const out = { ...a };
@@ -247,6 +247,7 @@ function softStopReminder() {
 }
 
 function suiteGateMissingMessage(suiteCmd, rootDir) {
+  const esc = shellEscape(rootDir);
   return `prove-it: Suite gate not found.
 
 The suite gate command '${suiteCmd}' does not exist at:
@@ -258,10 +259,10 @@ This is a safety block. You have three options:
    prove_it init
 
 2. USE A DIFFERENT COMMAND (e.g., npm test):
-   mkdir -p ${rootDir}/.claude && echo '{"suiteGate":{"command":"npm test"}}' > ${rootDir}/.claude/prove_it.local.json
+   mkdir -p ${esc}/.claude && echo '{"suiteGate":{"command":"npm test"}}' > ${esc}/.claude/prove_it.local.json
 
 3. DISABLE FOR THIS REPO (use with caution):
-   mkdir -p ${rootDir}/.claude && echo '{"suiteGate":{"require":false}}' > ${rootDir}/.claude/prove_it.local.json
+   mkdir -p ${esc}/.claude && echo '{"suiteGate":{"require":false}}' > ${esc}/.claude/prove_it.local.json
 
 For more info: https://github.com/searlsco/prove-it#configuration`;
 }
