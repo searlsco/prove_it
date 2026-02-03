@@ -124,6 +124,68 @@ describe("command gating regexes", () => {
   });
 });
 
+describe("local config write protection", () => {
+  function isLocalConfigWrite(command) {
+    const cmd = command || "";
+    if (!cmd.includes("prove_it.local.json")) return false;
+    return /[^<]>|>>|\btee\b/.test(cmd);
+  }
+
+  describe("blocks writes", () => {
+    it("blocks echo redirect", () => {
+      assert.ok(isLocalConfigWrite('echo \'{"suiteGate":{"require":false}}\' > .claude/prove_it.local.json'));
+    });
+
+    it("blocks append redirect", () => {
+      assert.ok(isLocalConfigWrite('echo foo >> .claude/prove_it.local.json'));
+    });
+
+    it("blocks tee", () => {
+      assert.ok(isLocalConfigWrite('echo foo | tee .claude/prove_it.local.json'));
+    });
+
+    it("blocks tee -a", () => {
+      assert.ok(isLocalConfigWrite('echo foo | tee -a .claude/prove_it.local.json'));
+    });
+
+    it("blocks with full path", () => {
+      assert.ok(isLocalConfigWrite('echo foo > /Users/justin/project/.claude/prove_it.local.json'));
+    });
+
+    it("blocks mkdir && echo combo", () => {
+      assert.ok(isLocalConfigWrite('mkdir -p .claude && echo \'{"suiteGate":{"require":false}}\' > .claude/prove_it.local.json'));
+    });
+  });
+
+  describe("allows reads", () => {
+    it("allows cat", () => {
+      assert.ok(!isLocalConfigWrite('cat .claude/prove_it.local.json'));
+    });
+
+    it("allows grep", () => {
+      assert.ok(!isLocalConfigWrite('grep require .claude/prove_it.local.json'));
+    });
+
+    it("allows jq", () => {
+      assert.ok(!isLocalConfigWrite('jq . .claude/prove_it.local.json'));
+    });
+
+    it("allows input redirect (reading)", () => {
+      assert.ok(!isLocalConfigWrite('jq . < .claude/prove_it.local.json'));
+    });
+  });
+
+  describe("ignores other files", () => {
+    it("allows writing to other json files", () => {
+      assert.ok(!isLocalConfigWrite('echo {} > .claude/other.json'));
+    });
+
+    it("allows writing to config.json", () => {
+      assert.ok(!isLocalConfigWrite('echo {} > ~/.claude/prove-it/config.json'));
+    });
+  });
+});
+
 describe("config merging", () => {
   function mergeDeep(a, b) {
     if (b === undefined || b === null) return a;

@@ -49,7 +49,7 @@ function loadJson(p) {
 }
 
 function mergeDeep(a, b) {
-  if (!b) return a;
+  if (b === undefined || b === null) return a;
   if (Array.isArray(a) && Array.isArray(b)) return b; // override arrays
   if (typeof a === "object" && a && typeof b === "object" && b) {
     const out = { ...a };

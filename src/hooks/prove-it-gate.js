@@ -53,6 +53,9 @@ function defaultConfig() {
     },
     stop: {
       enabled: true,
+      reviewer: {
+        enabled: true,
+      },
       cacheSeconds: 900,
       maxOutputLines: 200,
       maxOutputChars: 12000,
@@ -117,6 +120,15 @@ function shouldGateCommand(command, regexes) {
   });
 }
 
+function isLocalConfigWrite(command) {
+  // Block Claude from writing to prove_it.local.json
+  // This file is for user overrides only - Claude shouldn't modify it
+  const cmd = command || "";
+  if (!cmd.includes("prove_it.local.json")) return false;
+  // Check for write operators
+  return /[^<]>|>>|\btee\b/.test(cmd);
+}
+
 function resolveRoot(projectDir) {
   if (isGitRepo(projectDir)) return gitRoot(projectDir) || projectDir;
   return projectDir;
@@ -167,6 +179,87 @@ function softStopReminder() {
 - Is the user receiving completed, verified work - or a verification TODO list?`;
 }
 
+function getReviewerPrompt() {
+  return `You are a code review gatekeeper. A coding agent claims their work is complete.
+
+Your job: verify that code changes have corresponding test coverage.
+
+## Instructions
+
+1. Run: git diff --stat
+   - If no changes, return PASS (nothing to verify)
+
+2. For each changed source file (src/, lib/, or main code files):
+   - Check if corresponding test files were also modified
+   - If test files exist, read them to verify they actually test the changed behavior
+
+3. Be skeptical of:
+   - Source changes with no test changes
+   - Claims like "existing tests cover it" without evidence
+   - New functions/methods without corresponding test cases
+   - Bug fixes without regression tests
+
+4. Be lenient for:
+   - Documentation-only changes
+   - Config file changes
+   - Refactors where behavior is unchanged and existing tests still apply
+   - Test-only changes
+
+## Response Format
+
+Return EXACTLY one of:
+- PASS
+- FAIL: <reason>
+
+Examples:
+- PASS
+- FAIL: src/hooks/gate.js changed but no tests added for new isLocalConfigWrite() function
+- FAIL: 5 source files changed, 0 test files changed
+
+Be concise. One line only.`;
+}
+
+function runReviewer(rootDir) {
+  // Check if claude CLI is available
+  const whichResult = tryRun("which claude", {});
+  if (whichResult.code !== 0) {
+    // claude CLI not found, skip review
+    return { available: false };
+  }
+
+  const prompt = getReviewerPrompt();
+  const result = tryRun(`claude -p ${shellEscape(prompt)}`, {
+    cwd: rootDir,
+    timeout: 120000, // 2 minute timeout
+  });
+
+  if (result.code !== 0) {
+    // Reviewer failed to run, don't block
+    return { available: true, error: result.stderr || "unknown error" };
+  }
+
+  const output = result.stdout.trim();
+  const firstLine = output.split("\n")[0].trim();
+
+  if (firstLine === "PASS") {
+    return { available: true, pass: true };
+  }
+
+  if (firstLine.startsWith("FAIL:")) {
+    return { available: true, pass: false, reason: firstLine.slice(5).trim() };
+  }
+
+  if (firstLine === "FAIL") {
+    // FAIL without reason, check next line
+    const lines = output.split("\n");
+    const reason = lines.length > 1 ? lines[1].trim() : "No reason provided";
+    return { available: true, pass: false, reason };
+  }
+
+  // Unexpected output format, don't block but log
+  return { available: true, error: `Unexpected reviewer output: ${firstLine}` };
+}
+
 function suiteGateMissingMessage(suiteCmd, rootDir) {
   const esc = shellEscape(rootDir);
   return `prove-it: Suite gate not found.
@@ -183,6 +276,7 @@ This is a safety block. You have three options:
    mkdir -p ${esc}/.claude && echo '{"suiteGate":{"command":"npm test"}}' > ${esc}/.claude/prove_it.local.json
 
 3. DISABLE FOR THIS REPO (use with caution):
+   The user must run this command directly in the terminal:
    mkdir -p ${esc}/.claude && echo '{"suiteGate":{"require":false}}' > ${esc}/.claude/prove_it.local.json
 
 For more info: https://github.com/searlsco/prove-it#configuration`;
@@ -210,6 +304,22 @@ function main() {
     if (input.tool_name !== "Bash") process.exit(0);
     const toolCmd = input.tool_input && input.tool_input.command ? String(input.tool_input.command) : "";
     if (!toolCmd.trim()) process.exit(0);
+
+    // Block Claude from modifying the local config file
+    // This file is for user overrides - only the user should edit it directly
+    if (isLocalConfigWrite(toolCmd)) {
+      emitJson({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason:
+            `prove-it: Cannot modify .claude/prove_it.local.json\n\n` +
+            `This file is for user configuration overrides. ` +
+            `To modify it, run the command directly in your terminal (not through Claude).`,
+        },
+      });
+      process.exit(0);
+    }
 
     // Only gate selected boundary commands
     if (!shouldGateCommand(toolCmd, cfg.preToolUse.gatedCommandRegexes)) process.exit(0);
@@ -361,6 +471,33 @@ function main() {
     saveCache(cachePath, newState);
 
     if (run.code === 0) {
+      // Suite gate passed - now run the reviewer if enabled
+      if (cfg.stop.reviewer && cfg.stop.reviewer.enabled) {
+        const review = runReviewer(rootDir);
+
+        if (review.available && review.pass === false) {
+          emitJson({
+            decision: "block",
+            reason:
+              `prove-it: Test coverage review failed.\n\n` +
+              `${review.reason}\n\n` +
+              `The suite gate passed, but the reviewer found insufficient test coverage for your changes.\n` +
+              `Add tests for the changed code, then try again.`,
+          });
+          process.exit(0);
+        }
+
+        // If reviewer had an error or wasn't available, log but don't block
+        if (review.error) {
+          // Continue with soft reminder, but note the error
+          emitJson({
+            decision: "approve",
+            reason: `prove-it: Reviewer error (${review.error}). ${softStopReminder()}`,
+          });
+          process.exit(0);
+        }
+      }
+
       // Soft reminder even on success - prompt reconsideration
       emitJson({
         decision: "approve",

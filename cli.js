@@ -609,6 +609,7 @@ Commands:
   diagnose    Check installation status and report issues
   migrate     Upgrade config to latest version
   help        Show this help message
+  -v, --version  Show version number
 
 Examples:
   prove_it install      # Set up global hooks
@@ -617,6 +618,11 @@ Examples:
   prove_it deinit       # Remove prove_it from current repo
   prove_it uninstall    # Remove global hooks
 `);
+}
+
+function getVersion() {
+  const pkg = readJson(path.join(__dirname, "package.json"));
+  return pkg?.version || "unknown";
 }
 
 function main() {
@@ -641,6 +647,11 @@ function main() {
       break;
     case "migrate":
       cmdMigrate();
+      break;
+    case "-v":
+    case "--version":
+    case "version":
+      log(getVersion());
       break;
     case "help":
     case "--help":

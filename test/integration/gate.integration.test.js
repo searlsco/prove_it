@@ -187,6 +187,50 @@ describe("prove-it-gate.js integration", () => {
     });
   });
 
+  describe("local config write protection", () => {
+    it("blocks writes to prove_it.local.json", () => {
+      const result = invokeHook(
+        "prove-it-gate.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: 'echo \'{"suiteGate":{"require":false}}\' > .claude/prove_it.local.json' },
+          cwd: tmpDir,
+        },
+        { projectDir: tmpDir }
+      );
+
+      assert.strictEqual(result.exitCode, 0);
+      assert.ok(result.output, "Should produce output");
+      assert.ok(result.output.hookSpecificOutput, "Should have hookSpecificOutput");
+      assert.strictEqual(
+        result.output.hookSpecificOutput.permissionDecision,
+        "deny",
+        "Should deny the command"
+      );
+      assert.ok(
+        result.output.hookSpecificOutput.permissionDecisionReason.includes("prove_it.local.json"),
+        "Should mention the protected file"
+      );
+    });
+
+    it("allows reading prove_it.local.json", () => {
+      const result = invokeHook(
+        "prove-it-gate.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "cat .claude/prove_it.local.json" },
+          cwd: tmpDir,
+        },
+        { projectDir: tmpDir }
+      );
+
+      assert.strictEqual(result.exitCode, 0);
+      assert.strictEqual(result.output, null, "Should not block read operations");
+    });
+  });
+
   describe("shell escaping", () => {
     it("safely handles paths with special characters", () => {
       // Create a directory with special characters
