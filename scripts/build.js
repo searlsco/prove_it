@@ -64,7 +64,6 @@ function buildHook(srcFile, dstFile) {
     isGitRepo: ["tryRun", "shellEscape"],
     gitRoot: ["tryRun", "shellEscape"],
     gitHead: ["tryRun", "shellEscape"],
-    gitStatus: ["tryRun", "shellEscape"],
     gitStatusHash: ["tryRun", "sha256", "shellEscape"],
     gitTrackedFiles: ["tryRun", "shellEscape"],
     writeJson: ["ensureDir"],

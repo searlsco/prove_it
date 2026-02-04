@@ -127,8 +127,8 @@ function cmdInstall() {
   const dstHooksDir = path.join(claudeDir, "hooks");
   const srcHooksDir = path.join(globalDir, "hooks");
 
-  const dstKitDir = path.join(claudeDir, "prove-it");
-  const srcCfg = path.join(globalDir, "prove-it", "config.json");
+  const dstKitDir = path.join(claudeDir, "prove_it");
+  const srcCfg = path.join(globalDir, "prove_it", "config.json");
   const dstCfg = path.join(dstKitDir, "config.json");
 
   // Copy CLAUDE.md
@@ -161,9 +161,9 @@ function cmdInstall() {
   const settings = readJson(settingsPath) || {};
   if (!settings.hooks) settings.hooks = {};
 
-  const hookVerifGate = path.join(dstHooksDir, "prove-it-gate.js");
-  const hookSessionStart = path.join(dstHooksDir, "prove-it-session-start.js");
-  const hookBeadsGate = path.join(dstHooksDir, "prove-it-beads-gate.js");
+  const hookVerifGate = path.join(dstHooksDir, "prove_it_gate.js");
+  const hookSessionStart = path.join(dstHooksDir, "prove_it_session_start.js");
+  const hookBeadsGate = path.join(dstHooksDir, "prove_it_beads_gate.js");
 
   addHookGroup(settings.hooks, "SessionStart", {
     matcher: "startup|resume|clear|compact",
@@ -234,9 +234,9 @@ function removeProveItGroups(groups) {
     const hooks = g && g.hooks ? g.hooks : [];
     const serialized = JSON.stringify(hooks);
     return (
-      !serialized.includes("prove-it-gate.js") &&
-      !serialized.includes("prove-it-session-start.js") &&
-      !serialized.includes("prove-it-beads-gate.js")
+      !serialized.includes("prove_it_gate.js") &&
+      !serialized.includes("prove_it_session_start.js") &&
+      !serialized.includes("prove_it_beads_gate.js")
     );
   });
 }
@@ -256,16 +256,16 @@ function cmdUninstall() {
     writeJsonWithBackup(settingsPath, settings);
   }
 
-  // Remove prove-it files (best-effort)
-  rmIfExists(path.join(claudeDir, "prove-it"));
-  rmIfExists(path.join(claudeDir, "hooks", "prove-it-gate.js"));
-  rmIfExists(path.join(claudeDir, "hooks", "prove-it-session-start.js"));
-  rmIfExists(path.join(claudeDir, "hooks", "prove-it-beads-gate.js"));
+  // Remove prove_it files (best-effort)
+  rmIfExists(path.join(claudeDir, "prove_it"));
+  rmIfExists(path.join(claudeDir, "hooks", "prove_it_gate.js"));
+  rmIfExists(path.join(claudeDir, "hooks", "prove_it_session_start.js"));
+  rmIfExists(path.join(claudeDir, "hooks", "prove_it_beads_gate.js"));
 
   log("prove_it uninstalled (best-effort).");
   log(`  Settings updated: ${settingsPath}`);
-  log(`  Removed: ~/.claude/prove-it`);
-  log(`  Removed: ~/.claude/hooks/prove-it-*.js`);
+  log(`  Removed: ~/.claude/prove_it`);
+  log(`  Removed: ~/.claude/hooks/prove_it_*.js`);
   log("");
   log("Note: CLAUDE.md was not removed automatically.");
 }
@@ -324,8 +324,7 @@ function cmdInit() {
   log("Next:");
   log("  - Edit script/test to run your real test suite.");
   log("  - (Optional) Create script/test_fast for faster Stop-hook checks.");
-  log("  - Fill in .claude/rules/project.md with repo-specific commands/oracles.");
-  log("  - Commit .claude/prove_it.json and .claude/rules/* for team sharing.");
+  log("  - Commit .claude/prove_it.json for team sharing.");
 }
 
 // ============================================================================
@@ -336,13 +335,9 @@ function cmdInit() {
 const PROVE_IT_PROJECT_FILES = [
   ".claude/prove_it.json",
   ".claude/prove_it.local.json",
-  ".claude/rules/project.md",
-  ".claude/rules/oracles.md",
-  ".claude/verification/README.md",
-  ".claude/ui-evals/ui-evals.md",
 ];
 
-const PROVE_IT_PROJECT_DIRS = [".claude/verification", ".claude/ui-evals", ".claude/rules"];
+const PROVE_IT_PROJECT_DIRS = [];
 
 function cmdDeinit() {
   const repoRoot = process.cwd();
@@ -462,7 +457,7 @@ function cmdDiagnose() {
   log("Global installation:");
 
   // Check global config
-  const configPath = path.join(claudeDir, "prove-it", "config.json");
+  const configPath = path.join(claudeDir, "prove_it", "config.json");
   const config = readJson(configPath);
   if (config) {
     const version = config._version || 1;
@@ -478,7 +473,7 @@ function cmdDiagnose() {
   }
 
   // Check hook files
-  const hookFiles = ["prove-it-gate.js", "prove-it-beads-gate.js", "prove-it-session-start.js"];
+  const hookFiles = ["prove_it_gate.js", "prove_it_beads_gate.js", "prove_it_session_start.js"];
   const hooksDir = path.join(claudeDir, "hooks");
   for (const hook of hookFiles) {
     const hookPath = path.join(hooksDir, hook);
@@ -494,9 +489,9 @@ function cmdDiagnose() {
   const settingsPath = path.join(claudeDir, "settings.json");
   const settings = readJson(settingsPath);
   if (settings && settings.hooks) {
-    const hasSessionStart = JSON.stringify(settings.hooks).includes("prove-it-session-start.js");
-    const hasGate = JSON.stringify(settings.hooks).includes("prove-it-gate.js");
-    const hasBeadsGate = JSON.stringify(settings.hooks).includes("prove-it-beads-gate.js");
+    const hasSessionStart = JSON.stringify(settings.hooks).includes("prove_it_session_start.js");
+    const hasGate = JSON.stringify(settings.hooks).includes("prove_it_gate.js");
+    const hasBeadsGate = JSON.stringify(settings.hooks).includes("prove_it_beads_gate.js");
 
     if (hasSessionStart && hasGate && hasBeadsGate) {
       log("  [x] Hooks registered in settings.json");
@@ -603,7 +598,7 @@ function cmdDiagnose() {
 
 function cmdMigrate() {
   const claudeDir = getClaudeDir();
-  const configPath = path.join(claudeDir, "prove-it", "config.json");
+  const configPath = path.join(claudeDir, "prove_it", "config.json");
   const config = readJson(configPath);
 
   if (!config) {
@@ -642,7 +637,7 @@ function cmdMigrate() {
     config._version = 3;
   }
 
-  // Migration v3 -> v4: suiteGate -> commands.test, remove git push from gated commands
+  // Migration v3 -> v4: Full restructure
   if (config._version < 4) {
     log("  v3 -> v4: Migrating to new config structure");
 
@@ -658,22 +653,80 @@ function cmdMigrate() {
       delete config.suiteGate;
     }
 
-    // Remove git push from gatedCommandRegexes (commit is sufficient)
-    if (config.preToolUse?.gatedCommandRegexes) {
-      const before = config.preToolUse.gatedCommandRegexes.length;
-      config.preToolUse.gatedCommandRegexes = config.preToolUse.gatedCommandRegexes.filter(
-        (re) => !re.includes("git\\s+push")
-      );
-      const after = config.preToolUse.gatedCommandRegexes.length;
-      if (before !== after) {
-        log("    - Removed git push from gated commands (commit already runs full gate)");
-      }
-    }
-
     // Remove cacheSeconds (replaced by mtime-based caching)
     if (config.stop?.cacheSeconds !== undefined) {
       delete config.stop.cacheSeconds;
       log("    - Removed cacheSeconds (replaced by mtime-based caching)");
+    }
+
+    // Migrate preToolUse → hooks.done
+    if (config.preToolUse) {
+      if (!config.hooks) config.hooks = {};
+      if (!config.hooks.done) config.hooks.done = {};
+
+      if (config.preToolUse.enabled !== undefined) {
+        config.hooks.done.enabled = config.preToolUse.enabled;
+      }
+      if (config.preToolUse.gatedCommandRegexes) {
+        // Remove git push from gated commands (commit is sufficient)
+        config.hooks.done.commandPatterns = config.preToolUse.gatedCommandRegexes.filter(
+          (re) => !re.includes("git\\s+push")
+        );
+        log("    - Moved preToolUse.gatedCommandRegexes to hooks.done.commandPatterns");
+      }
+      // permissionDecision eliminated
+      delete config.preToolUse;
+      log("    - Moved preToolUse to hooks.done");
+    }
+
+    // Migrate stop → hooks.stop + reviewer.onStop
+    if (config.stop) {
+      if (!config.hooks) config.hooks = {};
+      if (!config.hooks.stop) config.hooks.stop = {};
+
+      if (config.stop.enabled !== undefined) {
+        config.hooks.stop.enabled = config.stop.enabled;
+      }
+      // Move reviewer to reviewer.onStop
+      if (config.stop.reviewer) {
+        if (!config.reviewer) config.reviewer = {};
+        if (!config.reviewer.onStop) config.reviewer.onStop = {};
+        if (config.stop.reviewer.enabled !== undefined) {
+          config.reviewer.onStop.enabled = config.stop.reviewer.enabled;
+        }
+        if (config.stop.reviewer.prompt) {
+          config.reviewer.onStop.prompt = config.stop.reviewer.prompt;
+        }
+        log("    - Moved stop.reviewer to reviewer.onStop");
+      }
+      // Move maxOutputChars to format.maxOutputChars
+      if (config.stop.maxOutputChars) {
+        if (!config.format) config.format = {};
+        config.format.maxOutputChars = config.stop.maxOutputChars;
+        log("    - Moved stop.maxOutputChars to format.maxOutputChars");
+      }
+      delete config.stop;
+      log("    - Moved stop to hooks.stop");
+    }
+
+    // Migrate flat reviewer → reviewer.onStop
+    if (config.reviewer && (config.reviewer.enabled !== undefined || config.reviewer.prompt) && !config.reviewer.onStop) {
+      const enabled = config.reviewer.enabled;
+      const prompt = config.reviewer.prompt;
+      config.reviewer = {
+        onStop: {
+          enabled: enabled !== undefined ? enabled : true,
+          prompt: prompt,
+        },
+      };
+      log("    - Moved flat reviewer to reviewer.onStop");
+    }
+
+    // Simplify beads config
+    if (config.beads && (config.beads.gatedTools || config.beads.gateBashWrites || config.beads.bashWritePatterns)) {
+      const wasEnabled = config.beads.enabled !== false;
+      config.beads = { enabled: wasEnabled };
+      log("    - Simplified beads config (removed implementation details)");
     }
 
     config._version = 4;
@@ -684,13 +737,13 @@ function cmdMigrate() {
   log(`\nMigration complete. Config updated to version ${CURRENT_CONFIG_VERSION}.`);
   log("");
   log("New config structure:");
-  log("  - commands.test.full: Full test suite (runs on commit)");
-  log("  - commands.test.fast: Fast tests (runs on Stop, optional)");
-  log("  - sources: Glob patterns for source files to track (optional)");
-  log("");
-  log("Conventions:");
-  log("  - ./script/test: Full test suite (default)");
-  log("  - ./script/test_fast: Fast tests for Stop hook (optional)");
+  log("  - commands.test.full/fast: Test commands");
+  log("  - hooks.done.enabled/commandPatterns: Done hook (gates commit)");
+  log("  - hooks.stop.enabled: Stop hook");
+  log("  - reviewer.onStop: AI reviewer for test coverage (runs on stop)");
+  log("  - reviewer.onDone: AI reviewer for bugs/issues (runs on commit)");
+  log("  - format.maxOutputChars: Output truncation");
+  log("  - beads.enabled: Require bead before writes");
 }
 
 // ============================================================================

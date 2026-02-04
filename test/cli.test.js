@@ -66,9 +66,8 @@ describe("init/deinit", () => {
     assert.strictEqual(result.exitCode, 0);
 
     // Check files exist
+    assert.ok(fs.existsSync(path.join(tmpDir, ".claude", "prove_it.json")));
     assert.ok(fs.existsSync(path.join(tmpDir, ".claude", "prove_it.local.json")));
-    assert.ok(fs.existsSync(path.join(tmpDir, ".claude", "rules", "project.md")));
-    assert.ok(fs.existsSync(path.join(tmpDir, ".claude", "rules", "oracles.md")));
     assert.ok(fs.existsSync(path.join(tmpDir, "script", "test")));
 
     // Check script/test is executable
@@ -77,15 +76,15 @@ describe("init/deinit", () => {
   });
 
   it("init is non-destructive", () => {
-    // Create a custom file first
-    fs.mkdirSync(path.join(tmpDir, ".claude", "rules"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".claude", "rules", "project.md"), "custom content");
+    // Create a custom prove_it.json first
+    fs.mkdirSync(path.join(tmpDir, ".claude"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".claude", "prove_it.json"), '{"custom": true}');
 
     runCli(["init"], { cwd: tmpDir });
 
     // Custom content should be preserved
-    const content = fs.readFileSync(path.join(tmpDir, ".claude", "rules", "project.md"), "utf8");
-    assert.strictEqual(content, "custom content");
+    const content = fs.readFileSync(path.join(tmpDir, ".claude", "prove_it.json"), "utf8");
+    assert.strictEqual(content, '{"custom": true}');
   });
 
   it("deinit removes prove-it files", () => {
@@ -98,8 +97,8 @@ describe("init/deinit", () => {
     assert.strictEqual(result.exitCode, 0);
 
     // Files should be gone
+    assert.ok(!fs.existsSync(path.join(tmpDir, ".claude", "prove_it.json")));
     assert.ok(!fs.existsSync(path.join(tmpDir, ".claude", "prove_it.local.json")));
-    assert.ok(!fs.existsSync(path.join(tmpDir, ".claude", "rules", "project.md")));
   });
 
   it("deinit preserves customized script/test", () => {

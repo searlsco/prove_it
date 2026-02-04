@@ -9,7 +9,7 @@ const {
   initBeads,
 } = require("./hook-harness");
 
-describe("prove-it-beads-gate.js integration", () => {
+describe("prove_it_beads_gate.js integration", () => {
   let tmpDir;
 
   beforeEach(() => {
@@ -26,7 +26,7 @@ describe("prove-it-beads-gate.js integration", () => {
       // No .beads directory
 
       const result = invokeHook(
-        "prove-it-beads-gate.js",
+        "prove_it_beads_gate.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Edit",
@@ -42,7 +42,7 @@ describe("prove-it-beads-gate.js integration", () => {
 
     it("allows Write without beads directory", () => {
       const result = invokeHook(
-        "prove-it-beads-gate.js",
+        "prove_it_beads_gate.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Write",
@@ -64,7 +64,7 @@ describe("prove-it-beads-gate.js integration", () => {
 
     it("blocks Edit when no in_progress bead", () => {
       const result = invokeHook(
-        "prove-it-beads-gate.js",
+        "prove_it_beads_gate.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Edit",
@@ -99,7 +99,7 @@ describe("prove-it-beads-gate.js integration", () => {
 
     it("blocks Write when no in_progress bead", () => {
       const result = invokeHook(
-        "prove-it-beads-gate.js",
+        "prove_it_beads_gate.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Write",
@@ -118,7 +118,7 @@ describe("prove-it-beads-gate.js integration", () => {
 
     it("blocks NotebookEdit when no in_progress bead", () => {
       const result = invokeHook(
-        "prove-it-beads-gate.js",
+        "prove_it_beads_gate.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "NotebookEdit",
@@ -137,7 +137,7 @@ describe("prove-it-beads-gate.js integration", () => {
 
     it("blocks Bash cat redirect when no in_progress bead", () => {
       const result = invokeHook(
-        "prove-it-beads-gate.js",
+        "prove_it_beads_gate.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
@@ -162,7 +162,7 @@ describe("prove-it-beads-gate.js integration", () => {
 
     it("allows Read tool", () => {
       const result = invokeHook(
-        "prove-it-beads-gate.js",
+        "prove_it_beads_gate.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Read",
@@ -178,7 +178,7 @@ describe("prove-it-beads-gate.js integration", () => {
 
     it("allows Glob tool", () => {
       const result = invokeHook(
-        "prove-it-beads-gate.js",
+        "prove_it_beads_gate.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Glob",
@@ -194,7 +194,7 @@ describe("prove-it-beads-gate.js integration", () => {
 
     it("allows Bash without write patterns", () => {
       const result = invokeHook(
-        "prove-it-beads-gate.js",
+        "prove_it_beads_gate.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
@@ -210,7 +210,7 @@ describe("prove-it-beads-gate.js integration", () => {
 
     it("allows bd commands", () => {
       const result = invokeHook(
-        "prove-it-beads-gate.js",
+        "prove_it_beads_gate.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
@@ -230,7 +230,7 @@ describe("prove-it-beads-gate.js integration", () => {
       const { spawnSync } = require("child_process");
       const path = require("path");
 
-      const hookPath = path.join(__dirname, "..", "..", "global", "hooks", "prove-it-beads-gate.js");
+      const hookPath = path.join(__dirname, "..", "..", "global", "hooks", "prove_it_beads_gate.js");
 
       const result = spawnSync("node", [hookPath], {
         input: "invalid json!@#$",
@@ -250,7 +250,7 @@ describe("prove-it-beads-gate.js integration", () => {
   describe("ignores non-PreToolUse events", () => {
     it("ignores Stop event", () => {
       const result = invokeHook(
-        "prove-it-beads-gate.js",
+        "prove_it_beads_gate.js",
         {
           hook_event_name: "Stop",
           session_id: "test-123",
@@ -264,7 +264,7 @@ describe("prove-it-beads-gate.js integration", () => {
 
     it("ignores SessionStart event", () => {
       const result = invokeHook(
-        "prove-it-beads-gate.js",
+        "prove_it_beads_gate.js",
         {
           hook_event_name: "SessionStart",
           session_id: "test-123",

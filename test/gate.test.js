@@ -196,7 +196,7 @@ describe("local config write protection", () => {
     });
 
     it("allows writing to config.json", () => {
-      assert.ok(!isLocalConfigWrite('echo {} > ~/.claude/prove-it/config.json'));
+      assert.ok(!isLocalConfigWrite('echo {} > ~/.claude/prove_it/config.json'));
     });
   });
 });

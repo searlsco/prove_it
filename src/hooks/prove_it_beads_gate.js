@@ -21,37 +21,50 @@ const {
   tryRun,
   gitRoot,
   emitJson,
+  migrateConfig,
 } = require("../lib/shared");
+
+// Hardcoded: tools that require a bead to be in progress
+const GATED_TOOLS = ["Edit", "Write", "NotebookEdit"];
+
+// Hardcoded: bash patterns that look like code-writing operations
+const BASH_WRITE_PATTERNS = [
+  "\\bcat\\s+.*>",
+  "\\becho\\s+.*>",
+  "\\btee\\s",
+  "\\bsed\\s+-i",
+  "\\bawk\\s+.*-i\\s*inplace",
+];
 
 function defaultConfig() {
   return {
     beads: {
       enabled: true,
-      // Tools that require a bead to be in progress
-      gatedTools: ["Edit", "Write", "NotebookEdit"],
-      // If true, also gate Bash commands that look like they're writing code
-      gateBashWrites: true,
-      // Bash patterns that look like code-writing operations
-      bashWritePatterns: [
-        "\\bcat\\s+.*>",
-        "\\becho\\s+.*>",
-        "\\btee\\s",
-        "\\bsed\\s+-i",
-        "\\bawk\\s+.*-i\\s*inplace",
-      ],
     },
   };
 }
 
 function loadEffectiveConfig(projectDir) {
   const home = os.homedir();
-  const globalCfgPath = path.join(home, ".claude", "prove-it", "config.json");
+  const globalCfgPath = path.join(home, ".claude", "prove_it", "config.json");
 
   let cfg = defaultConfig();
-  cfg = mergeDeep(cfg, loadJson(globalCfgPath));
+  const globalCfg = loadJson(globalCfgPath);
+  if (globalCfg) {
+    cfg = mergeDeep(cfg, migrateConfig({ ...globalCfg }));
+  }
+
+  const teamCfgPath = path.join(projectDir, ".claude", "prove_it.json");
+  const teamCfg = loadJson(teamCfgPath);
+  if (teamCfg) {
+    cfg = mergeDeep(cfg, migrateConfig({ ...teamCfg }));
+  }
 
   const localCfgPath = path.join(projectDir, ".claude", "prove_it.local.json");
-  cfg = mergeDeep(cfg, loadJson(localCfgPath));
+  const localCfg = loadJson(localCfgPath);
+  if (localCfg) {
+    cfg = mergeDeep(cfg, migrateConfig({ ...localCfg }));
+  }
 
   return cfg;
 }
@@ -135,18 +148,17 @@ function main() {
   const projectDir = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
   const cfg = loadEffectiveConfig(projectDir);
 
-  if (!cfg.beads || !cfg.beads.enabled) process.exit(0);
+  if (!cfg.beads?.enabled) process.exit(0);
 
   const toolName = input.tool_name;
-  const gatedTools = cfg.beads.gatedTools || [];
 
   // Check if this tool should be gated
-  let shouldGate = gatedTools.includes(toolName);
+  let shouldGate = GATED_TOOLS.includes(toolName);
 
   // For Bash, check if it looks like a write operation
-  if (!shouldGate && toolName === "Bash" && cfg.beads.gateBashWrites) {
+  if (!shouldGate && toolName === "Bash") {
     const command = input.tool_input?.command || "";
-    shouldGate = shouldGateBash(command, cfg.beads.bashWritePatterns || []);
+    shouldGate = shouldGateBash(command, BASH_WRITE_PATTERNS);
   }
 
   if (!shouldGate) process.exit(0);

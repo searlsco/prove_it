@@ -33,7 +33,7 @@ function main() {
   const projectDir = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
 
   const home = os.homedir();
-  const baseDir = path.join(home, ".claude", "prove-it");
+  const baseDir = path.join(home, ".claude", "prove_it");
   const sessionsDir = path.join(baseDir, "sessions");
   ensureDir(sessionsDir);
 

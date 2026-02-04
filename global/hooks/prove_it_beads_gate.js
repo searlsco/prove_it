@@ -59,40 +59,145 @@ function mergeDeep(a, b) {
   return b;
 }
 
+function migrateConfig(cfg) {
+  if (!cfg) return cfg;
+
+  // Migrate suiteGate to commands.test
+  if (cfg.suiteGate) {
+    if (!cfg.commands) cfg.commands = {};
+    if (!cfg.commands.test) cfg.commands.test = {};
+
+    if (cfg.suiteGate.command && !cfg.commands.test.full) {
+      cfg.commands.test.full = cfg.suiteGate.command;
+    }
+    delete cfg.suiteGate;
+  }
+
+  // Migrate preToolUse → hooks.done
+  if (cfg.preToolUse) {
+    if (!cfg.hooks) cfg.hooks = {};
+    if (!cfg.hooks.done) cfg.hooks.done = {};
+
+    if (cfg.preToolUse.enabled !== undefined) {
+      cfg.hooks.done.enabled = cfg.preToolUse.enabled;
+    }
+    if (cfg.preToolUse.gatedCommandRegexes) {
+      // Remove git push if present (old default)
+      cfg.hooks.done.commandPatterns = cfg.preToolUse.gatedCommandRegexes.filter(
+        (re) => !re.includes("git\\s+push")
+      );
+    }
+    // permissionDecision is eliminated
+    delete cfg.preToolUse;
+  }
+
+  // Migrate stop → hooks.stop + top-level reviewer
+  if (cfg.stop) {
+    if (!cfg.hooks) cfg.hooks = {};
+    if (!cfg.hooks.stop) cfg.hooks.stop = {};
+
+    if (cfg.stop.enabled !== undefined) {
+      cfg.hooks.stop.enabled = cfg.stop.enabled;
+    }
+    // Move reviewer to reviewer.onStop
+    if (cfg.stop.reviewer) {
+      if (!cfg.reviewer) cfg.reviewer = {};
+      if (!cfg.reviewer.onStop) cfg.reviewer.onStop = {};
+      if (cfg.stop.reviewer.enabled !== undefined) {
+        cfg.reviewer.onStop.enabled = cfg.stop.reviewer.enabled;
+      }
+      if (cfg.stop.reviewer.prompt) {
+        cfg.reviewer.onStop.prompt = cfg.stop.reviewer.prompt;
+      }
+    }
+    // Migrate maxOutputChars to format.maxOutputChars
+    if (cfg.stop.maxOutputChars) {
+      if (!cfg.format) cfg.format = {};
+      cfg.format.maxOutputChars = cfg.stop.maxOutputChars;
+    }
+    delete cfg.stop;
+  }
+
+  // Migrate hooks.stop.reviewer → reviewer.onStop
+  if (cfg.hooks?.stop?.reviewer) {
+    if (!cfg.reviewer) cfg.reviewer = {};
+    if (!cfg.reviewer.onStop) cfg.reviewer.onStop = {};
+    if (cfg.hooks.stop.reviewer.enabled !== undefined) {
+      cfg.reviewer.onStop.enabled = cfg.hooks.stop.reviewer.enabled;
+    }
+    if (cfg.hooks.stop.reviewer.prompt) {
+      cfg.reviewer.onStop.prompt = cfg.hooks.stop.reviewer.prompt;
+    }
+    delete cfg.hooks.stop.reviewer;
+  }
+
+  // Migrate flat reviewer → reviewer.onStop
+  if (cfg.reviewer && (cfg.reviewer.enabled !== undefined || cfg.reviewer.prompt) && !cfg.reviewer.onStop) {
+    const enabled = cfg.reviewer.enabled;
+    const prompt = cfg.reviewer.prompt;
+    cfg.reviewer = {
+      onStop: {
+        enabled: enabled !== undefined ? enabled : true,
+        prompt: prompt,
+      },
+    };
+  }
+
+  // Simplify beads config - remove implementation details
+  if (cfg.beads) {
+    const wasEnabled = cfg.beads.enabled;
+    cfg.beads = { enabled: wasEnabled !== false };
+  }
+
+  return cfg;
+}
+
 function readStdin() {
   return fs.readFileSync(0, "utf8");
 }
 
 
+// Hardcoded: tools that require a bead to be in progress
+const GATED_TOOLS = ["Edit", "Write", "NotebookEdit"];
+
+// Hardcoded: bash patterns that look like code-writing operations
+const BASH_WRITE_PATTERNS = [
+  "\\bcat\\s+.*>",
+  "\\becho\\s+.*>",
+  "\\btee\\s",
+  "\\bsed\\s+-i",
+  "\\bawk\\s+.*-i\\s*inplace",
+];
+
 function defaultConfig() {
   return {
     beads: {
       enabled: true,
-      // Tools that require a bead to be in progress
-      gatedTools: ["Edit", "Write", "NotebookEdit"],
-      // If true, also gate Bash commands that look like they're writing code
-      gateBashWrites: true,
-      // Bash patterns that look like code-writing operations
-      bashWritePatterns: [
-        "\\bcat\\s+.*>",
-        "\\becho\\s+.*>",
-        "\\btee\\s",
-        "\\bsed\\s+-i",
-        "\\bawk\\s+.*-i\\s*inplace",
-      ],
     },
   };
 }
 
 function loadEffectiveConfig(projectDir) {
   const home = os.homedir();
-  const globalCfgPath = path.join(home, ".claude", "prove-it", "config.json");
+  const globalCfgPath = path.join(home, ".claude", "prove_it", "config.json");
 
   let cfg = defaultConfig();
-  cfg = mergeDeep(cfg, loadJson(globalCfgPath));
+  const globalCfg = loadJson(globalCfgPath);
+  if (globalCfg) {
+    cfg = mergeDeep(cfg, migrateConfig({ ...globalCfg }));
+  }
+
+  const teamCfgPath = path.join(projectDir, ".claude", "prove_it.json");
+  const teamCfg = loadJson(teamCfgPath);
+  if (teamCfg) {
+    cfg = mergeDeep(cfg, migrateConfig({ ...teamCfg }));
+  }
 
   const localCfgPath = path.join(projectDir, ".claude", "prove_it.local.json");
-  cfg = mergeDeep(cfg, loadJson(localCfgPath));
+  const localCfg = loadJson(localCfgPath);
+  if (localCfg) {
+    cfg = mergeDeep(cfg, migrateConfig({ ...localCfg }));
+  }
 
   return cfg;
 }
@@ -176,18 +281,17 @@ function main() {
   const projectDir = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
   const cfg = loadEffectiveConfig(projectDir);
 
-  if (!cfg.beads || !cfg.beads.enabled) process.exit(0);
+  if (!cfg.beads?.enabled) process.exit(0);
 
   const toolName = input.tool_name;
-  const gatedTools = cfg.beads.gatedTools || [];
 
   // Check if this tool should be gated
-  let shouldGate = gatedTools.includes(toolName);
+  let shouldGate = GATED_TOOLS.includes(toolName);
 
   // For Bash, check if it looks like a write operation
-  if (!shouldGate && toolName === "Bash" && cfg.beads.gateBashWrites) {
+  if (!shouldGate && toolName === "Bash") {
     const command = input.tool_input?.command || "";
-    shouldGate = shouldGateBash(command, cfg.beads.bashWritePatterns || []);
+    shouldGate = shouldGateBash(command, BASH_WRITE_PATTERNS);
   }
 
   if (!shouldGate) process.exit(0);

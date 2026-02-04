@@ -1,0 +1,32 @@
+{
+  "_version": 4,
+  "commands": {
+    "test": {
+      "full": null,
+      "fast": null
+    }
+  },
+  "sources": null,
+  "hooks": {
+    "done": {
+      "enabled": true,
+      "commandPatterns": [
+        "(^|\\s)git\\s+commit\\b",
+        "(^|\\s)(beads|bd)\\s+(done|finish|close)\\b"
+      ]
+    },
+    "stop": {
+      "enabled": true
+    }
+  },
+  "reviewer": {
+    "onStop": { "enabled": true },
+    "onDone": { "enabled": true }
+  },
+  "format": {
+    "maxOutputChars": 12000
+  },
+  "beads": {
+    "enabled": true
+  }
+}
