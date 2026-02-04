@@ -11,7 +11,8 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const HOOKS_DIR = path.join(__dirname, "..", "..", "global", "hooks");
+// Test source hooks directly (they export main() and work standalone)
+const HOOKS_DIR = path.join(__dirname, "..", "..", "src", "hooks");
 
 /**
  * Invoke a hook with the given input.

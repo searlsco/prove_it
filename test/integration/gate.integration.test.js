@@ -169,7 +169,7 @@ describe("prove_it_gate.js integration", () => {
       const { spawnSync } = require("child_process");
       const path = require("path");
 
-      const hookPath = path.join(__dirname, "..", "..", "global", "hooks", "prove_it_gate.js");
+      const hookPath = path.join(__dirname, "..", "..", "src", "hooks", "prove_it_gate.js");
 
       const result = spawnSync("node", [hookPath], {
         input: "not valid json {{{",

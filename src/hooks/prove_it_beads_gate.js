@@ -22,7 +22,7 @@ const {
   gitRoot,
   emitJson,
   migrateConfig,
-} = require("../lib/shared");
+} = require("../../lib/shared");
 
 // Hardcoded: tools that require a bead to be in progress
 const GATED_TOOLS = ["Edit", "Write", "NotebookEdit"];
@@ -210,4 +210,8 @@ Tip: If this is exploratory work, you can disable beads enforcement in
   });
 }
 
-main();
+// Export for CLI, auto-run when called directly
+if (require.main === module) {
+  main();
+}
+module.exports = { main };

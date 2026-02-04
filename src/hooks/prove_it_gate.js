@@ -41,7 +41,7 @@ const {
   gateExists,
   getLatestSnapshot,
   generateDiffsSince,
-} = require("../lib/shared");
+} = require("../../lib/shared");
 
 function shouldGateCommand(command, regexes) {
   const cmd = command || "";
@@ -621,4 +621,8 @@ Fix the failing tests before committing.
   process.exit(0);
 }
 
-main();
+// Export for CLI, auto-run when called directly
+if (require.main === module) {
+  main();
+}
+module.exports = { main };

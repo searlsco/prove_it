@@ -16,7 +16,7 @@ const {
   gitHead,
   gitStatusHash,
   emitJson,
-} = require("../lib/shared");
+} = require("../../lib/shared");
 
 function main() {
   let input;
@@ -83,4 +83,8 @@ function main() {
   process.stdout.write(reminder);
 }
 
-main();
+// Export for CLI, auto-run when called directly
+if (require.main === module) {
+  main();
+}
+module.exports = { main };

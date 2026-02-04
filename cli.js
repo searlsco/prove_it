@@ -891,6 +891,28 @@ function cmdMigrate() {
 }
 
 // ============================================================================
+// Hook command - runs hook logic directly
+// ============================================================================
+
+function cmdHook(hookType) {
+  const hookMap = {
+    gate: "./src/hooks/prove_it_gate.js",
+    "beads-gate": "./src/hooks/prove_it_beads_gate.js",
+    "session-start": "./src/hooks/prove_it_session_start.js",
+  };
+
+  const hookPath = hookMap[hookType];
+  if (!hookPath) {
+    console.error(`Unknown hook type: ${hookType}`);
+    console.error("Available hooks: gate, beads-gate, session-start");
+    process.exit(1);
+  }
+
+  const hook = require(hookPath);
+  hook.main();
+}
+
+// ============================================================================
 // Main CLI
 // ============================================================================
 
@@ -945,6 +967,9 @@ function main() {
       break;
     case "migrate":
       cmdMigrate();
+      break;
+    case "hook":
+      cmdHook(args[1]);
       break;
     case "-v":
     case "--version":
