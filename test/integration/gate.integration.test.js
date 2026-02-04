@@ -50,9 +50,8 @@ describe("prove-it-gate.js integration", () => {
         );
       });
 
-      it("wraps git push with suite gate", () => {
-        createSuiteGate(tmpDir, true);
-
+      it("does not gate git push by default", () => {
+        // git push is no longer gated by default - commit already runs full gate
         const result = invokeHook(
           "prove-it-gate.js",
           {
@@ -65,7 +64,7 @@ describe("prove-it-gate.js integration", () => {
         );
 
         assert.strictEqual(result.exitCode, 0);
-        assert.ok(result.output?.hookSpecificOutput?.updatedInput?.command.includes("./script/test"));
+        assert.strictEqual(result.output, null, "Should not gate git push");
       });
 
       it("wraps bd done with suite gate", () => {
@@ -209,8 +208,8 @@ describe("prove-it-gate.js integration", () => {
         "Should deny the command"
       );
       assert.ok(
-        result.output.hookSpecificOutput.permissionDecisionReason.includes("prove_it.local.json"),
-        "Should mention the protected file"
+        result.output.hookSpecificOutput.permissionDecisionReason.includes("prove_it"),
+        "Should mention the protected file pattern"
       );
     });
 

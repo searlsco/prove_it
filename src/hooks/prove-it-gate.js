@@ -3,15 +3,18 @@
  * prove-it: Verifiability gate
  *
  * Handles:
- * - PreToolUse (Bash): wraps selected "completion boundary" commands with the suite gate
- * - Stop: blocks Claude from stopping until suite gate passes if the session changed the repo
+ * - PreToolUse (Bash): wraps selected "completion boundary" commands with the full gate
+ * - Stop: runs fast gate, skips if tests passed more recently than latest mtime
  *
- * This is intentionally deterministic: it runs the suite gate itself on Stop when required.
+ * Mtime-based skip logic:
+ * - Tracks last run timestamp for fast and full gates in .claude/prove_it.local.json
+ * - Compares to max mtime of tracked files (git ls-files or configured globs)
+ * - If last run passed after latest mtime → skip (no re-run needed)
+ * - If last run failed after latest mtime → block immediately (fix tests first)
  *
- * stop_hook_active field:
- *   When the Stop hook blocks and Claude retries, the input includes stop_hook_active=true.
- *   This prevents infinite Stop loops when tests fail repeatedly - we detect the same
- *   failure state and show a cached message instead of rerunning.
+ * Gate resolution (explicit config wins):
+ * - Fast: cfg.commands.test.fast > script/test_fast > full gate
+ * - Full: cfg.commands.test.full > script/test > script/test_slow
  */
 const fs = require("fs");
 const os = require("os");
@@ -22,92 +25,23 @@ const {
   readStdin,
   loadJson,
   writeJson,
-  mergeDeep,
-  sha256,
   tryRun,
   isGitRepo,
   gitRoot,
   gitHead,
-  gitStatus,
   emitJson,
   tailLines,
   truncateChars,
   nowIso,
+  defaultGateConfig,
+  loadEffectiveConfig,
+  loadRunData,
+  saveRunData,
+  getLatestMtime,
+  resolveFastGate,
+  resolveFullGate,
+  gateExists,
 } = require("../lib/shared");
-
-function defaultConfig() {
-  return {
-    suiteGate: {
-      command: "./script/test",
-      require: true,
-    },
-    preToolUse: {
-      enabled: true,
-      // The suite gate provides safety; no need to also require user confirmation.
-      permissionDecision: "allow",
-      gatedCommandRegexes: [
-        "(^|\\s)git\\s+commit\\b",
-        "(^|\\s)git\\s+push\\b",
-        "(^|\\s)(beads|bd)\\s+(done|finish|close)\\b",
-      ],
-    },
-    stop: {
-      enabled: true,
-      reviewer: {
-        enabled: true,
-      },
-      cacheSeconds: 900,
-      maxOutputLines: 200,
-      maxOutputChars: 12000,
-    },
-  };
-}
-
-function loadEffectiveConfig(projectDir) {
-  const home = os.homedir();
-  const baseDir = path.join(home, ".claude", "prove-it");
-  const globalCfgPath = path.join(baseDir, "config.json");
-
-  let cfg = defaultConfig();
-  const globalCfg = loadJson(globalCfgPath);
-  cfg = mergeDeep(cfg, globalCfg);
-
-  // Auto-migrate old config
-  if (globalCfg && (globalCfg._version || 1) < 3) {
-    // v2->v3: permissionDecision "ask" -> "allow"
-    if (cfg.preToolUse && cfg.preToolUse.permissionDecision === "ask") {
-      cfg.preToolUse.permissionDecision = "allow";
-    }
-    // Write migrated config back
-    try {
-      const migrated = { ...globalCfg, _version: 3 };
-      if (migrated.preToolUse) migrated.preToolUse.permissionDecision = "allow";
-      writeJson(globalCfgPath, migrated);
-    } catch {
-      // Ignore write errors
-    }
-  }
-
-  // Per-project override (optional)
-  const localCfgPath = path.join(projectDir, ".claude", "prove_it.local.json");
-  cfg = mergeDeep(cfg, loadJson(localCfgPath));
-
-  return { cfg, baseDir };
-}
-
-function cacheKeyForRoot(rootDir) {
-  return sha256(rootDir).slice(0, 12);
-}
-
-function loadCache(baseDir, rootDir) {
-  const key = cacheKeyForRoot(rootDir);
-  const cachePath = path.join(baseDir, "cache", key, "state.json");
-  return { key, cachePath, state: loadJson(cachePath) };
-}
-
-function saveCache(cachePath, state) {
-  writeJson(cachePath, state);
-}
 
 function shouldGateCommand(command, regexes) {
   const cmd = command || "";
@@ -121,10 +55,9 @@ function shouldGateCommand(command, regexes) {
 }
 
 function isLocalConfigWrite(command) {
-  // Block Claude from writing to prove_it.local.json
-  // This file is for user overrides only - Claude shouldn't modify it
+  // Block Claude from writing to prove_it.local.json or prove_it.json
   const cmd = command || "";
-  if (!cmd.includes("prove_it.local.json")) return false;
+  if (!cmd.includes("prove_it.local.json") && !cmd.includes("prove_it.json")) return false;
   // Check for write operators
   return /[^<]>|>>|\btee\b/.test(cmd);
 }
@@ -134,46 +67,16 @@ function resolveRoot(projectDir) {
   return projectDir;
 }
 
-function suiteExists(rootDir, suiteCmd) {
-  // Conservative check for default ./script/test. If overridden, we can't reliably stat, so just return true.
-  if (suiteCmd === "./script/test") {
-    return fs.existsSync(path.join(rootDir, "script", "test"));
-  }
-  // Legacy support for ./scripts/test
-  if (suiteCmd === "./scripts/test") {
-    return fs.existsSync(path.join(rootDir, "scripts", "test"));
-  }
-  return true;
-}
-
-function runSuite(rootDir, suiteCmd) {
+function runGate(rootDir, gateCmd) {
   const start = Date.now();
-  const r = tryRun(suiteCmd, { cwd: rootDir });
+  const r = tryRun(gateCmd, { cwd: rootDir });
   const durationMs = Date.now() - start;
   const combined = `${r.stdout}\n${r.stderr}`.trim();
   return { ...r, combined, durationMs };
 }
 
-function stopChangedSinceSessionStart(baseDir, sessionId, rootDir, head, statusHash) {
-  if (!sessionId) return true; // if unknown, err on gating
-  const sessionPath = path.join(baseDir, "sessions", `${sessionId}.json`);
-  const sess = loadJson(sessionPath);
-  if (!sess || !sess.git || !sess.git.is_repo) {
-    // If we can't compare baseline, only gate when working tree is dirty.
-    return null;
-  }
-  // Only compare if it is the same root dir; otherwise, treat as changed.
-  if (sess.git.root && path.resolve(sess.git.root) !== path.resolve(rootDir)) return true;
-  const startHead = sess.git.head || null;
-  const startStatusHash = sess.git.status_hash || null;
-
-  if (startHead !== head) return true;
-  if (startStatusHash !== statusHash) return true;
-  return false;
-}
-
 function softStopReminder() {
-  return `prove-it: Suite gate passed. Before finishing, verify:
+  return `prove-it: Gate passed. Before finishing, verify:
 - Did you run every verification command yourself, or did you leave "Try X" for the user?
 - If you couldn't run something, did you clearly mark it UNVERIFIED?
 - Is the user receiving completed, verified work - or a verification TODO list?`;
@@ -223,18 +126,16 @@ function runReviewer(rootDir) {
   // Check if claude CLI is available
   const whichResult = tryRun("which claude", {});
   if (whichResult.code !== 0) {
-    // claude CLI not found, skip review
     return { available: false };
   }
 
   const prompt = getReviewerPrompt();
   const result = tryRun(`claude -p ${shellEscape(prompt)}`, {
     cwd: rootDir,
-    timeout: 120000, // 2 minute timeout
+    timeout: 120000,
   });
 
   if (result.code !== 0) {
-    // Reviewer failed to run, don't block
     return { available: true, error: result.stderr || "unknown error" };
   }
 
@@ -250,36 +151,82 @@ function runReviewer(rootDir) {
   }
 
   if (firstLine === "FAIL") {
-    // FAIL without reason, check next line
     const lines = output.split("\n");
     const reason = lines.length > 1 ? lines[1].trim() : "No reason provided";
     return { available: true, pass: false, reason };
   }
 
-  // Unexpected output format, don't block but log
   return { available: true, error: `Unexpected reviewer output: ${firstLine}` };
 }
 
-function suiteGateMissingMessage(suiteCmd, rootDir) {
+function gateMissingMessage(gateCmd, rootDir) {
   const esc = shellEscape(rootDir);
-  return `prove-it: Suite gate not found.
+  return `prove-it: Gate not found.
 
-The suite gate command '${suiteCmd}' does not exist at:
+The gate command '${gateCmd}' does not exist at:
   ${rootDir}
 
-This is a safety block. You have three options:
+This is a safety block. Options:
 
-1. CREATE THE SUITE GATE (recommended):
+1. CREATE THE GATE (recommended):
    prove_it init
 
 2. USE A DIFFERENT COMMAND (e.g., npm test):
-   mkdir -p ${esc}/.claude && echo '{"suiteGate":{"command":"npm test"}}' > ${esc}/.claude/prove_it.local.json
+   Create .claude/prove_it.json with:
+   { "commands": { "test": { "full": "npm test" } } }
 
-3. DISABLE FOR THIS REPO (use with caution):
-   The user must run this command directly in the terminal:
-   mkdir -p ${esc}/.claude && echo '{"suiteGate":{"require":false}}' > ${esc}/.claude/prove_it.local.json
+3. Or create the script directly:
+   mkdir -p ${esc}/script && echo '#!/bin/bash\\nnpm test' > ${esc}/script/test && chmod +x ${esc}/script/test
 
 For more info: https://github.com/searlsco/prove-it#configuration`;
+}
+
+/**
+ * Check if we should skip running a gate based on mtime comparison.
+ * Returns: { skip: boolean, reason?: string, lastRun?: object }
+ */
+function shouldSkipGate(rootDir, cfg, localCfgPath, runKey) {
+  const runs = loadRunData(localCfgPath);
+  const lastRun = runs[runKey];
+
+  if (!lastRun || !lastRun.at) {
+    return { skip: false };
+  }
+
+  const latestMtime = getLatestMtime(rootDir, cfg.sources);
+
+  // If no files found or mtime is 0, don't skip
+  if (latestMtime === 0) {
+    return { skip: false };
+  }
+
+  // Compare last run time to latest mtime
+  if (lastRun.at > latestMtime) {
+    if (lastRun.pass) {
+      // Tests passed more recently than code changed - skip
+      return { skip: true, reason: "passed", lastRun };
+    } else {
+      // Tests failed more recently than code changed - skip running, but block
+      return { skip: true, reason: "failed", lastRun };
+    }
+  }
+
+  return { skip: false };
+}
+
+/**
+ * Check if full gate passed recently enough to also satisfy fast gate.
+ */
+function fullGateSatisfiesFast(rootDir, cfg, localCfgPath) {
+  const runs = loadRunData(localCfgPath);
+  const fullRun = runs["test_full"];
+
+  if (!fullRun || !fullRun.at || !fullRun.pass) {
+    return false;
+  }
+
+  const latestMtime = getLatestMtime(rootDir, cfg.sources);
+  return latestMtime > 0 && fullRun.at > latestMtime;
 }
 
 function main() {
@@ -287,7 +234,6 @@ function main() {
   try {
     input = JSON.parse(readStdin());
   } catch (e) {
-    // Fail closed: if we can't parse input, block with error
     emitJson({
       decision: "block",
       reason: `prove-it: Failed to parse hook input.\n\nError: ${e.message}\n\nThis is a safety block. Please report this issue.`,
@@ -297,25 +243,25 @@ function main() {
 
   const hookEvent = input.hook_event_name;
   const projectDir = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
-  const { cfg, baseDir } = loadEffectiveConfig(projectDir);
+  const { cfg, localCfgPath } = loadEffectiveConfig(projectDir, defaultGateConfig);
 
   if (hookEvent === "PreToolUse") {
     if (!cfg.preToolUse.enabled) process.exit(0);
     if (input.tool_name !== "Bash") process.exit(0);
+
     const toolCmd = input.tool_input && input.tool_input.command ? String(input.tool_input.command) : "";
     if (!toolCmd.trim()) process.exit(0);
 
-    // Block Claude from modifying the local config file
-    // This file is for user overrides - only the user should edit it directly
+    // Block Claude from modifying config files
     if (isLocalConfigWrite(toolCmd)) {
       emitJson({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "deny",
           permissionDecisionReason:
-            `prove-it: Cannot modify .claude/prove_it.local.json\n\n` +
-            `This file is for user configuration overrides. ` +
-            `To modify it, run the command directly in your terminal (not through Claude).`,
+            `prove-it: Cannot modify .claude/prove_it*.json\n\n` +
+            `These files are for user configuration. ` +
+            `To modify them, run the command directly in your terminal (not through Claude).`,
         },
       });
       process.exit(0);
@@ -324,20 +270,20 @@ function main() {
     // Only gate selected boundary commands
     if (!shouldGateCommand(toolCmd, cfg.preToolUse.gatedCommandRegexes)) process.exit(0);
 
-    // Avoid double-wrapping
-    if (toolCmd.includes(cfg.suiteGate.command)) process.exit(0);
-
     const rootDir = resolveRoot(projectDir);
-    const suiteCmd = cfg.suiteGate.command;
+    const fullGateCmd = resolveFullGate(rootDir, cfg);
 
-    // If suite gate is required but missing, replace the tool call with a failing message.
-    if (cfg.suiteGate.require && !suiteExists(rootDir, suiteCmd)) {
-      const msg = suiteGateMissingMessage(suiteCmd, rootDir);
+    // Avoid double-wrapping
+    if (toolCmd.includes(fullGateCmd)) process.exit(0);
+
+    // Check if gate exists
+    if (!gateExists(rootDir, fullGateCmd)) {
+      const msg = gateMissingMessage(fullGateCmd, rootDir);
       emitJson({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: cfg.preToolUse.permissionDecision,
-          permissionDecisionReason: "prove-it: suite gate missing; blocking completion boundary",
+          permissionDecisionReason: "prove-it: gate missing; blocking completion boundary",
           updatedInput: {
             ...input.tool_input,
             command: `echo ${shellEscape(msg)} 1>&2; exit 1`,
@@ -347,11 +293,45 @@ function main() {
       process.exit(0);
     }
 
-    // Wrap: run suite gate in repo root, then return to original cwd for the original command.
+    // Check mtime-based skip for full gate
+    const skipCheck = shouldSkipGate(rootDir, cfg, localCfgPath, "test_full");
+
+    if (skipCheck.skip && skipCheck.reason === "passed") {
+      // Full gate passed recently, allow the command without re-running
+      process.exit(0);
+    }
+
+    if (skipCheck.skip && skipCheck.reason === "failed") {
+      // Full gate failed recently, block immediately
+      const lastRun = skipCheck.lastRun;
+      const msg = `prove-it: Tests failed and no code has changed since.
+
+Gate: ${fullGateCmd}
+Last run: ${new Date(lastRun.at).toISOString()}
+Result: FAILED
+
+Fix the failing tests before committing.
+(The gate will re-run automatically when source files change.)`;
+
+      emitJson({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: cfg.preToolUse.permissionDecision,
+          permissionDecisionReason: "prove-it: cached failure, no code changes",
+          updatedInput: {
+            ...input.tool_input,
+            command: `echo ${shellEscape(msg)} 1>&2; exit 1`,
+          },
+        },
+      });
+      process.exit(0);
+    }
+
+    // Wrap: run full gate in repo root, then return to original cwd for the original command
     const cwd = input.cwd || projectDir;
     const wrapped = [
       `cd ${shellEscape(rootDir)}`,
-      `&& ${suiteCmd}`,
+      `&& ${fullGateCmd}`,
       `&& cd ${shellEscape(cwd)}`,
       `&& ${toolCmd}`,
     ].join(" ");
@@ -360,14 +340,14 @@ function main() {
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: cfg.preToolUse.permissionDecision,
-        permissionDecisionReason: `prove-it: running suite gate (${suiteCmd}) before this command`,
+        permissionDecisionReason: `prove-it: running full gate (${fullGateCmd}) before this command`,
         updatedInput: {
           ...input.tool_input,
           command: wrapped,
           description:
             input.tool_input && input.tool_input.description
-              ? `${input.tool_input.description} (prove-it: gated by ${suiteCmd})`
-              : `prove-it: gated by ${suiteCmd}`,
+              ? `${input.tool_input.description} (prove-it: gated by ${fullGateCmd})`
+              : `prove-it: gated by ${fullGateCmd}`,
         },
       },
     });
@@ -378,55 +358,9 @@ function main() {
     if (!cfg.stop.enabled) process.exit(0);
 
     const rootDir = resolveRoot(projectDir);
-    const suiteCmd = cfg.suiteGate.command;
 
-    // If not a git repo, we can't reliably know what changed; only gate if suite is required AND exists AND the user opted into that behavior.
+    // If not a git repo, use simpler logic
     if (!isGitRepo(projectDir)) {
-      if (cfg.suiteGate.require && !suiteExists(rootDir, suiteCmd)) {
-        emitJson({
-          decision: "block",
-          reason: suiteGateMissingMessage(suiteCmd, rootDir),
-        });
-      } else {
-        // Soft reminder for non-git repos
-        emitJson({
-          decision: "approve",
-          reason: softStopReminder(),
-        });
-      }
-      process.exit(0);
-    }
-
-    const head = gitHead(rootDir);
-    const status = gitStatus(rootDir) ?? "";
-    const statusHash = sha256(status);
-
-    // Compare to session baseline if available:
-    const sessionId = input.session_id || null;
-    const changed = stopChangedSinceSessionStart(baseDir, sessionId, rootDir, head, statusHash);
-
-    // If we can prove nothing changed since session start, allow stop without running the suite.
-    if (changed === false) process.exit(0);
-
-    // If suite gate required but missing, block.
-    if (cfg.suiteGate.require && !suiteExists(rootDir, suiteCmd)) {
-      emitJson({
-        decision: "block",
-        reason: suiteGateMissingMessage(suiteCmd, rootDir),
-      });
-      process.exit(0);
-    }
-
-    const { cachePath, state } = loadCache(baseDir, rootDir);
-    const now = Date.now();
-    const cacheSeconds = cfg.stop.cacheSeconds ?? 0;
-
-    const last = state && state.last_suite_run ? state.last_suite_run : null;
-    const cacheFresh = last && (now - Date.parse(last.ran_at)) / 1000 <= cacheSeconds;
-    const sameInputs = last && last.head === head && last.status_hash === statusHash;
-
-    // If last run for this exact state passed recently, allow stop with reminder.
-    if (cacheFresh && sameInputs && last.ok === true) {
       emitJson({
         decision: "approve",
         reason: softStopReminder(),
@@ -434,45 +368,67 @@ function main() {
       process.exit(0);
     }
 
-    // Avoid rerunning repeatedly in Stop-hook loop when nothing changed.
-    // When stop_hook_active is true, we're in a retry after a previous block.
-    // If the workspace hasn't changed, show cached failure instead of rerunning.
-    if (input.stop_hook_active && cacheFresh && sameInputs && last && last.ok === false) {
+    const fastGateCmd = resolveFastGate(rootDir, cfg);
+    const head = gitHead(rootDir);
+
+    // Check if full gate passed recently (satisfies fast gate too)
+    if (fullGateSatisfiesFast(rootDir, cfg, localCfgPath)) {
       emitJson({
-        decision: "block",
-        reason:
-          `prove-it: suite gate still failing for current workspace state.\n\n` +
-          `Repo: ${rootDir}\n` +
-          `Suite gate: ${suiteCmd}\n` +
-          `Last run: ${last.ran_at}\n\n` +
-          `Tail:\n${last.output_tail || "(no output captured)"}\n\n` +
-          `Fix the failure, then try stopping again (the gate will rerun when the workspace changes).`,
+        decision: "approve",
+        reason: softStopReminder(),
       });
       process.exit(0);
     }
 
-    // Run suite gate now (deterministic enforcement).
-    const run = runSuite(rootDir, suiteCmd);
+    // Check mtime-based skip for fast gate
+    const skipCheck = shouldSkipGate(rootDir, cfg, localCfgPath, "test_fast");
 
+    if (skipCheck.skip && skipCheck.reason === "passed") {
+      emitJson({
+        decision: "approve",
+        reason: softStopReminder(),
+      });
+      process.exit(0);
+    }
+
+    if (skipCheck.skip && skipCheck.reason === "failed") {
+      const lastRun = skipCheck.lastRun;
+      emitJson({
+        decision: "block",
+        reason:
+          `prove-it: Tests failed and no code has changed since.\n\n` +
+          `Gate: ${fastGateCmd}\n` +
+          `Last run: ${new Date(lastRun.at).toISOString()}\n` +
+          `Result: FAILED\n\n` +
+          `Fix the failing tests, then try stopping again.\n` +
+          `(The gate will re-run automatically when source files change.)`,
+      });
+      process.exit(0);
+    }
+
+    // Check if gate exists
+    if (!gateExists(rootDir, fastGateCmd)) {
+      emitJson({
+        decision: "block",
+        reason: gateMissingMessage(fastGateCmd, rootDir),
+      });
+      process.exit(0);
+    }
+
+    // Run the fast gate
+    const run = runGate(rootDir, fastGateCmd);
     const outputTail = truncateChars(tailLines(run.combined, cfg.stop.maxOutputLines), cfg.stop.maxOutputChars);
 
-    const newState = {
-      ...state,
-      last_suite_run: {
-        ran_at: nowIso(),
-        head,
-        status_hash: statusHash,
-        ok: run.code === 0,
-        exit_code: run.code,
-        duration_ms: run.durationMs,
-        output_tail: outputTail,
-      },
-    };
-    saveCache(cachePath, newState);
+    // Save run result
+    saveRunData(localCfgPath, "test_fast", {
+      at: Date.now(),
+      head,
+      pass: run.code === 0,
+    });
 
     if (run.code === 0) {
-      // Suite gate passed - now run the reviewer if enabled
-      if (cfg.stop.reviewer && cfg.stop.reviewer.enabled) {
+      // Fast gate passed - run reviewer if enabled
+      if (cfg.stop.reviewer?.enabled) {
         const review = runReviewer(rootDir);
 
         if (review.available && review.pass === false) {
@@ -481,15 +437,13 @@ function main() {
             reason:
               `prove-it: Test coverage review failed.\n\n` +
               `${review.reason}\n\n` +
-              `The suite gate passed, but the reviewer found insufficient test coverage for your changes.\n` +
+              `The gate passed, but the reviewer found insufficient test coverage.\n` +
               `Add tests for the changed code, then try again.`,
           });
           process.exit(0);
         }
 
-        // If reviewer had an error or wasn't available, log but don't block
         if (review.error) {
-          // Continue with soft reminder, but note the error
           emitJson({
             decision: "approve",
             reason: `prove-it: Reviewer error (${review.error}). ${softStopReminder()}`,
@@ -498,7 +452,6 @@ function main() {
         }
       }
 
-      // Soft reminder even on success - prompt reconsideration
       emitJson({
         decision: "approve",
         reason: softStopReminder(),
@@ -508,13 +461,13 @@ function main() {
       emitJson({
         decision: "block",
         reason:
-          `prove-it: suite gate failed; cannot stop or claim completion.\n\n` +
+          `prove-it: Gate failed; cannot stop.\n\n` +
           `Repo: ${rootDir}\n` +
-          `Command: ${suiteCmd}\n` +
+          `Command: ${fastGateCmd}\n` +
           `Exit: ${run.code}\n` +
           `Duration: ${(run.durationMs / 1000).toFixed(1)}s\n\n` +
           `Tail:\n${outputTail || "(no output captured)"}\n\n` +
-          `Next step: fix the failure, then rerun ${suiteCmd} (or attempt to stop; the gate will rerun).`,
+          `Fix the failure, then try stopping again.`,
       });
       process.exit(0);
     }

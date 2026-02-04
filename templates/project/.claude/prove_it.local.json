@@ -1,15 +1,2 @@
 {
-  "suiteGate": {
-    "command": "./script/test",
-    "require": true
-  },
-  "preToolUse": {
-    "permissionDecision": "ask"
-  },
-  "stop": {
-    "cacheSeconds": 900
-  },
-  "beads": {
-    "enabled": true
-  }
 }

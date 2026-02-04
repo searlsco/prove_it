@@ -15,7 +15,7 @@ const os = require("os");
 const path = require("path");
 
 // Current config version
-const CURRENT_CONFIG_VERSION = 3;
+const CURRENT_CONFIG_VERSION = 4;
 
 // ============================================================================
 // Shared utilities
@@ -274,6 +274,27 @@ function cmdUninstall() {
 // Init command
 // ============================================================================
 
+function addToGitignore(repoRoot, pattern) {
+  const gitignorePath = path.join(repoRoot, ".gitignore");
+  let content = "";
+
+  if (fs.existsSync(gitignorePath)) {
+    content = fs.readFileSync(gitignorePath, "utf8");
+    // Check if pattern already exists
+    if (content.split("\n").some((line) => line.trim() === pattern)) {
+      return false; // Already present
+    }
+  }
+
+  // Add pattern with a newline if needed
+  if (content && !content.endsWith("\n")) {
+    content += "\n";
+  }
+  content += pattern + "\n";
+  fs.writeFileSync(gitignorePath, content);
+  return true;
+}
+
 function cmdInit() {
   const repoRoot = process.cwd();
   const srcRoot = getSrcRoot();
@@ -289,14 +310,22 @@ function cmdInit() {
     chmodX(scriptTest);
   }
 
+  // Add prove_it.local.json to .gitignore (it contains ephemeral run data)
+  const addedToGitignore = addToGitignore(repoRoot, ".claude/prove_it.local.json");
+
   log("prove_it project templates copied (non-destructive).");
-  log(`  Added (if missing): ${path.join(repoRoot, ".claude")}`);
+  log(`  Added (if missing): ${path.join(repoRoot, ".claude", "prove_it.json")} (team config)`);
+  log(`  Added (if missing): ${path.join(repoRoot, ".claude", "prove_it.local.json")} (local/ephemeral)`);
   log(`  Added (if missing): ${scriptTest}`);
+  if (addedToGitignore) {
+    log(`  Added to .gitignore: .claude/prove_it.local.json`);
+  }
   log("");
   log("Next:");
-  log("  - Edit script/test to run your real suite gate.");
+  log("  - Edit script/test to run your real test suite.");
+  log("  - (Optional) Create script/test_fast for faster Stop-hook checks.");
   log("  - Fill in .claude/rules/project.md with repo-specific commands/oracles.");
-  log("  - (Optional) Commit .claude/rules/* and .claude/ui-evals/* for team sharing.");
+  log("  - Commit .claude/prove_it.json and .claude/rules/* for team sharing.");
 }
 
 // ============================================================================
@@ -305,6 +334,7 @@ function cmdInit() {
 
 // Files/directories that prove-it owns and can safely remove
 const PROVE_IT_PROJECT_FILES = [
+  ".claude/prove_it.json",
   ".claude/prove_it.local.json",
   ".claude/rules/project.md",
   ".claude/rules/oracles.md",
@@ -483,32 +513,62 @@ function cmdDiagnose() {
 
   log("\nCurrent repository:");
 
-  // Check suite gate
-  const suiteCmd = config?.suiteGate?.command || "./script/test";
-  let suiteGatePath;
-  if (suiteCmd === "./script/test") {
-    suiteGatePath = path.join(repoRoot, "script", "test");
-  } else if (suiteCmd === "./scripts/test") {
-    suiteGatePath = path.join(repoRoot, "scripts", "test");
+  // Check for gate scripts
+  const scriptTest = path.join(repoRoot, "script", "test");
+  const scriptTestFast = path.join(repoRoot, "script", "test_fast");
+
+  if (fs.existsSync(scriptTest)) {
+    log(`  [x] Full gate exists: ./script/test`);
   } else {
-    suiteGatePath = null;
+    log(`  [ ] Full gate missing: ./script/test`);
+    issues.push("Create ./script/test for this repository");
   }
 
-  if (suiteGatePath && fs.existsSync(suiteGatePath)) {
-    log(`  [x] Suite gate exists: ${suiteCmd}`);
-  } else if (suiteGatePath) {
-    log(`  [ ] Suite gate missing: ${suiteCmd}`);
-    issues.push(`Create ${suiteCmd} for this repository`);
+  if (fs.existsSync(scriptTestFast)) {
+    log(`  [x] Fast gate exists: ./script/test_fast`);
   } else {
-    log(`  [?] Custom suite gate: ${suiteCmd} (cannot verify)`);
+    log(`  [ ] Fast gate not configured (optional): ./script/test_fast`);
+  }
+
+  // Check team config
+  const teamConfigPath = path.join(repoRoot, ".claude", "prove_it.json");
+  if (fs.existsSync(teamConfigPath)) {
+    log(`  [x] Team config exists: .claude/prove_it.json`);
+  } else {
+    log(`  [ ] Team config missing (optional): .claude/prove_it.json`);
   }
 
   // Check local config
   const localConfigPath = path.join(repoRoot, ".claude", "prove_it.local.json");
   if (fs.existsSync(localConfigPath)) {
     log(`  [x] Local config exists: .claude/prove_it.local.json`);
+    const localConfig = readJson(localConfigPath);
+    if (localConfig?.runs) {
+      const fastRun = localConfig.runs.test_fast;
+      const fullRun = localConfig.runs.test_full;
+      if (fastRun) {
+        const status = fastRun.pass ? "passed" : "failed";
+        log(`      Last fast run: ${status} at ${new Date(fastRun.at).toISOString()}`);
+      }
+      if (fullRun) {
+        const status = fullRun.pass ? "passed" : "failed";
+        log(`      Last full run: ${status} at ${new Date(fullRun.at).toISOString()}`);
+      }
+    }
   } else {
     log(`  [ ] Local config missing (optional): .claude/prove_it.local.json`);
+  }
+
+  // Check .gitignore for prove_it.local.json
+  const gitignorePath = path.join(repoRoot, ".gitignore");
+  if (fs.existsSync(gitignorePath)) {
+    const gitignoreContent = fs.readFileSync(gitignorePath, "utf8");
+    if (gitignoreContent.includes("prove_it.local.json")) {
+      log(`  [x] .gitignore includes prove_it.local.json`);
+    } else {
+      log(`  [ ] .gitignore missing prove_it.local.json`);
+      issues.push("Add .claude/prove_it.local.json to .gitignore");
+    }
   }
 
   // Check beads - must be a project .beads/, not the global ~/.beads/ config
@@ -582,14 +642,55 @@ function cmdMigrate() {
     config._version = 3;
   }
 
+  // Migration v3 -> v4: suiteGate -> commands.test, remove git push from gated commands
+  if (config._version < 4) {
+    log("  v3 -> v4: Migrating to new config structure");
+
+    // Migrate suiteGate to commands.test
+    if (config.suiteGate) {
+      if (!config.commands) config.commands = {};
+      if (!config.commands.test) config.commands.test = {};
+
+      if (config.suiteGate.command) {
+        config.commands.test.full = config.suiteGate.command;
+        log(`    - Moved suiteGate.command to commands.test.full: ${config.suiteGate.command}`);
+      }
+      delete config.suiteGate;
+    }
+
+    // Remove git push from gatedCommandRegexes (commit is sufficient)
+    if (config.preToolUse?.gatedCommandRegexes) {
+      const before = config.preToolUse.gatedCommandRegexes.length;
+      config.preToolUse.gatedCommandRegexes = config.preToolUse.gatedCommandRegexes.filter(
+        (re) => !re.includes("git\\s+push")
+      );
+      const after = config.preToolUse.gatedCommandRegexes.length;
+      if (before !== after) {
+        log("    - Removed git push from gated commands (commit already runs full gate)");
+      }
+    }
+
+    // Remove cacheSeconds (replaced by mtime-based caching)
+    if (config.stop?.cacheSeconds !== undefined) {
+      delete config.stop.cacheSeconds;
+      log("    - Removed cacheSeconds (replaced by mtime-based caching)");
+    }
+
+    config._version = 4;
+  }
+
   // Write updated config
   writeJsonWithBackup(configPath, config);
   log(`\nMigration complete. Config updated to version ${CURRENT_CONFIG_VERSION}.`);
   log("");
-  log("Note: If you have repos using ./scripts/test, you can either:");
-  log("  1. Rename scripts/test to script/test (recommended)");
-  log("  2. Override in .claude/prove_it.local.json:");
-  log('     { "suiteGate": { "command": "./scripts/test" } }');
+  log("New config structure:");
+  log("  - commands.test.full: Full test suite (runs on commit)");
+  log("  - commands.test.fast: Fast tests (runs on Stop, optional)");
+  log("  - sources: Glob patterns for source files to track (optional)");
+  log("");
+  log("Conventions:");
+  log("  - ./script/test: Full test suite (default)");
+  log("  - ./script/test_fast: Fast tests for Stop hook (optional)");
 }
 
 // ============================================================================

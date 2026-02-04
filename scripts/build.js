@@ -66,8 +66,16 @@ function buildHook(srcFile, dstFile) {
     gitHead: ["tryRun", "shellEscape"],
     gitStatus: ["tryRun", "shellEscape"],
     gitStatusHash: ["tryRun", "sha256", "shellEscape"],
+    gitTrackedFiles: ["tryRun", "shellEscape"],
     writeJson: ["ensureDir"],
-    loadEffectiveConfig: ["mergeDeep", "loadJson"],
+    loadEffectiveConfig: ["mergeDeep", "loadJson", "migrateConfig"],
+    loadRunData: ["loadJson"],
+    saveRunData: ["loadJson", "writeJson"],
+    getLatestMtime: ["gitTrackedFiles", "expandGlobs"],
+    expandGlobs: ["globToRegex", "walkDir"],
+    resolveFastGate: ["resolveFullGate"],
+    resolveFullGate: [],
+    gateExists: [],
   };
 
   // Map functions to their required modules

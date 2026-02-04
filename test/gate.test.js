@@ -5,7 +5,14 @@ const assert = require("node:assert");
 // These are unit tests for the regex matching and config merging
 
 describe("command gating regexes", () => {
+  // Note: git push removed from defaults - commit already runs full gate
   const defaultRegexes = [
+    "(^|\\s)git\\s+commit\\b",
+    "(^|\\s)(beads|bd)\\s+(done|finish|close)\\b",
+  ];
+
+  // For testing git push separately (users can add it back)
+  const withPushRegexes = [
     "(^|\\s)git\\s+commit\\b",
     "(^|\\s)git\\s+push\\b",
     "(^|\\s)(beads|bd)\\s+(done|finish|close)\\b",
@@ -43,17 +50,21 @@ describe("command gating regexes", () => {
     });
   });
 
-  describe("git push", () => {
-    it("gates 'git push'", () => {
-      assert.ok(shouldGate("git push"));
+  describe("git push (not gated by default)", () => {
+    it("does not gate 'git push' by default", () => {
+      assert.ok(!shouldGate("git push"));
     });
 
-    it("gates 'git push origin main'", () => {
-      assert.ok(shouldGate("git push origin main"));
+    it("does not gate 'git push origin main' by default", () => {
+      assert.ok(!shouldGate("git push origin main"));
     });
 
-    it("gates 'git push --force'", () => {
-      assert.ok(shouldGate("git push --force"));
+    it("gates 'git push' when added to regexes", () => {
+      assert.ok(shouldGate("git push", withPushRegexes));
+    });
+
+    it("gates 'git push --force' when added to regexes", () => {
+      assert.ok(shouldGate("git push --force", withPushRegexes));
     });
 
     it("does not gate 'git pull'", () => {
@@ -96,8 +107,12 @@ describe("command gating regexes", () => {
       assert.ok(shouldGate('npm test && git commit -m "done"'));
     });
 
-    it("gates 'echo foo; git push'", () => {
-      assert.ok(shouldGate("echo foo; git push"));
+    it("gates 'echo foo; git push' when push is gated", () => {
+      assert.ok(shouldGate("echo foo; git push", withPushRegexes));
+    });
+
+    it("does not gate 'echo foo; git push' by default", () => {
+      assert.ok(!shouldGate("echo foo; git push"));
     });
   });
 
