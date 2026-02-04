@@ -64,36 +64,85 @@ prove_it diagnose   # Check what's working and what isn't
 
 ## Configuration
 
-Global config lives at `~/.claude/prove_it/config.json`. Per-repo config is split:
-- `.claude/prove_it.json` - team config (commit this)
-- `.claude/prove_it.local.json` - local overrides + run cache (gitignored)
+Config files are layered (later overrides earlier):
+1. `~/.claude/prove_it/config.json` - global user config
+2. `.claude/prove_it.json` - team config (commit this)
+3. `.claude/prove_it.local.json` - local overrides + run cache (gitignored)
 
-Key settings:
+### Team config (`.claude/prove_it.json`)
 
-- `commands.test.full` - full gate command (default: `./script/test`)
-- `commands.test.fast` - fast gate for Stop hook (default: `./script/test_fast`, falls back to full)
-- `sources` - glob patterns to track for mtime-based skip (default: `null` = git-tracked files)
-- `hooks.done.enabled` - enable Done hook (gates commit/beads done) (default: `true`)
-- `hooks.done.commandPatterns` - regex patterns for commands that trigger the gate
-- `hooks.stop.enabled` - enable Stop hook (default: `true`)
-- `reviewer.onStop.enabled` - AI reviewer checks test coverage on Stop (default: `true`)
-- `reviewer.onStop.prompt` - what the coverage reviewer checks
-- `reviewer.onDone.enabled` - AI reviewer checks for bugs before commit (default: `true`)
-- `reviewer.onDone.prompt` - what the code reviewer checks
-- `format.maxOutputChars` - truncate gate output to this many characters (default: `12000`)
-- `beads.enabled` - require a task before code changes (default: `true`)
-
-Example: use npm test instead of script/test:
+This is the main config you'll customize per-repo. Full example with all options:
 
 ```json
 {
   "commands": {
     "test": {
-      "full": "npm test"
+      "full": "./script/test",
+      "fast": "./script/test_fast"
     }
+  },
+  "sources": [
+    "src/**",
+    "lib/**",
+    "test/**",
+    "*.js"
+  ],
+  "hooks": {
+    "done": {
+      "enabled": true,
+      "commandPatterns": [
+        "(^|\\s)git\\s+commit\\b",
+        "(^|\\s)(beads|bd)\\s+(done|finish|close)\\b"
+      ]
+    },
+    "stop": {
+      "enabled": true
+    }
+  },
+  "reviewer": {
+    "onStop": {
+      "enabled": true,
+      "prompt": "Custom coverage review instructions..."
+    },
+    "onDone": {
+      "enabled": true,
+      "prompt": "Custom code review instructions..."
+    }
+  },
+  "format": {
+    "maxOutputChars": 12000
+  },
+  "beads": {
+    "enabled": true
   }
 }
 ```
+
+**Key settings to customize:**
+
+- **`commands.test.full`** - your full test suite command (default: `./script/test`)
+- **`commands.test.fast`** - fast tests for Stop hook (default: `./script/test_fast`, falls back to full)
+- **`sources`** - glob patterns for source files. When set, prove_it only runs tests when these files change. If `null` (default), tracks all git-tracked files.
+
+### Local config (`.claude/prove_it.local.json`)
+
+Gitignored. Contains local overrides and run tracking data:
+
+```json
+{
+  "hooks": {
+    "stop": {
+      "enabled": false
+    }
+  },
+  "runs": {
+    "test_fast": { "pass": true, "at": 1706000000000, "mtime": 1705999000000 },
+    "test_full": { "pass": true, "at": 1706000000000, "mtime": 1705999000000 }
+  }
+}
+```
+
+The `runs` section is managed automatically—it tracks when tests last passed so prove_it can skip redundant runs.
 
 ## How it works
 

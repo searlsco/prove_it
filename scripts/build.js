@@ -75,6 +75,12 @@ function buildHook(srcFile, dstFile) {
     resolveFastGate: ["resolveFullGate"],
     resolveFullGate: [],
     gateExists: [],
+    // Checkpoint introspection
+    getSessionJsonlPath: ["getSessionId"],
+    getFileHistoryDir: ["getSessionId"],
+    getLatestSnapshot: ["getSessionJsonlPath"],
+    getEditedFilesSince: ["getLatestSnapshot", "getSessionJsonlPath"],
+    generateDiffsSince: ["getEditedFilesSince", "getFileHistoryDir", "getLatestSnapshot", "generateUnifiedDiff"],
   };
 
   // Map functions to their required modules

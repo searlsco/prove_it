@@ -146,6 +146,46 @@ describe("local config write protection", () => {
     return /[^<]>|>>|\btee\b/.test(cmd);
   }
 
+  function isConfigFileEdit(toolName, toolInput) {
+    if (toolName !== "Write" && toolName !== "Edit") return false;
+    const filePath = toolInput?.file_path || "";
+    return filePath.includes("prove_it.json") || filePath.includes("prove_it.local.json");
+  }
+
+  describe("blocks Write/Edit tools", () => {
+    it("blocks Write to prove_it.json", () => {
+      assert.ok(isConfigFileEdit("Write", { file_path: "/project/.claude/prove_it.json" }));
+    });
+
+    it("blocks Write to prove_it.local.json", () => {
+      assert.ok(isConfigFileEdit("Write", { file_path: "/project/.claude/prove_it.local.json" }));
+    });
+
+    it("blocks Edit to prove_it.json", () => {
+      assert.ok(isConfigFileEdit("Edit", { file_path: ".claude/prove_it.json" }));
+    });
+
+    it("blocks Edit to prove_it.local.json", () => {
+      assert.ok(isConfigFileEdit("Edit", { file_path: ".claude/prove_it.local.json" }));
+    });
+
+    it("allows Write to other files", () => {
+      assert.ok(!isConfigFileEdit("Write", { file_path: "/project/src/index.js" }));
+    });
+
+    it("allows Edit to other files", () => {
+      assert.ok(!isConfigFileEdit("Edit", { file_path: ".claude/settings.json" }));
+    });
+
+    it("allows Read tool", () => {
+      assert.ok(!isConfigFileEdit("Read", { file_path: ".claude/prove_it.json" }));
+    });
+
+    it("allows Bash tool", () => {
+      assert.ok(!isConfigFileEdit("Bash", { command: "cat .claude/prove_it.json" }));
+    });
+  });
+
   describe("blocks writes", () => {
     it("blocks echo redirect", () => {
       assert.ok(isLocalConfigWrite('echo \'{"suiteGate":{"require":false}}\' > .claude/prove_it.local.json'));

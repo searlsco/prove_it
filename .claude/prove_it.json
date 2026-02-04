@@ -1,0 +1,15 @@
+{
+  "commands": {
+    "test": {
+      "full": "./script/test",
+      "fast": "./script/test_fast"
+    }
+  },
+  "sources": [
+    "cli.js",
+    "lib/**/*.js",
+    "src/**/*.js",
+    "scripts/**/*.js",
+    "test/**/*.js"
+  ]
+}

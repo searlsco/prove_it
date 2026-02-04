@@ -128,6 +128,151 @@ function gateExists(rootDir, gateCmd) {
   return true;
 }
 
+function getSessionId() {
+  return process.env.CLAUDE_SESSION_ID || null;
+}
+
+function getSessionJsonlPath(projectDir) {
+  const sessionId = getSessionId();
+  if (!sessionId) return null;
+
+  const home = os.homedir();
+  // Encode project path: /Users/foo/bar -> -Users-foo-bar
+  const encoded = projectDir.replace(/\//g, "-").replace(/^-/, "-");
+  return path.join(home, ".claude", "projects", encoded, `${sessionId}.jsonl`);
+}
+
+function getLatestSnapshot(projectDir) {
+  const jsonlPath = getSessionJsonlPath(projectDir);
+  if (!jsonlPath || !fs.existsSync(jsonlPath)) return null;
+
+  try {
+    const content = fs.readFileSync(jsonlPath, "utf8");
+    const lines = content.trim().split("\n").reverse(); // Most recent first
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const entry = JSON.parse(line);
+      if (entry.type === "file-history-snapshot" && entry.snapshot) {
+        return entry.snapshot;
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function getEditedFilesSince(projectDir, previousMessageId) {
+  const currentSnapshot = getLatestSnapshot(projectDir);
+  if (!currentSnapshot) return [];
+
+  const currentFiles = Object.keys(currentSnapshot.trackedFileBackups || {});
+
+  if (!previousMessageId) {
+    return currentFiles;
+  }
+
+  // Find the previous snapshot and compare
+  const jsonlPath = getSessionJsonlPath(projectDir);
+  if (!jsonlPath || !fs.existsSync(jsonlPath)) return currentFiles;
+
+  try {
+    const content = fs.readFileSync(jsonlPath, "utf8");
+    const lines = content.trim().split("\n");
+
+    let previousSnapshot = null;
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const entry = JSON.parse(line);
+      if (entry.type === "file-history-snapshot" && entry.snapshot?.messageId === previousMessageId) {
+        previousSnapshot = entry.snapshot;
+        break;
+      }
+    }
+
+    if (!previousSnapshot) return currentFiles;
+
+    // Files that are new or have different versions
+    const previousBackups = previousSnapshot.trackedFileBackups || {};
+    const currentBackups = currentSnapshot.trackedFileBackups || {};
+    const editedFiles = [];
+
+    for (const [filePath, info] of Object.entries(currentBackups)) {
+      const prev = previousBackups[filePath];
+      if (!prev || prev.version !== info.version) {
+        editedFiles.push(filePath);
+      }
+    }
+
+    return editedFiles;
+  } catch {
+    return currentFiles;
+  }
+}
+
+function getFileHistoryDir() {
+  const sessionId = getSessionId();
+  if (!sessionId) return null;
+
+  const home = os.homedir();
+  return path.join(home, ".claude", "file-history", sessionId);
+}
+
+function generateUnifiedDiff(fileName, oldContent, newContent) {
+  const oldLines = oldContent.split("\n");
+  const newLines = newContent.split("\n");
+
+  if (oldContent === newContent) return null;
+
+  // Simple diff: show changed lines with context
+  const diff = [`--- a/${fileName}`, `+++ b/${fileName}`];
+  let inHunk = false;
+  let hunkStart = 0;
+  let hunkLines = [];
+
+  for (let i = 0; i < Math.max(oldLines.length, newLines.length); i++) {
+    const oldLine = oldLines[i];
+    const newLine = newLines[i];
+
+    if (oldLine !== newLine) {
+      if (!inHunk) {
+        inHunk = true;
+        hunkStart = Math.max(0, i - 2);
+        // Add context before
+        for (let j = hunkStart; j < i; j++) {
+          if (oldLines[j] !== undefined) hunkLines.push(` ${oldLines[j]}`);
+        }
+      }
+      if (oldLine !== undefined && newLine !== undefined) {
+        hunkLines.push(`-${oldLine}`);
+        hunkLines.push(`+${newLine}`);
+      } else if (oldLine !== undefined) {
+        hunkLines.push(`-${oldLine}`);
+      } else if (newLine !== undefined) {
+        hunkLines.push(`+${newLine}`);
+      }
+    } else if (inHunk) {
+      hunkLines.push(` ${oldLine}`);
+      // End hunk after 2 lines of context
+      if (hunkLines.filter((l) => l.startsWith(" ")).length >= 2) {
+        diff.push(`@@ -${hunkStart + 1} +${hunkStart + 1} @@`);
+        diff.push(...hunkLines);
+        hunkLines = [];
+        inHunk = false;
+      }
+    }
+  }
+
+  if (hunkLines.length > 0) {
+    diff.push(`@@ -${hunkStart + 1} +${hunkStart + 1} @@`);
+    diff.push(...hunkLines);
+  }
+
+  return diff.length > 2 ? diff.join("\n") : null;
+}
+
 function generateDiffsSince(projectDir, previousMessageId, maxChars) {
   const editedFiles = getEditedFilesSince(projectDir, previousMessageId);
   if (editedFiles.length === 0) return [];
@@ -223,28 +368,6 @@ function getLatestMtime(rootDir, globs) {
   }
 
   return maxMtime;
-}
-
-function getLatestSnapshot(projectDir) {
-  const jsonlPath = getSessionJsonlPath(projectDir);
-  if (!jsonlPath || !fs.existsSync(jsonlPath)) return null;
-
-  try {
-    const content = fs.readFileSync(jsonlPath, "utf8");
-    const lines = content.trim().split("\n").reverse(); // Most recent first
-
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      const entry = JSON.parse(line);
-      if (entry.type === "file-history-snapshot" && entry.snapshot) {
-        return entry.snapshot;
-      }
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
 }
 
 function gitHead(dir) {
@@ -484,11 +607,18 @@ function shouldGateCommand(command, regexes) {
 }
 
 function isLocalConfigWrite(command) {
-  // Block Claude from writing to prove_it.local.json or prove_it.json
+  // Block Claude from writing to prove_it.local.json or prove_it.json via Bash
   const cmd = command || "";
   if (!cmd.includes("prove_it.local.json") && !cmd.includes("prove_it.json")) return false;
   // Check for write operators
   return /[^<]>|>>|\btee\b/.test(cmd);
+}
+
+function isConfigFileEdit(toolName, toolInput) {
+  // Block Claude from editing prove_it config files via Write/Edit tools
+  if (toolName !== "Write" && toolName !== "Edit") return false;
+  const filePath = toolInput?.file_path || "";
+  return filePath.includes("prove_it.json") || filePath.includes("prove_it.local.json");
 }
 
 function resolveRoot(projectDir) {
@@ -727,13 +857,28 @@ function main() {
   const { cfg, localCfgPath } = loadEffectiveConfig(projectDir, defaultGateConfig);
 
   if (hookEvent === "PreToolUse") {
+    // Block Claude from modifying config files via Write/Edit
+    if (isConfigFileEdit(input.tool_name, input.tool_input)) {
+      emitJson({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason:
+            `prove-it: Cannot modify .claude/prove_it*.json\n\n` +
+            `These files are for user configuration. ` +
+            `To modify them, run the command directly in your terminal (not through Claude).`,
+        },
+      });
+      process.exit(0);
+    }
+
     if (!cfg.hooks?.done?.enabled) process.exit(0);
     if (input.tool_name !== "Bash") process.exit(0);
 
     const toolCmd = input.tool_input && input.tool_input.command ? String(input.tool_input.command) : "";
     if (!toolCmd.trim()) process.exit(0);
 
-    // Block Claude from modifying config files
+    // Block Claude from modifying config files via Bash
     if (isLocalConfigWrite(toolCmd)) {
       emitJson({
         hookSpecificOutput: {

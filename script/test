@@ -1,5 +1,4 @@
 #!/bin/bash
 set -e
-npm run build
-npm test
+"$(dirname "$0")/test_fast"
 npm run test:integration

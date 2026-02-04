@@ -55,11 +55,18 @@ function shouldGateCommand(command, regexes) {
 }
 
 function isLocalConfigWrite(command) {
-  // Block Claude from writing to prove_it.local.json or prove_it.json
+  // Block Claude from writing to prove_it.local.json or prove_it.json via Bash
   const cmd = command || "";
   if (!cmd.includes("prove_it.local.json") && !cmd.includes("prove_it.json")) return false;
   // Check for write operators
   return /[^<]>|>>|\btee\b/.test(cmd);
+}
+
+function isConfigFileEdit(toolName, toolInput) {
+  // Block Claude from editing prove_it config files via Write/Edit tools
+  if (toolName !== "Write" && toolName !== "Edit") return false;
+  const filePath = toolInput?.file_path || "";
+  return filePath.includes("prove_it.json") || filePath.includes("prove_it.local.json");
 }
 
 function resolveRoot(projectDir) {
@@ -298,13 +305,28 @@ function main() {
   const { cfg, localCfgPath } = loadEffectiveConfig(projectDir, defaultGateConfig);
 
   if (hookEvent === "PreToolUse") {
+    // Block Claude from modifying config files via Write/Edit
+    if (isConfigFileEdit(input.tool_name, input.tool_input)) {
+      emitJson({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason:
+            `prove-it: Cannot modify .claude/prove_it*.json\n\n` +
+            `These files are for user configuration. ` +
+            `To modify them, run the command directly in your terminal (not through Claude).`,
+        },
+      });
+      process.exit(0);
+    }
+
     if (!cfg.hooks?.done?.enabled) process.exit(0);
     if (input.tool_name !== "Bash") process.exit(0);
 
     const toolCmd = input.tool_input && input.tool_input.command ? String(input.tool_input.command) : "";
     if (!toolCmd.trim()) process.exit(0);
 
-    // Block Claude from modifying config files
+    // Block Claude from modifying config files via Bash
     if (isLocalConfigWrite(toolCmd)) {
       emitJson({
         hookSpecificOutput: {

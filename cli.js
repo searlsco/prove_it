@@ -274,6 +274,26 @@ function cmdUninstall() {
 // Init command
 // ============================================================================
 
+const { execSync } = require("child_process");
+
+function isIgnoredByGit(repoRoot, relativePath) {
+  try {
+    execSync(`git check-ignore -q "${relativePath}"`, { cwd: repoRoot, stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isTrackedByGit(repoRoot, relativePath) {
+  try {
+    execSync(`git ls-files --error-unmatch "${relativePath}"`, { cwd: repoRoot, stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function addToGitignore(repoRoot, pattern) {
   const gitignorePath = path.join(repoRoot, ".gitignore");
   let content = "";
@@ -295,36 +315,160 @@ function addToGitignore(repoRoot, pattern) {
   return true;
 }
 
+function isScriptTestStub(scriptTestPath) {
+  if (!fs.existsSync(scriptTestPath)) return false;
+  try {
+    const content = fs.readFileSync(scriptTestPath, "utf8");
+    return content.includes("prove-it suite gate stub");
+  } catch {
+    return false;
+  }
+}
+
 function cmdInit() {
   const repoRoot = process.cwd();
   const srcRoot = getSrcRoot();
   const tpl = path.join(srcRoot, "templates", "project");
 
-  copyDir(tpl, repoRoot);
+  const results = {
+    teamConfig: { path: ".claude/prove_it.json", created: false, existed: false },
+    localConfig: { path: ".claude/prove_it.local.json", created: false, existed: false },
+    scriptTest: { path: "script/test", created: false, existed: false, isStub: false },
+  };
+
+  // Copy team config
+  const teamConfigSrc = path.join(tpl, ".claude", "prove_it.json");
+  const teamConfigDst = path.join(repoRoot, ".claude", "prove_it.json");
+  if (fs.existsSync(teamConfigDst)) {
+    results.teamConfig.existed = true;
+  } else {
+    ensureDir(path.dirname(teamConfigDst));
+    fs.copyFileSync(teamConfigSrc, teamConfigDst);
+    results.teamConfig.created = true;
+  }
+
+  // Copy local config
+  const localConfigSrc = path.join(tpl, ".claude", "prove_it.local.json");
+  const localConfigDst = path.join(repoRoot, ".claude", "prove_it.local.json");
+  if (fs.existsSync(localConfigDst)) {
+    results.localConfig.existed = true;
+  } else {
+    ensureDir(path.dirname(localConfigDst));
+    fs.copyFileSync(localConfigSrc, localConfigDst);
+    results.localConfig.created = true;
+  }
 
   // Create stub script/test if missing
   const scriptTest = path.join(repoRoot, "script", "test");
-  if (!fs.existsSync(scriptTest)) {
+  if (fs.existsSync(scriptTest)) {
+    results.scriptTest.existed = true;
+    results.scriptTest.isStub = isScriptTestStub(scriptTest);
+  } else {
     ensureDir(path.dirname(scriptTest));
     fs.copyFileSync(path.join(srcRoot, "templates", "script", "test"), scriptTest);
     chmodX(scriptTest);
+    results.scriptTest.created = true;
+    results.scriptTest.isStub = true;
   }
 
-  // Add prove_it.local.json to .gitignore (it contains ephemeral run data)
-  const addedToGitignore = addToGitignore(repoRoot, ".claude/prove_it.local.json");
+  // Check script/test_fast
+  const scriptTestFast = path.join(repoRoot, "script", "test_fast");
+  const hasTestFast = fs.existsSync(scriptTestFast);
 
-  log("prove_it project templates copied (non-destructive).");
-  log(`  Added (if missing): ${path.join(repoRoot, ".claude", "prove_it.json")} (team config)`);
-  log(`  Added (if missing): ${path.join(repoRoot, ".claude", "prove_it.local.json")} (local/ephemeral)`);
-  log(`  Added (if missing): ${scriptTest}`);
+  // Add prove_it.local.json to .gitignore only if not already covered
+  let addedToGitignore = false;
+  if (!isIgnoredByGit(repoRoot, ".claude/prove_it.local.json")) {
+    addedToGitignore = addToGitignore(repoRoot, ".claude/prove_it.local.json");
+  }
+
+  // Check if team config needs to be committed
+  const teamConfigNeedsCommit =
+    fs.existsSync(teamConfigDst) && !isTrackedByGit(repoRoot, ".claude/prove_it.json");
+
+  // Output results
+  log("prove_it initialized.\n");
+
+  // What happened
+  if (results.teamConfig.created) {
+    log(`  Created: ${results.teamConfig.path}`);
+  } else {
+    log(`  Exists:  ${results.teamConfig.path}`);
+  }
+
+  if (results.localConfig.created) {
+    log(`  Created: ${results.localConfig.path}`);
+  } else {
+    log(`  Exists:  ${results.localConfig.path}`);
+  }
+
+  if (results.scriptTest.created) {
+    log(`  Created: ${results.scriptTest.path} (stub)`);
+  } else if (results.scriptTest.isStub) {
+    log(`  Exists:  ${results.scriptTest.path} (stub - needs customization)`);
+  } else {
+    log(`  Exists:  ${results.scriptTest.path} (customized)`);
+  }
+
   if (addedToGitignore) {
     log(`  Added to .gitignore: .claude/prove_it.local.json`);
   }
+
+  // Build TODO list
+  const todos = [];
+
+  // script/test TODO
+  if (results.scriptTest.isStub) {
+    todos.push({
+      done: false,
+      text: "Edit script/test to run your full test suite (unit + integration tests)",
+    });
+  } else {
+    todos.push({
+      done: true,
+      text: "script/test configured",
+    });
+  }
+
+  // script/test_fast TODO
+  if (hasTestFast) {
+    todos.push({
+      done: true,
+      text: "script/test_fast configured (fast checks on Stop)",
+    });
+  } else {
+    todos.push({
+      done: false,
+      text: "Create script/test_fast for faster Stop-hook checks (unit tests only)",
+    });
+  }
+
+  // Customize team config TODO
+  todos.push({
+    done: false,
+    text: "Customize .claude/prove_it.json (test commands, source globs)",
+  });
+
+  // Commit team config TODO
+  if (teamConfigNeedsCommit) {
+    todos.push({
+      done: false,
+      text: "Commit .claude/prove_it.json",
+    });
+  } else if (fs.existsSync(teamConfigDst)) {
+    todos.push({
+      done: true,
+      text: ".claude/prove_it.json committed",
+    });
+  }
+
+  // Print TODOs
+  log("\nTODO:");
+  for (const todo of todos) {
+    const checkbox = todo.done ? "[x]" : "[ ]";
+    log(`  ${checkbox} ${todo.text}`);
+  }
   log("");
-  log("Next:");
-  log("  - Edit script/test to run your real test suite.");
-  log("  - (Optional) Create script/test_fast for faster Stop-hook checks.");
-  log("  - Commit .claude/prove_it.json for team sharing.");
+  log("See: https://github.com/searlsco/prove_it#configuration");
 }
 
 // ============================================================================
