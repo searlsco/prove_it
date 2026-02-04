@@ -955,6 +955,7 @@ Fix the failing tests before committing.
     }
 
     // Run code reviewer on staged changes if enabled
+    let codeReviewStatus = null;
     if (cfg.reviewer?.onDone?.enabled) {
       const stagedResult = tryRun("git diff --cached", { cwd: rootDir });
       const stagedDiff = stagedResult.code === 0 ? stagedResult.stdout.trim() : null;
@@ -970,7 +971,7 @@ Fix the failing tests before committing.
             hookSpecificOutput: {
               hookEventName: "PreToolUse",
               permissionDecision: "allow",
-              permissionDecisionReason: "prove-it: code reviewer found issues",
+              permissionDecisionReason: "prove-it: code reviewer: FAIL",
               updatedInput: {
                 ...input.tool_input,
                 command: `echo ${shellEscape(msg)} 1>&2; exit 1`,
@@ -980,7 +981,15 @@ Fix the failing tests before committing.
           process.exit(0);
         }
 
-        // If reviewer errored or unavailable, continue (fail open for non-blocking reviewer)
+        if (review.available && review.pass) {
+          codeReviewStatus = "PASS";
+        } else if (review.error) {
+          codeReviewStatus = `ERROR (${review.error})`;
+        } else if (!review.available) {
+          codeReviewStatus = "SKIP (claude CLI not found)";
+        }
+      } else {
+        codeReviewStatus = "SKIP (no staged changes)";
       }
     }
 
@@ -993,11 +1002,12 @@ Fix the failing tests before committing.
       `&& ${toolCmd}`,
     ].join(" ");
 
+    const reviewerNote = codeReviewStatus ? ` | code reviewer: ${codeReviewStatus}` : "";
     emitJson({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "allow",
-        permissionDecisionReason: `prove-it: running full gate (${fullGateCmd}) before this command`,
+        permissionDecisionReason: `prove-it: running full gate (${fullGateCmd})${reviewerNote}`,
         updatedInput: {
           ...input.tool_input,
           command: wrapped,
@@ -1090,6 +1100,7 @@ Fix the failing tests before committing.
 
     if (run.code === 0) {
       // Fast gate passed - run coverage reviewer if enabled
+      let coverageReviewStatus = null;
       if (cfg.reviewer?.onStop?.enabled) {
         // Get previous snapshot ID from last successful review
         const runs = loadRunData(localCfgPath);
@@ -1105,7 +1116,7 @@ Fix the failing tests before committing.
           emitJson({
             decision: "block",
             reason:
-              `prove-it: Test coverage review failed.\n\n` +
+              `prove-it: Coverage reviewer: FAIL\n\n` +
               `${review.reason}\n\n` +
               `The gate passed, but the reviewer found insufficient test coverage.\n` +
               `Add tests for the changed code, then try again.`,
@@ -1113,23 +1124,23 @@ Fix the failing tests before committing.
           process.exit(0);
         }
 
-        if (review.error) {
-          emitJson({
-            decision: "approve",
-            reason: `prove-it: Coverage reviewer error (${review.error}). ${softStopReminder()}`,
-          });
-          process.exit(0);
-        }
-
-        // Reviewer passed - save snapshot ID for next time
-        if (review.available && review.pass && currentSnapshotId) {
-          saveRunData(localCfgPath, "last_review_snapshot", currentSnapshotId);
+        if (review.available && review.pass) {
+          coverageReviewStatus = "PASS";
+          // Save snapshot ID for next time
+          if (currentSnapshotId) {
+            saveRunData(localCfgPath, "last_review_snapshot", currentSnapshotId);
+          }
+        } else if (review.error) {
+          coverageReviewStatus = `ERROR (${review.error})`;
+        } else if (!review.available) {
+          coverageReviewStatus = "SKIP (claude CLI not found)";
         }
       }
 
+      const reviewerNote = coverageReviewStatus ? `Coverage reviewer: ${coverageReviewStatus}\n\n` : "";
       emitJson({
         decision: "approve",
-        reason: softStopReminder(),
+        reason: `prove-it: Gate passed.${coverageReviewStatus ? ` ${reviewerNote.trim()}` : ""}\n\n${softStopReminder()}`,
       });
       process.exit(0);
     } else {
