@@ -966,6 +966,7 @@ Fix the failing tests before committing.
         const review = runReviewer(rootDir, prompt);
 
         if (review.available && review.pass === false) {
+          console.error(`prove-it: Code reviewer: FAIL`);
           const msg = `prove-it: Code review failed.\n\n${review.reason}\n\nFix the issue before committing.`;
           emitJson({
             hookSpecificOutput: {
@@ -991,6 +992,10 @@ Fix the failing tests before committing.
       } else {
         codeReviewStatus = "SKIP (no staged changes)";
       }
+    }
+
+    if (codeReviewStatus) {
+      console.error(`prove-it: Code reviewer: ${codeReviewStatus}`);
     }
 
     // Wrap: run full gate in repo root, then return to original cwd for the original command
@@ -1113,6 +1118,7 @@ Fix the failing tests before committing.
         const review = runReviewer(rootDir, prompt);
 
         if (review.available && review.pass === false) {
+          console.error(`prove-it: Coverage reviewer: FAIL`);
           emitJson({
             decision: "block",
             reason:
@@ -1135,6 +1141,10 @@ Fix the failing tests before committing.
         } else if (!review.available) {
           coverageReviewStatus = "SKIP (claude CLI not found)";
         }
+      }
+
+      if (coverageReviewStatus) {
+        console.error(`prove-it: Coverage reviewer: ${coverageReviewStatus}`);
       }
 
       const reviewerNote = coverageReviewStatus ? `Coverage reviewer: ${coverageReviewStatus}\n\n` : "";
