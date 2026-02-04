@@ -1,5 +1,5 @@
 #!/bin/bash
 set -euo pipefail
 
-# prove-it's own test suite
+# prove_it's own test suite
 node --test test/*.test.js

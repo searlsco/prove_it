@@ -12,18 +12,17 @@ const path = require("path");
 const os = require("os");
 
 // Test source hooks directly (they export main() and work standalone)
-const HOOKS_DIR = path.join(__dirname, "..", "..", "src", "hooks");
+const HOOKS_DIR = path.join(__dirname, "..", "..", "lib", "hooks");
 
 /**
  * Invoke a hook with the given input.
  *
- * @param {string} hookName - Name of the hook file (e.g., "prove-it-gate.js")
+ * @param {string} hookName - Name of the hook file (e.g., "prove_it_test.js")
  * @param {object} input - The input object to pass via stdin
  * @param {object} options - Options including projectDir, env overrides
  * @returns {object} - { exitCode, stdout, stderr, output (parsed JSON if valid) }
  */
 function invokeHook(hookName, input, options = {}) {
-  // Use built hooks from global/hooks/ (they have inlined shared functions)
   const hookPath = path.join(HOOKS_DIR, hookName);
 
   const env = { ...process.env, ...options.env };
@@ -61,7 +60,7 @@ function invokeHook(hookName, input, options = {}) {
  * @param {string} prefix - Prefix for the temp directory name
  * @returns {string} - Path to the created directory
  */
-function createTempDir(prefix = "prove-it-test-") {
+function createTempDir(prefix = "prove_it_test_") {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
@@ -108,17 +107,20 @@ function makeExecutable(filePath) {
 }
 
 /**
- * Create a basic suite gate script.
+ * Create a basic test script (script/test).
  *
  * @param {string} dir - Base directory
  * @param {boolean} shouldPass - Whether the script should exit 0
  */
-function createSuiteGate(dir, shouldPass = true) {
+function createTestScript(dir, shouldPass = true) {
   const scriptPath = path.join(dir, "script", "test");
   const content = shouldPass ? "#!/bin/bash\nexit 0\n" : "#!/bin/bash\necho 'Tests failed' >&2\nexit 1\n";
   createFile(dir, "script/test", content);
   makeExecutable(scriptPath);
 }
+
+// Alias for backwards compatibility
+const createSuiteGate = createTestScript;
 
 /**
  * Initialize beads in the given directory.
@@ -140,7 +142,8 @@ module.exports = {
   initGitRepo,
   createFile,
   makeExecutable,
-  createSuiteGate,
+  createTestScript,
+  createSuiteGate, // Alias for backwards compatibility
   initBeads,
   HOOKS_DIR,
 };

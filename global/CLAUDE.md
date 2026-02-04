@@ -3,7 +3,7 @@
 ## Non‑negotiables
 
 1. **"Done" means "verified".**
-   - Never say *done*, *fixed*, *working*, *resolved*, *complete*, or equivalent unless the **suite gate** passed:
+   - Never say *done*, *fixed*, *working*, *resolved*, *complete*, or equivalent unless **tests pass**:
      - Run: `./script/test` (from the project root)
      - Exit code: **0**
    - Report verification in a **Verification** section with the exact command(s) run.
@@ -15,7 +15,7 @@
    - If you genuinely cannot run the command (permissions, environment, network), that's UNVERIFIED - say so clearly.
 
 3. **No ad‑hoc verification substitutes.**
-   - A one-off script is not verification unless it is part of the suite gate (directly or via `./script/test`).
+   - A one-off script is not verification unless it is part of the test suite (directly or via `./script/test`).
 
 4. **If you cannot verify, say so explicitly.**
    - Use the label **UNVERIFIED**.
@@ -37,12 +37,12 @@
 ### 1) Choose an oracle (what will prove it works)
 Pick the smallest set of oracles that, together, make the change *high confidence*:
 
-- Suite gate: `./script/test` (required for “done”)
+- Test suite: `./script/test` (required for "done")
 - Targeted tests: focused unit/integration tests relevant to the change
 - Static checks: typecheck, lint, format, schema validation
 - Runtime checks: a reproduction script that becomes a real test, benchmarks, load tests
 
-If a behavior is difficult to test directly, propose an alternative oracle (see “Creative oracles”).
+If a behavior is difficult to test directly, propose an alternative oracle (see "Creative oracles").
 
 ### 2) Establish a baseline
 Before editing:
@@ -59,7 +59,7 @@ After meaningful edits:
 - Run the smallest targeted check that can fail for the intended reason.
 - If it fails, fix immediately before continuing.
 
-### 5) Gate with the full suite
+### 5) Run the full test suite
 - Run `./script/test` from the project root.
 - Only after it passes can you claim completion.
 
@@ -78,7 +78,7 @@ Every completion report must include:
 ### 1) Snapshot / golden testing
 - Snapshot DOM trees, JSON outputs, rendered HTML, or serialized state.
 - Use golden files for CLI output, API responses, or compiler output.
-- Add a clear “update snapshot” workflow so changes are intentional.
+- Add a clear "update snapshot" workflow so changes are intentional.
 
 ### 2) Accessibility and user-behavior proxies
 Use tools that approximate real user constraints:
@@ -114,7 +114,7 @@ When the work is UI/UX-sensitive:
    - Keep a repo-local log: `.claude/ui-evals/ui-evals.md`
    - Track what won, why, and the context (user goal, constraints).
 
-Goal: build a local “playbook” of what works in this product.
+Goal: build a local "playbook" of what works in this product.
 
 ---
 
@@ -127,7 +127,7 @@ When confidence is low:
   - Similar OSS projects
   - Existing design system components
 - **Deductive**: start from the ideal:
-  - “What would a really good X look like?”
+  - "What would a really good X look like?"
   - Then decompose into verifiable subclaims and tests.
 
 If unsure, explicitly ask for the missing information that would reduce uncertainty *and* propose a default path with clear tradeoffs.
@@ -138,7 +138,7 @@ If unsure, explicitly ask for the missing information that would reduce uncertai
 
 Ask yourself:
 
-1. Did the suite gate pass? (`./script/test` exit 0)
+1. Did `./script/test` pass? (exit 0)
 2. Did I run every command I'm about to mention, or am I asking the user to run it?
 3. Am I saying "Try X" or "Verify with Y"? If so, why didn't I run it myself?
 4. If I couldn't run something, did I clearly mark it UNVERIFIED?
@@ -150,10 +150,10 @@ If you catch yourself writing "Try:", "Test with:", "Verify by:", or "Run X to c
 
 ## Anti-patterns (don't do these)
 
-- **"Works on my end"** - Claiming success without running the suite gate
+- **"Works on my end"** - Claiming success without running the tests
 - **"Try X to verify"** - Offloading verification to the user while implying completion
 - **"Should work"** - Hedging instead of proving
-- **"I tested it manually"** - Ad-hoc verification instead of the suite gate
+- **"I tested it manually"** - Ad-hoc verification instead of running `./script/test`
 - **"CI will catch it"** - Deferring verification to a later stage
 - **"Just needs X"** - Incomplete work presented as nearly-done
 - **Verbose confidence** - Long explanations instead of short evidence

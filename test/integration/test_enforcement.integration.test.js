@@ -9,11 +9,11 @@ const {
   createSuiteGate,
 } = require("./hook-harness");
 
-describe("prove_it_gate.js integration", () => {
+describe("prove_it_test.js integration", () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = createTempDir("prove-it-gate-");
+    tmpDir = createTempDir("prove_it_test_");
     initGitRepo(tmpDir);
   });
 
@@ -22,12 +22,12 @@ describe("prove_it_gate.js integration", () => {
   });
 
   describe("PreToolUse event", () => {
-    describe("gated commands", () => {
-      it("wraps git commit with suite gate", () => {
+    describe("commands that require tests", () => {
+      it("wraps git commit with test script", () => {
         createSuiteGate(tmpDir, true);
 
         const result = invokeHook(
-          "prove_it_gate.js",
+          "prove_it_test.js",
           {
             hook_event_name: "PreToolUse",
             tool_name: "Bash",
@@ -42,7 +42,7 @@ describe("prove_it_gate.js integration", () => {
         assert.ok(result.output.hookSpecificOutput, "Should have hookSpecificOutput");
         assert.ok(
           result.output.hookSpecificOutput.updatedInput.command.includes("./script/test"),
-          "Command should include suite gate"
+          "Command should include test script"
         );
         assert.ok(
           result.output.hookSpecificOutput.updatedInput.command.includes("git commit"),
@@ -50,10 +50,10 @@ describe("prove_it_gate.js integration", () => {
         );
       });
 
-      it("does not gate git push by default", () => {
-        // git push is no longer gated by default - commit already runs full gate
+      it("does not require tests for git push by default", () => {
+        // git push is no longer blocked by default - commit already runs full tests
         const result = invokeHook(
-          "prove_it_gate.js",
+          "prove_it_test.js",
           {
             hook_event_name: "PreToolUse",
             tool_name: "Bash",
@@ -64,14 +64,14 @@ describe("prove_it_gate.js integration", () => {
         );
 
         assert.strictEqual(result.exitCode, 0);
-        assert.strictEqual(result.output, null, "Should not gate git push");
+        assert.strictEqual(result.output, null, "Should not require tests for git push");
       });
 
-      it("wraps bd done with suite gate", () => {
+      it("wraps bd done with test script", () => {
         createSuiteGate(tmpDir, true);
 
         const result = invokeHook(
-          "prove_it_gate.js",
+          "prove_it_test.js",
           {
             hook_event_name: "PreToolUse",
             tool_name: "Bash",
@@ -86,10 +86,10 @@ describe("prove_it_gate.js integration", () => {
       });
     });
 
-    describe("non-gated commands", () => {
+    describe("commands that don't require tests", () => {
       it("ignores git status", () => {
         const result = invokeHook(
-          "prove_it_gate.js",
+          "prove_it_test.js",
           {
             hook_event_name: "PreToolUse",
             tool_name: "Bash",
@@ -100,12 +100,12 @@ describe("prove_it_gate.js integration", () => {
         );
 
         assert.strictEqual(result.exitCode, 0);
-        assert.strictEqual(result.output, null, "Should not produce output for non-gated commands");
+        assert.strictEqual(result.output, null, "Should not produce output for commands that don't require tests");
       });
 
       it("ignores npm test", () => {
         const result = invokeHook(
-          "prove_it_gate.js",
+          "prove_it_test.js",
           {
             hook_event_name: "PreToolUse",
             tool_name: "Bash",
@@ -121,7 +121,7 @@ describe("prove_it_gate.js integration", () => {
 
       it("ignores non-Bash tools", () => {
         const result = invokeHook(
-          "prove_it_gate.js",
+          "prove_it_test.js",
           {
             hook_event_name: "PreToolUse",
             tool_name: "Edit",
@@ -136,12 +136,12 @@ describe("prove_it_gate.js integration", () => {
       });
     });
 
-    describe("suite gate missing", () => {
-      it("blocks with helpful error when suite gate required but missing", () => {
-        // Don't create suite gate
+    describe("test script missing", () => {
+      it("blocks with helpful error when test script required but missing", () => {
+        // Don't create test script
 
         const result = invokeHook(
-          "prove_it_gate.js",
+          "prove_it_test.js",
           {
             hook_event_name: "PreToolUse",
             tool_name: "Bash",
@@ -169,7 +169,7 @@ describe("prove_it_gate.js integration", () => {
       const { spawnSync } = require("child_process");
       const path = require("path");
 
-      const hookPath = path.join(__dirname, "..", "..", "src", "hooks", "prove_it_gate.js");
+      const hookPath = path.join(__dirname, "..", "..", "lib", "hooks", "prove_it_test.js");
 
       const result = spawnSync("node", [hookPath], {
         input: "not valid json {{{",
@@ -189,7 +189,7 @@ describe("prove_it_gate.js integration", () => {
   describe("local config write protection", () => {
     it("blocks writes to prove_it.local.json", () => {
       const result = invokeHook(
-        "prove_it_gate.js",
+        "prove_it_test.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
@@ -215,7 +215,7 @@ describe("prove_it_gate.js integration", () => {
 
     it("allows reading prove_it.local.json", () => {
       const result = invokeHook(
-        "prove_it_gate.js",
+        "prove_it_test.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
@@ -241,7 +241,7 @@ describe("prove_it_gate.js integration", () => {
       createSuiteGate(specialDir, true);
 
       const result = invokeHook(
-        "prove_it_gate.js",
+        "prove_it_test.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",

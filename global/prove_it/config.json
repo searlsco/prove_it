@@ -1,5 +1,6 @@
 {
   "_version": 4,
+  "ignoredPaths": [],
   "commands": {
     "test": {
       "full": null,

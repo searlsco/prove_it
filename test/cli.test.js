@@ -54,7 +54,7 @@ describe("init/deinit", () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "prove-it-test-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "prove_it_test_"));
   });
 
   afterEach(() => {
@@ -87,7 +87,7 @@ describe("init/deinit", () => {
     assert.strictEqual(content, '{"custom": true}');
   });
 
-  it("deinit removes prove-it files", () => {
+  it("deinit removes prove_it files", () => {
     // First init
     runCli(["init"], { cwd: tmpDir });
     assert.ok(fs.existsSync(path.join(tmpDir, ".claude", "prove_it.local.json")));

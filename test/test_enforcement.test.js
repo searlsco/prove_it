@@ -1,11 +1,11 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert");
 
-// Test the gating logic extracted from the hook
+// Test the command matching logic extracted from the hook
 // These are unit tests for the regex matching and config merging
 
-describe("command gating regexes", () => {
-  // Note: git push removed from defaults - commit already runs full gate
+describe("commands that require tests", () => {
+  // Note: git push removed from defaults - commit already runs full tests
   const defaultRegexes = [
     "(^|\\s)git\\s+commit\\b",
     "(^|\\s)(beads|bd)\\s+(done|finish|close)\\b",
@@ -18,7 +18,7 @@ describe("command gating regexes", () => {
     "(^|\\s)(beads|bd)\\s+(done|finish|close)\\b",
   ];
 
-  function shouldGate(command, regexes = defaultRegexes) {
+  function shouldRequireTests(command, regexes = defaultRegexes) {
     return regexes.some((re) => {
       try {
         return new RegExp(re, "i").test(command);
@@ -29,112 +29,112 @@ describe("command gating regexes", () => {
   }
 
   describe("git commit", () => {
-    it("gates 'git commit'", () => {
-      assert.ok(shouldGate("git commit"));
+    it("requires tests for 'git commit'", () => {
+      assert.ok(shouldRequireTests("git commit"));
     });
 
-    it("gates 'git commit -m message'", () => {
-      assert.ok(shouldGate('git commit -m "message"'));
+    it("requires tests for 'git commit -m message'", () => {
+      assert.ok(shouldRequireTests('git commit -m "message"'));
     });
 
-    it("gates 'git commit --amend'", () => {
-      assert.ok(shouldGate("git commit --amend"));
+    it("requires tests for 'git commit --amend'", () => {
+      assert.ok(shouldRequireTests("git commit --amend"));
     });
 
-    it("does not gate 'git commits' (different word)", () => {
-      assert.ok(!shouldGate("git commits"));
+    it("does not require tests for 'git commits' (different word)", () => {
+      assert.ok(!shouldRequireTests("git commits"));
     });
 
-    it("does not gate 'git log --oneline' (different command)", () => {
-      assert.ok(!shouldGate("git log --oneline"));
+    it("does not require tests for 'git log --oneline' (different command)", () => {
+      assert.ok(!shouldRequireTests("git log --oneline"));
     });
   });
 
-  describe("git push (not gated by default)", () => {
-    it("does not gate 'git push' by default", () => {
-      assert.ok(!shouldGate("git push"));
+  describe("git push (not blocked by default)", () => {
+    it("does not require tests for 'git push' by default", () => {
+      assert.ok(!shouldRequireTests("git push"));
     });
 
-    it("does not gate 'git push origin main' by default", () => {
-      assert.ok(!shouldGate("git push origin main"));
+    it("does not require tests for 'git push origin main' by default", () => {
+      assert.ok(!shouldRequireTests("git push origin main"));
     });
 
-    it("gates 'git push' when added to regexes", () => {
-      assert.ok(shouldGate("git push", withPushRegexes));
+    it("requires tests for 'git push' when added to regexes", () => {
+      assert.ok(shouldRequireTests("git push", withPushRegexes));
     });
 
-    it("gates 'git push --force' when added to regexes", () => {
-      assert.ok(shouldGate("git push --force", withPushRegexes));
+    it("requires tests for 'git push --force' when added to regexes", () => {
+      assert.ok(shouldRequireTests("git push --force", withPushRegexes));
     });
 
-    it("does not gate 'git pull'", () => {
-      assert.ok(!shouldGate("git pull"));
+    it("does not require tests for 'git pull'", () => {
+      assert.ok(!shouldRequireTests("git pull"));
     });
   });
 
   describe("beads/bd done/finish/close", () => {
-    it("gates 'beads done'", () => {
-      assert.ok(shouldGate("beads done"));
+    it("requires tests for 'beads done'", () => {
+      assert.ok(shouldRequireTests("beads done"));
     });
 
-    it("gates 'bd done'", () => {
-      assert.ok(shouldGate("bd done"));
+    it("requires tests for 'bd done'", () => {
+      assert.ok(shouldRequireTests("bd done"));
     });
 
-    it("gates 'beads finish'", () => {
-      assert.ok(shouldGate("beads finish"));
+    it("requires tests for 'beads finish'", () => {
+      assert.ok(shouldRequireTests("beads finish"));
     });
 
-    it("gates 'bd close'", () => {
-      assert.ok(shouldGate("bd close"));
+    it("requires tests for 'bd close'", () => {
+      assert.ok(shouldRequireTests("bd close"));
     });
 
-    it("gates 'beads done 123'", () => {
-      assert.ok(shouldGate("beads done 123"));
+    it("requires tests for 'beads done 123'", () => {
+      assert.ok(shouldRequireTests("beads done 123"));
     });
 
-    it("does not gate 'beads list'", () => {
-      assert.ok(!shouldGate("beads list"));
+    it("does not require tests for 'beads list'", () => {
+      assert.ok(!shouldRequireTests("beads list"));
     });
 
-    it("does not gate 'bd show'", () => {
-      assert.ok(!shouldGate("bd show"));
+    it("does not require tests for 'bd show'", () => {
+      assert.ok(!shouldRequireTests("bd show"));
     });
   });
 
   describe("compound commands", () => {
-    it("gates 'npm test && git commit -m done'", () => {
-      assert.ok(shouldGate('npm test && git commit -m "done"'));
+    it("requires tests for 'npm test && git commit -m done'", () => {
+      assert.ok(shouldRequireTests('npm test && git commit -m "done"'));
     });
 
-    it("gates 'echo foo; git push' when push is gated", () => {
-      assert.ok(shouldGate("echo foo; git push", withPushRegexes));
+    it("requires tests for 'echo foo; git push' when push is enabled", () => {
+      assert.ok(shouldRequireTests("echo foo; git push", withPushRegexes));
     });
 
-    it("does not gate 'echo foo; git push' by default", () => {
-      assert.ok(!shouldGate("echo foo; git push"));
+    it("does not require tests for 'echo foo; git push' by default", () => {
+      assert.ok(!shouldRequireTests("echo foo; git push"));
     });
   });
 
-  describe("non-gated commands", () => {
-    it("does not gate 'npm test'", () => {
-      assert.ok(!shouldGate("npm test"));
+  describe("commands that don't require tests", () => {
+    it("does not require tests for 'npm test'", () => {
+      assert.ok(!shouldRequireTests("npm test"));
     });
 
-    it("does not gate 'ls -la'", () => {
-      assert.ok(!shouldGate("ls -la"));
+    it("does not require tests for 'ls -la'", () => {
+      assert.ok(!shouldRequireTests("ls -la"));
     });
 
-    it("does not gate 'git status'", () => {
-      assert.ok(!shouldGate("git status"));
+    it("does not require tests for 'git status'", () => {
+      assert.ok(!shouldRequireTests("git status"));
     });
 
-    it("does not gate 'git diff'", () => {
-      assert.ok(!shouldGate("git diff"));
+    it("does not require tests for 'git diff'", () => {
+      assert.ok(!shouldRequireTests("git diff"));
     });
 
-    it("does not gate 'git add .'", () => {
-      assert.ok(!shouldGate("git add ."));
+    it("does not require tests for 'git add .'", () => {
+      assert.ok(!shouldRequireTests("git add ."));
     });
   });
 });
@@ -263,10 +263,10 @@ describe("config merging", () => {
   });
 
   it("overrides arrays entirely", () => {
-    const base = { gatedCommandRegexes: ["a", "b"] };
-    const override = { gatedCommandRegexes: ["c"] };
+    const base = { commandPatterns: ["a", "b"] };
+    const override = { commandPatterns: ["c"] };
     const result = mergeDeep(base, override);
-    assert.deepStrictEqual(result, { gatedCommandRegexes: ["c"] });
+    assert.deepStrictEqual(result, { commandPatterns: ["c"] });
   });
 
   it("handles null override", () => {
@@ -307,5 +307,47 @@ describe("config merging", () => {
     const override = { name: "" };
     const result = mergeDeep(base, override);
     assert.deepStrictEqual(result, { name: "" });
+  });
+});
+
+describe("isIgnoredPath", () => {
+  const os = require("os");
+  const path = require("path");
+  const { isIgnoredPath } = require("../lib/shared");
+  const home = os.homedir();
+
+  it("returns false for empty ignoredPaths", () => {
+    assert.strictEqual(isIgnoredPath("/some/path", []), false);
+    assert.strictEqual(isIgnoredPath("/some/path", null), false);
+    assert.strictEqual(isIgnoredPath("/some/path", undefined), false);
+  });
+
+  it("matches absolute paths exactly", () => {
+    assert.strictEqual(isIgnoredPath("/Users/test/bin", ["/Users/test/bin"]), true);
+    assert.strictEqual(isIgnoredPath("/Users/test/bin", ["/Users/other/bin"]), false);
+  });
+
+  it("matches home-relative paths with ~", () => {
+    const binPath = path.join(home, "bin");
+    assert.strictEqual(isIgnoredPath(binPath, ["~/bin"]), true);
+    assert.strictEqual(isIgnoredPath(binPath, ["~/other"]), false);
+  });
+
+  it("matches subdirectories of ignored paths", () => {
+    const subPath = path.join(home, "bin", "scripts");
+    assert.strictEqual(isIgnoredPath(subPath, ["~/bin"]), true);
+  });
+
+  it("does not match partial directory names", () => {
+    const binPath = path.join(home, "binary");
+    assert.strictEqual(isIgnoredPath(binPath, ["~/bin"]), false);
+  });
+
+  it("handles multiple ignored paths", () => {
+    const binPath = path.join(home, "bin");
+    const dotfilesPath = path.join(home, "dotfiles");
+    assert.strictEqual(isIgnoredPath(binPath, ["~/dotfiles", "~/bin"]), true);
+    assert.strictEqual(isIgnoredPath(dotfilesPath, ["~/dotfiles", "~/bin"]), true);
+    assert.strictEqual(isIgnoredPath(path.join(home, "code"), ["~/dotfiles", "~/bin"]), false);
   });
 });

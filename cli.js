@@ -3,10 +3,10 @@
  * prove_it CLI
  *
  * Commands:
- *   install   - Install prove-it globally (~/.claude/)
- *   uninstall - Remove prove-it from global config
- *   init      - Initialize prove-it in current repository
- *   deinit    - Remove prove-it files from current repository
+ *   install   - Install prove_it globally (~/.claude/)
+ *   uninstall - Remove prove_it from global config
+ *   init      - Initialize prove_it in current repository
+ *   deinit    - Remove prove_it files from current repository
  *   diagnose  - Check installation status and report issues
  *   migrate   - Upgrade config to latest version
  */
@@ -108,9 +108,6 @@ function cmdInstall() {
   const dstRulesFile = path.join(dstRulesDir, "prove_it.md");
   const srcRulesFile = path.join(globalDir, "CLAUDE.md");
 
-  const dstHooksDir = path.join(claudeDir, "hooks");
-  const srcHooksDir = path.join(globalDir, "hooks");
-
   const dstKitDir = path.join(claudeDir, "prove_it");
   const srcCfg = path.join(globalDir, "prove_it", "config.json");
   const dstCfg = path.join(dstKitDir, "config.json");
@@ -118,15 +115,6 @@ function cmdInstall() {
   // Copy rules file (always overwrite on upgrade - it's prove_it's file)
   ensureDir(dstRulesDir);
   fs.copyFileSync(srcRulesFile, dstRulesFile);
-
-  // Copy hooks (no backup needed - they're just shims that call the CLI)
-  ensureDir(dstHooksDir);
-  for (const f of fs.readdirSync(srcHooksDir)) {
-    const src = path.join(srcHooksDir, f);
-    const dst = path.join(dstHooksDir, f);
-    fs.copyFileSync(src, dst);
-    chmodX(dst);
-  }
 
   // Create config if missing, or check if migration needed
   ensureDir(dstKitDir);
@@ -141,21 +129,17 @@ function cmdInstall() {
     }
   }
 
-  // Merge settings.json hooks
+  // Merge settings.json hooks - call prove_it CLI directly
   const settingsPath = path.join(claudeDir, "settings.json");
   const settings = readJson(settingsPath) || {};
   if (!settings.hooks) settings.hooks = {};
-
-  const hookVerifGate = path.join(dstHooksDir, "prove_it_gate.js");
-  const hookSessionStart = path.join(dstHooksDir, "prove_it_session_start.js");
-  const hookBeadsGate = path.join(dstHooksDir, "prove_it_beads_gate.js");
 
   addHookGroup(settings.hooks, "SessionStart", {
     matcher: "startup|resume|clear|compact",
     hooks: [
       {
         type: "command",
-        command: `node "${hookSessionStart}"`,
+        command: "prove_it hook session-start",
       },
     ],
   });
@@ -165,7 +149,7 @@ function cmdInstall() {
     hooks: [
       {
         type: "command",
-        command: `node "${hookVerifGate}"`,
+        command: "prove_it hook test",
       },
     ],
   });
@@ -176,7 +160,7 @@ function cmdInstall() {
     hooks: [
       {
         type: "command",
-        command: `node "${hookBeadsGate}"`,
+        command: "prove_it hook beads",
       },
     ],
   });
@@ -185,7 +169,7 @@ function cmdInstall() {
     hooks: [
       {
         type: "command",
-        command: `node "${hookVerifGate}"`,
+        command: "prove_it hook test",
         timeout: 3600,
       },
     ],
@@ -195,9 +179,8 @@ function cmdInstall() {
 
   log("prove_it installed.");
   log(`  Rules: ${dstRulesFile}`);
-  log(`  Hooks: ${dstHooksDir}`);
   log(`  Config: ${dstCfg}`);
-  log(`  Settings merged: ${settingsPath}`);
+  log(`  Settings: ${settingsPath}`);
   log("");
   log("════════════════════════════════════════════════════════════════════");
   log("IMPORTANT: Restart Claude Code for hooks to take effect.");
@@ -219,9 +202,10 @@ function removeProveItGroups(groups) {
     const hooks = g && g.hooks ? g.hooks : [];
     const serialized = JSON.stringify(hooks);
     return (
-      !serialized.includes("prove_it_gate.js") &&
+      !serialized.includes("prove_it_test.js") &&
       !serialized.includes("prove_it_session_start.js") &&
-      !serialized.includes("prove_it_beads_gate.js")
+      !serialized.includes("prove_it_beads.js") &&
+      !serialized.includes("prove_it hook")
     );
   });
 }
@@ -243,15 +227,11 @@ function cmdUninstall() {
 
   // Remove prove_it files (best-effort)
   rmIfExists(path.join(claudeDir, "prove_it"));
-  rmIfExists(path.join(claudeDir, "hooks", "prove_it_gate.js"));
-  rmIfExists(path.join(claudeDir, "hooks", "prove_it_session_start.js"));
-  rmIfExists(path.join(claudeDir, "hooks", "prove_it_beads_gate.js"));
   rmIfExists(path.join(claudeDir, "rules", "prove_it.md"));
 
-  log("prove_it uninstalled (best-effort).");
-  log(`  Settings updated: ${settingsPath}`);
-  log(`  Removed: ~/.claude/prove_it`);
-  log(`  Removed: ~/.claude/hooks/prove_it_*.js`);
+  log("prove_it uninstalled.");
+  log(`  Settings: ${settingsPath}`);
+  log(`  Removed: ~/.claude/prove_it/`);
   log(`  Removed: ~/.claude/rules/prove_it.md`);
 }
 
@@ -304,7 +284,7 @@ function isScriptTestStub(scriptTestPath) {
   if (!fs.existsSync(scriptTestPath)) return false;
   try {
     const content = fs.readFileSync(scriptTestPath, "utf8");
-    return content.includes("prove-it suite gate stub");
+    return content.includes("prove_it:");
   } catch {
     return false;
   }
@@ -418,12 +398,12 @@ function cmdInit() {
   if (hasTestFast) {
     todos.push({
       done: true,
-      text: "script/test_fast configured (fast checks on Stop)",
+      text: "script/test_fast configured (runs on Stop)",
     });
   } else {
     todos.push({
       done: false,
-      text: "Create script/test_fast for faster Stop-hook checks (unit tests only)",
+      text: "Create script/test_fast (fast unit tests, runs on Stop)",
     });
   }
 
@@ -460,7 +440,7 @@ function cmdInit() {
 // Deinit command
 // ============================================================================
 
-// Files/directories that prove-it owns and can safely remove
+// Files/directories that prove_it owns and can safely remove
 const PROVE_IT_PROJECT_FILES = [
   ".claude/prove_it.json",
   ".claude/prove_it.local.json",
@@ -505,7 +485,7 @@ function cmdDeinit() {
   if (fs.existsSync(scriptTest)) {
     try {
       const content = fs.readFileSync(scriptTest, "utf8");
-      if (content.includes("prove-it suite gate stub")) {
+      if (isScriptTestStub(scriptTest)) {
         rmIfExists(scriptTest);
         removed.push("script/test");
         // Remove script/ dir if empty
@@ -524,28 +504,6 @@ function cmdDeinit() {
     }
   }
 
-  // Legacy: also check scripts/test
-  const scriptsTest = path.join(repoRoot, "scripts", "test");
-  if (fs.existsSync(scriptsTest)) {
-    try {
-      const content = fs.readFileSync(scriptsTest, "utf8");
-      if (content.includes("prove-it suite gate stub")) {
-        rmIfExists(scriptsTest);
-        removed.push("scripts/test");
-        const scriptsDir = path.join(repoRoot, "scripts");
-        try {
-          if (fs.readdirSync(scriptsDir).length === 0) {
-            fs.rmdirSync(scriptsDir);
-            removed.push("scripts/");
-          }
-        } catch {}
-      } else {
-        skipped.push("scripts/test (customized)");
-      }
-    } catch {
-      skipped.push("scripts/test (error reading)");
-    }
-  }
 
   // Try to remove .claude/ if empty
   const claudeDir = path.join(repoRoot, ".claude");
@@ -601,34 +559,22 @@ function cmdDiagnose() {
     issues.push("Run 'prove_it install' to create config");
   }
 
-  // Check hook files
-  const hookFiles = ["prove_it_gate.js", "prove_it_beads_gate.js", "prove_it_session_start.js"];
-  const hooksDir = path.join(claudeDir, "hooks");
-  for (const hook of hookFiles) {
-    const hookPath = path.join(hooksDir, hook);
-    if (fs.existsSync(hookPath)) {
-      log(`  [x] Hook exists: ${hook}`);
-    } else {
-      log(`  [ ] Hook missing: ${hook}`);
-      issues.push(`Run 'prove_it install' to create ${hook}`);
-    }
-  }
-
   // Check settings.json for hook registration
   const settingsPath = path.join(claudeDir, "settings.json");
   const settings = readJson(settingsPath);
   if (settings && settings.hooks) {
-    const hasSessionStart = JSON.stringify(settings.hooks).includes("prove_it_session_start.js");
-    const hasGate = JSON.stringify(settings.hooks).includes("prove_it_gate.js");
-    const hasBeadsGate = JSON.stringify(settings.hooks).includes("prove_it_beads_gate.js");
+    const serialized = JSON.stringify(settings.hooks);
+    const hasSessionStart = serialized.includes("prove_it hook session-start");
+    const hasTest = serialized.includes("prove_it hook test");
+    const hasBeads = serialized.includes("prove_it hook beads");
 
-    if (hasSessionStart && hasGate && hasBeadsGate) {
+    if (hasSessionStart && hasTest && hasBeads) {
       log("  [x] Hooks registered in settings.json");
     } else {
       log("  [ ] Hooks not fully registered in settings.json");
       if (!hasSessionStart) issues.push("SessionStart hook not registered");
-      if (!hasGate) issues.push("Gate hook not registered");
-      if (!hasBeadsGate) issues.push("Beads gate hook not registered");
+      if (!hasTest) issues.push("Test enforcement hook not registered");
+      if (!hasBeads) issues.push("Beads enforcement hook not registered");
     }
   } else {
     log("  [ ] settings.json missing or has no hooks");
@@ -637,21 +583,21 @@ function cmdDiagnose() {
 
   log("\nCurrent repository:");
 
-  // Check for gate scripts
+  // Check for test scripts
   const scriptTest = path.join(repoRoot, "script", "test");
   const scriptTestFast = path.join(repoRoot, "script", "test_fast");
 
   if (fs.existsSync(scriptTest)) {
-    log(`  [x] Full gate exists: ./script/test`);
+    log(`  [x] Full test script exists: ./script/test`);
   } else {
-    log(`  [ ] Full gate missing: ./script/test`);
+    log(`  [ ] Full test script missing: ./script/test`);
     issues.push("Create ./script/test for this repository");
   }
 
   if (fs.existsSync(scriptTestFast)) {
-    log(`  [x] Fast gate exists: ./script/test_fast`);
+    log(`  [x] Fast test script exists: ./script/test_fast`);
   } else {
-    log(`  [ ] Fast gate not configured (optional): ./script/test_fast`);
+    log(`  [ ] Fast test script not configured (optional): ./script/test_fast`);
   }
 
   // Check team config
@@ -735,144 +681,10 @@ function cmdMigrate() {
     return;
   }
 
-  const currentVersion = config._version || 1;
+  const currentVersion = config._version || CURRENT_CONFIG_VERSION;
   log(`Current config version: ${currentVersion}`);
   log(`Latest config version: ${CURRENT_CONFIG_VERSION}`);
-
-  if (currentVersion >= CURRENT_CONFIG_VERSION) {
-    log("\nConfig is already up to date. No migration needed.");
-    return;
-  }
-
-  log("\nApplying migrations...");
-
-  // Migration v1 -> v2: scripts/test -> script/test
-  if (currentVersion < 2) {
-    log("  v1 -> v2: Updating default suite gate path");
-    if (config.suiteGate && config.suiteGate.command === "./scripts/test") {
-      config.suiteGate.command = "./script/test";
-      log("    - Changed suiteGate.command from ./scripts/test to ./script/test");
-    }
-    config._version = 2;
-  }
-
-  // Migration v2 -> v3: permissionDecision "ask" -> "allow"
-  if (config._version < 3) {
-    log("  v2 -> v3: Changing permissionDecision from 'ask' to 'allow'");
-    if (config.preToolUse && config.preToolUse.permissionDecision === "ask") {
-      config.preToolUse.permissionDecision = "allow";
-      log("    - Suite gate provides safety; no need to also require user confirmation");
-    }
-    config._version = 3;
-  }
-
-  // Migration v3 -> v4: Full restructure
-  if (config._version < 4) {
-    log("  v3 -> v4: Migrating to new config structure");
-
-    // Migrate suiteGate to commands.test
-    if (config.suiteGate) {
-      if (!config.commands) config.commands = {};
-      if (!config.commands.test) config.commands.test = {};
-
-      if (config.suiteGate.command) {
-        config.commands.test.full = config.suiteGate.command;
-        log(`    - Moved suiteGate.command to commands.test.full: ${config.suiteGate.command}`);
-      }
-      delete config.suiteGate;
-    }
-
-    // Remove cacheSeconds (replaced by mtime-based caching)
-    if (config.stop?.cacheSeconds !== undefined) {
-      delete config.stop.cacheSeconds;
-      log("    - Removed cacheSeconds (replaced by mtime-based caching)");
-    }
-
-    // Migrate preToolUse → hooks.done
-    if (config.preToolUse) {
-      if (!config.hooks) config.hooks = {};
-      if (!config.hooks.done) config.hooks.done = {};
-
-      if (config.preToolUse.enabled !== undefined) {
-        config.hooks.done.enabled = config.preToolUse.enabled;
-      }
-      if (config.preToolUse.gatedCommandRegexes) {
-        // Remove git push from gated commands (commit is sufficient)
-        config.hooks.done.commandPatterns = config.preToolUse.gatedCommandRegexes.filter(
-          (re) => !re.includes("git\\s+push")
-        );
-        log("    - Moved preToolUse.gatedCommandRegexes to hooks.done.commandPatterns");
-      }
-      // permissionDecision eliminated
-      delete config.preToolUse;
-      log("    - Moved preToolUse to hooks.done");
-    }
-
-    // Migrate stop → hooks.stop + reviewer.onStop
-    if (config.stop) {
-      if (!config.hooks) config.hooks = {};
-      if (!config.hooks.stop) config.hooks.stop = {};
-
-      if (config.stop.enabled !== undefined) {
-        config.hooks.stop.enabled = config.stop.enabled;
-      }
-      // Move reviewer to reviewer.onStop
-      if (config.stop.reviewer) {
-        if (!config.reviewer) config.reviewer = {};
-        if (!config.reviewer.onStop) config.reviewer.onStop = {};
-        if (config.stop.reviewer.enabled !== undefined) {
-          config.reviewer.onStop.enabled = config.stop.reviewer.enabled;
-        }
-        if (config.stop.reviewer.prompt) {
-          config.reviewer.onStop.prompt = config.stop.reviewer.prompt;
-        }
-        log("    - Moved stop.reviewer to reviewer.onStop");
-      }
-      // Move maxOutputChars to format.maxOutputChars
-      if (config.stop.maxOutputChars) {
-        if (!config.format) config.format = {};
-        config.format.maxOutputChars = config.stop.maxOutputChars;
-        log("    - Moved stop.maxOutputChars to format.maxOutputChars");
-      }
-      delete config.stop;
-      log("    - Moved stop to hooks.stop");
-    }
-
-    // Migrate flat reviewer → reviewer.onStop
-    if (config.reviewer && (config.reviewer.enabled !== undefined || config.reviewer.prompt) && !config.reviewer.onStop) {
-      const enabled = config.reviewer.enabled;
-      const prompt = config.reviewer.prompt;
-      config.reviewer = {
-        onStop: {
-          enabled: enabled !== undefined ? enabled : true,
-          prompt: prompt,
-        },
-      };
-      log("    - Moved flat reviewer to reviewer.onStop");
-    }
-
-    // Simplify beads config
-    if (config.beads && (config.beads.gatedTools || config.beads.gateBashWrites || config.beads.bashWritePatterns)) {
-      const wasEnabled = config.beads.enabled !== false;
-      config.beads = { enabled: wasEnabled };
-      log("    - Simplified beads config (removed implementation details)");
-    }
-
-    config._version = 4;
-  }
-
-  // Write updated config
-  writeJson(configPath, config);
-  log(`\nMigration complete. Config updated to version ${CURRENT_CONFIG_VERSION}.`);
-  log("");
-  log("New config structure:");
-  log("  - commands.test.full/fast: Test commands");
-  log("  - hooks.done.enabled/commandPatterns: Done hook (gates commit)");
-  log("  - hooks.stop.enabled: Stop hook");
-  log("  - reviewer.onStop: AI reviewer for test coverage (runs on stop)");
-  log("  - reviewer.onDone: AI reviewer for bugs/issues (runs on commit)");
-  log("  - format.maxOutputChars: Output truncation");
-  log("  - beads.enabled: Require bead before writes");
+  log("\nConfig is already up to date. No migration needed.");
 }
 
 // ============================================================================
@@ -881,15 +693,15 @@ function cmdMigrate() {
 
 function cmdHook(hookType) {
   const hookMap = {
-    gate: "./src/hooks/prove_it_gate.js",
-    "beads-gate": "./src/hooks/prove_it_beads_gate.js",
-    "session-start": "./src/hooks/prove_it_session_start.js",
+    test: "./lib/hooks/prove_it_test.js",
+    beads: "./lib/hooks/prove_it_beads.js",
+    "session-start": "./lib/hooks/prove_it_session_start.js",
   };
 
   const hookPath = hookMap[hookType];
   if (!hookPath) {
     console.error(`Unknown hook type: ${hookType}`);
-    console.error("Available hooks: gate, beads-gate, session-start");
+    console.error("Available hooks: test, beads, session-start");
     process.exit(1);
   }
 
