@@ -44,23 +44,6 @@ function writeJson(p, obj) {
   fs.writeFileSync(p, JSON.stringify(obj, null, 2) + "\n", "utf8");
 }
 
-function writeJsonWithBackup(p, obj) {
-  if (fs.existsSync(p)) {
-    const backup = `${p}.bak-${nowStamp()}`;
-    fs.copyFileSync(p, backup);
-  }
-  writeJson(p, obj);
-}
-
-function copyFileWithBackup(src, dst) {
-  if (fs.existsSync(dst)) {
-    const backup = `${dst}.bak-${nowStamp()}`;
-    fs.copyFileSync(dst, backup);
-  }
-  ensureDir(path.dirname(dst));
-  fs.copyFileSync(src, dst);
-}
-
 function copyDir(src, dst, overwrite = false) {
   ensureDir(dst);
   for (const ent of fs.readdirSync(src, { withFileTypes: true })) {
@@ -121,8 +104,9 @@ function cmdInstall() {
   const srcRoot = getSrcRoot();
   const globalDir = path.join(srcRoot, "global");
 
-  const dstClaudeMd = path.join(claudeDir, "CLAUDE.md");
-  const srcClaudeMd = path.join(globalDir, "CLAUDE.md");
+  const dstRulesDir = path.join(claudeDir, "rules");
+  const dstRulesFile = path.join(dstRulesDir, "prove_it.md");
+  const srcRulesFile = path.join(globalDir, "CLAUDE.md");
 
   const dstHooksDir = path.join(claudeDir, "hooks");
   const srcHooksDir = path.join(globalDir, "hooks");
@@ -131,15 +115,16 @@ function cmdInstall() {
   const srcCfg = path.join(globalDir, "prove_it", "config.json");
   const dstCfg = path.join(dstKitDir, "config.json");
 
-  // Copy CLAUDE.md
-  copyFileWithBackup(srcClaudeMd, dstClaudeMd);
+  // Copy rules file (always overwrite on upgrade - it's prove_it's file)
+  ensureDir(dstRulesDir);
+  fs.copyFileSync(srcRulesFile, dstRulesFile);
 
-  // Copy hooks
+  // Copy hooks (no backup needed - they're just shims that call the CLI)
   ensureDir(dstHooksDir);
   for (const f of fs.readdirSync(srcHooksDir)) {
     const src = path.join(srcHooksDir, f);
     const dst = path.join(dstHooksDir, f);
-    copyFileWithBackup(src, dst);
+    fs.copyFileSync(src, dst);
     chmodX(dst);
   }
 
@@ -206,10 +191,10 @@ function cmdInstall() {
     ],
   });
 
-  writeJsonWithBackup(settingsPath, settings);
+  writeJson(settingsPath, settings);
 
   log("prove_it installed.");
-  log(`  Global CLAUDE.md: ${dstClaudeMd}`);
+  log(`  Rules: ${dstRulesFile}`);
   log(`  Hooks: ${dstHooksDir}`);
   log(`  Config: ${dstCfg}`);
   log(`  Settings merged: ${settingsPath}`);
@@ -253,7 +238,7 @@ function cmdUninstall() {
         delete settings.hooks[k];
       }
     }
-    writeJsonWithBackup(settingsPath, settings);
+    writeJson(settingsPath, settings);
   }
 
   // Remove prove_it files (best-effort)
@@ -261,13 +246,13 @@ function cmdUninstall() {
   rmIfExists(path.join(claudeDir, "hooks", "prove_it_gate.js"));
   rmIfExists(path.join(claudeDir, "hooks", "prove_it_session_start.js"));
   rmIfExists(path.join(claudeDir, "hooks", "prove_it_beads_gate.js"));
+  rmIfExists(path.join(claudeDir, "rules", "prove_it.md"));
 
   log("prove_it uninstalled (best-effort).");
   log(`  Settings updated: ${settingsPath}`);
   log(`  Removed: ~/.claude/prove_it`);
   log(`  Removed: ~/.claude/hooks/prove_it_*.js`);
-  log("");
-  log("Note: CLAUDE.md was not removed automatically.");
+  log(`  Removed: ~/.claude/rules/prove_it.md`);
 }
 
 // ============================================================================
@@ -877,7 +862,7 @@ function cmdMigrate() {
   }
 
   // Write updated config
-  writeJsonWithBackup(configPath, config);
+  writeJson(configPath, config);
   log(`\nMigration complete. Config updated to version ${CURRENT_CONFIG_VERSION}.`);
   log("");
   log("New config structure:");
