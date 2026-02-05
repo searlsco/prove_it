@@ -1,6 +1,6 @@
 {
   "name": "prove_it",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "description": "Verifiability-first hooks for Claude Code - enforce verified workflows",
   "author": "Justin Searls",
   "license": "MIT",
