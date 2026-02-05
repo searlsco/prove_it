@@ -258,4 +258,111 @@ describe("prove_it_test.js integration", () => {
       assert.ok(cmd.includes("'"), "Should use single-quote escaping");
     });
   });
+
+  describe("test root resolution", () => {
+    const fs = require("fs");
+    const path = require("path");
+
+    it("finds script/test in cwd first", () => {
+      createSuiteGate(tmpDir, true);
+      const subDir = path.join(tmpDir, "subdir");
+      fs.mkdirSync(subDir, { recursive: true });
+      createSuiteGate(subDir, true); // subdir has its own script/test
+
+      const result = invokeHook(
+        "prove_it_test.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: 'git commit -m "test"' },
+          cwd: subDir,
+        },
+        { projectDir: subDir }
+      );
+
+      assert.strictEqual(result.exitCode, 0);
+      const cmd = result.output.hookSpecificOutput.updatedInput.command;
+      // Should run from subdir, not parent
+      assert.ok(cmd.includes(subDir), "Should run tests from cwd with script/test");
+    });
+
+    it("walks up to find script/test in parent", () => {
+      createSuiteGate(tmpDir, true); // only root has script/test
+      const subDir = path.join(tmpDir, "subdir");
+      fs.mkdirSync(subDir, { recursive: true });
+      // subdir has no script/test
+
+      const result = invokeHook(
+        "prove_it_test.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: 'git commit -m "test"' },
+          cwd: subDir,
+        },
+        { projectDir: subDir }
+      );
+
+      assert.strictEqual(result.exitCode, 0);
+      const cmd = result.output.hookSpecificOutput.updatedInput.command;
+      // Should run from root where script/test exists
+      assert.ok(cmd.includes(tmpDir), "Should find script/test in parent");
+    });
+
+    it("stops at .claude/prove_it.json marker even without script/test", () => {
+      createSuiteGate(tmpDir, true); // root has script/test
+      const subDir = path.join(tmpDir, "subproject");
+      fs.mkdirSync(path.join(subDir, ".claude"), { recursive: true });
+      fs.writeFileSync(
+        path.join(subDir, ".claude", "prove_it.json"),
+        JSON.stringify({ enabled: true })
+      );
+      // subDir has prove_it.json but no script/test
+
+      const result = invokeHook(
+        "prove_it_test.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: 'git commit -m "test"' },
+          cwd: subDir,
+        },
+        { projectDir: subDir }
+      );
+
+      assert.strictEqual(result.exitCode, 0);
+      // Should stop at subDir (has prove_it.json) and report missing script/test
+      assert.ok(
+        result.output.hookSpecificOutput.updatedInput.command.includes("exit 1"),
+        "Should report test script missing in subproject"
+      );
+    });
+
+    it("does not walk above git root", () => {
+      // Create a nested git repo
+      const innerRepo = path.join(tmpDir, "inner");
+      fs.mkdirSync(innerRepo, { recursive: true });
+      initGitRepo(innerRepo);
+      createSuiteGate(tmpDir, true); // outer has script/test
+      // inner repo has no script/test
+
+      const result = invokeHook(
+        "prove_it_test.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: 'git commit -m "test"' },
+          cwd: innerRepo,
+        },
+        { projectDir: innerRepo }
+      );
+
+      assert.strictEqual(result.exitCode, 0);
+      // Should not find outer script/test - stops at inner git root
+      assert.ok(
+        result.output.hookSpecificOutput.updatedInput.command.includes("exit 1"),
+        "Should not inherit script/test from outside git root"
+      );
+    });
+  });
 });

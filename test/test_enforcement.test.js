@@ -310,6 +310,107 @@ describe("config merging", () => {
   });
 });
 
+describe("loadEffectiveConfig ancestor discovery", () => {
+  const os = require("os");
+  const fs = require("fs");
+  const path = require("path");
+  const { loadEffectiveConfig, defaultTestConfig } = require("../lib/shared");
+
+  const tmpBase = path.join(os.tmpdir(), "prove_it_config_test_" + Date.now());
+
+  // Setup: create nested directory structure
+  // tmpBase/
+  //   .claude/prove_it.json  (root config)
+  //   child/
+  //     .claude/prove_it.json  (child config)
+  //     grandchild/
+  //       (no config - should inherit)
+
+  function setup() {
+    fs.mkdirSync(path.join(tmpBase, ".claude"), { recursive: true });
+    fs.mkdirSync(path.join(tmpBase, "child", ".claude"), { recursive: true });
+    fs.mkdirSync(path.join(tmpBase, "child", "grandchild"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(tmpBase, ".claude", "prove_it.json"),
+      JSON.stringify({ commands: { test: { full: "./root-test" } } })
+    );
+    fs.writeFileSync(
+      path.join(tmpBase, "child", ".claude", "prove_it.json"),
+      JSON.stringify({ commands: { test: { fast: "./child-fast" } } })
+    );
+  }
+
+  function cleanup() {
+    fs.rmSync(tmpBase, { recursive: true, force: true });
+  }
+
+  it("loads config from cwd", () => {
+    setup();
+    try {
+      const { cfg } = loadEffectiveConfig(path.join(tmpBase, "child"), defaultTestConfig);
+      assert.strictEqual(cfg.commands.test.fast, "./child-fast");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("inherits ancestor config (child overrides root)", () => {
+    setup();
+    try {
+      const { cfg } = loadEffectiveConfig(path.join(tmpBase, "child"), defaultTestConfig);
+      // Root sets full, child sets fast - both should be present
+      assert.strictEqual(cfg.commands.test.full, "./root-test");
+      assert.strictEqual(cfg.commands.test.fast, "./child-fast");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("grandchild inherits from ancestors", () => {
+    setup();
+    try {
+      const { cfg } = loadEffectiveConfig(path.join(tmpBase, "child", "grandchild"), defaultTestConfig);
+      // Grandchild has no config, should inherit from child and root
+      assert.strictEqual(cfg.commands.test.full, "./root-test");
+      assert.strictEqual(cfg.commands.test.fast, "./child-fast");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("cwd config wins over ancestors", () => {
+    setup();
+    // Add grandchild config that overrides
+    fs.mkdirSync(path.join(tmpBase, "child", "grandchild", ".claude"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpBase, "child", "grandchild", ".claude", "prove_it.json"),
+      JSON.stringify({ commands: { test: { full: "./grandchild-test" } } })
+    );
+    try {
+      const { cfg } = loadEffectiveConfig(path.join(tmpBase, "child", "grandchild"), defaultTestConfig);
+      // Grandchild overrides root's full, keeps child's fast
+      assert.strictEqual(cfg.commands.test.full, "./grandchild-test");
+      assert.strictEqual(cfg.commands.test.fast, "./child-fast");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("uses defaults when no config found", () => {
+    const emptyDir = path.join(os.tmpdir(), "prove_it_empty_" + Date.now());
+    fs.mkdirSync(emptyDir, { recursive: true });
+    try {
+      const { cfg } = loadEffectiveConfig(emptyDir, defaultTestConfig);
+      // Should have default values
+      assert.strictEqual(cfg.hooks.stop.enabled, true);
+      assert.strictEqual(cfg.commands.test.full, null);
+    } finally {
+      fs.rmSync(emptyDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("isIgnoredPath", () => {
   const os = require("os");
   const path = require("path");
