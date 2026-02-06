@@ -103,9 +103,66 @@ describe('Mtime-based test skip', () => {
     }, { projectDir: tmpDir, env: isolatedEnv() })
 
     assert.strictEqual(result.exitCode, 0)
-    // Silent exit — no output means "allowed through" (line 181-184 of prove_it_done.js)
-    assert.strictEqual(result.output, null,
-      'Done hook should exit silently when cached pass is fresh')
+    // Tests skipped but reviewer still runs (no staged changes = PASS)
+    // Output may be null (reviewer not enabled in defaults without claude binary)
+    // or contain allow. Either way, not a deny.
+    if (result.output) {
+      assert.notStrictEqual(
+        result.output.hookSpecificOutput?.permissionDecision,
+        'deny',
+        'Done hook should not deny when cached pass is fresh and no staged changes'
+      )
+    }
+  })
+
+  it('done hook runs reviewer even when tests are mtime-skipped', () => {
+    const runTime = Date.now()
+    writeRunData('test_full', { at: runTime, pass: true, head: 'abc123' })
+
+    const before = new Date(runTime - 2000)
+    const tracked = spawnSync('git', ['ls-files'], { cwd: tmpDir, encoding: 'utf8' })
+    for (const file of tracked.stdout.trim().split('\n').filter(Boolean)) {
+      fs.utimesSync(path.join(tmpDir, file), before, before)
+    }
+
+    // Create a mock reviewer that FAILs
+    const reviewerPath = path.join(tmpDir, 'fail_reviewer.sh')
+    createFile(tmpDir, 'fail_reviewer.sh', '#!/bin/bash\necho "FAIL: untested code"\n')
+    makeExecutable(reviewerPath)
+
+    createFile(tmpDir, '.claude/prove_it.json', JSON.stringify({
+      hooks: {
+        done: {
+          reviewer: {
+            enabled: true,
+            command: reviewerPath
+          }
+        }
+      }
+    }))
+
+    // Stage a change so reviewer has something to look at
+    createFile(tmpDir, 'src/new.js', 'function untested() {}\n')
+    spawnSync('git', ['add', 'src/new.js'], { cwd: tmpDir })
+
+    const result = invokeHook('prove_it_done.js', {
+      hook_event_name: 'PreToolUse',
+      tool_name: 'Bash',
+      tool_input: { command: 'git commit -m "add untested"' },
+      cwd: tmpDir
+    }, { projectDir: tmpDir, env: isolatedEnv() })
+
+    assert.strictEqual(result.exitCode, 0)
+    assert.ok(result.output, 'Hook should produce output when reviewer fails')
+    assert.strictEqual(
+      result.output.hookSpecificOutput.permissionDecision,
+      'deny',
+      'Done hook should deny when reviewer fails, even with mtime-skipped tests'
+    )
+    assert.ok(
+      result.output.hookSpecificOutput.permissionDecisionReason.includes('untested code'),
+      'Denial reason should include reviewer feedback'
+    )
   })
 
   it('stop hook blocks on cached failure without re-running', () => {
