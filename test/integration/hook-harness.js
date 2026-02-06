@@ -23,7 +23,7 @@ const VALID_PERMISSION_DECISIONS = ["allow", "deny", "ask"];
 /**
  * Invoke a hook with the given input.
  *
- * @param {string} hookName - Name of the hook file (e.g., "prove_it_test.js")
+ * @param {string} hookName - Name of the hook file (e.g., "prove_it_done.js")
  * @param {object} input - The input object to pass via stdin
  * @param {object} options - Options including projectDir, env overrides
  * @returns {object} - { exitCode, stdout, stderr, output (parsed JSON if valid) }

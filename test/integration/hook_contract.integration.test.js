@@ -35,7 +35,7 @@ describe("Claude Code hook output contract", () => {
     cleanupTempDir(tmpDir);
   });
 
-  describe("prove_it_beads.js PreToolUse decisions", () => {
+  describe("prove_it_edit.js PreToolUse decisions", () => {
     beforeEach(() => {
       initBeads(tmpDir);
     });
@@ -50,7 +50,7 @@ describe("Claude Code hook output contract", () => {
     for (const { tool, input } of gatedTools) {
       it(`uses valid permissionDecision when denying ${tool}`, () => {
         const result = invokeHook(
-          "prove_it_beads.js",
+          "prove_it_edit.js",
           {
             hook_event_name: "PreToolUse",
             tool_name: tool,
@@ -60,7 +60,7 @@ describe("Claude Code hook output contract", () => {
           { projectDir: tmpDir }
         );
 
-        assertValidPermissionDecision(result, `beads/${tool}`);
+        assertValidPermissionDecision(result, `edit/${tool}`);
 
         if (result.output?.hookSpecificOutput) {
           assert.strictEqual(
@@ -71,22 +71,20 @@ describe("Claude Code hook output contract", () => {
         }
       });
     }
-  });
 
-  describe("prove_it_test.js PreToolUse decisions", () => {
-    it("uses valid permissionDecision when denying config write", () => {
+    it("uses valid permissionDecision when denying config file Edit", () => {
       const result = invokeHook(
-        "prove_it_test.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "PreToolUse",
-          tool_name: "Bash",
-          tool_input: { command: "echo '{}' > .claude/prove_it.local.json" },
+          tool_name: "Edit",
+          tool_input: { file_path: ".claude/prove_it.json", old_string: "a", new_string: "b" },
           cwd: tmpDir,
         },
         { projectDir: tmpDir }
       );
 
-      assertValidPermissionDecision(result, "test/config-write");
+      assertValidPermissionDecision(result, "edit/config-edit");
 
       if (result.output?.hookSpecificOutput?.permissionDecision) {
         assert.strictEqual(
@@ -96,11 +94,35 @@ describe("Claude Code hook output contract", () => {
       }
     });
 
+    it("uses valid permissionDecision when denying config file Write", () => {
+      const result = invokeHook(
+        "prove_it_edit.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Write",
+          tool_input: { file_path: ".claude/prove_it.local.json", content: "{}" },
+          cwd: tmpDir,
+        },
+        { projectDir: tmpDir }
+      );
+
+      assertValidPermissionDecision(result, "edit/config-write");
+
+      if (result.output?.hookSpecificOutput?.permissionDecision) {
+        assert.strictEqual(
+          result.output.hookSpecificOutput.permissionDecision,
+          "deny"
+        );
+      }
+    });
+  });
+
+  describe("prove_it_done.js PreToolUse decisions", () => {
     it("uses valid permissionDecision when wrapping git commit", () => {
       createTestScript(tmpDir, true);
 
       const result = invokeHook(
-        "prove_it_test.js",
+        "prove_it_done.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
@@ -110,14 +132,14 @@ describe("Claude Code hook output contract", () => {
         { projectDir: tmpDir }
       );
 
-      assertValidPermissionDecision(result, "test/git-commit");
+      assertValidPermissionDecision(result, "done/git-commit");
     });
 
     it("uses valid permissionDecision when test script is missing", () => {
       // No test script created
 
       const result = invokeHook(
-        "prove_it_test.js",
+        "prove_it_done.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
@@ -127,7 +149,31 @@ describe("Claude Code hook output contract", () => {
         { projectDir: tmpDir }
       );
 
-      assertValidPermissionDecision(result, "test/missing-script");
+      assertValidPermissionDecision(result, "done/missing-script");
+    });
+  });
+
+  describe("prove_it_edit.js config protection via Bash", () => {
+    it("uses valid permissionDecision when denying config write via Bash", () => {
+      const result = invokeHook(
+        "prove_it_edit.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "echo '{}' > .claude/prove_it.local.json" },
+          cwd: tmpDir,
+        },
+        { projectDir: tmpDir }
+      );
+
+      assertValidPermissionDecision(result, "edit/config-bash-write");
+
+      if (result.output?.hookSpecificOutput?.permissionDecision) {
+        assert.strictEqual(
+          result.output.hookSpecificOutput.permissionDecision,
+          "deny"
+        );
+      }
     });
   });
 

@@ -10,7 +10,7 @@ const {
   createFile,
 } = require("./hook-harness");
 
-describe("prove_it_beads.js integration", () => {
+describe("prove_it_edit.js integration", () => {
   let tmpDir;
 
   beforeEach(() => {
@@ -27,7 +27,7 @@ describe("prove_it_beads.js integration", () => {
       // No .beads directory
 
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Edit",
@@ -43,7 +43,7 @@ describe("prove_it_beads.js integration", () => {
 
     it("allows Write without beads directory", () => {
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Write",
@@ -65,7 +65,7 @@ describe("prove_it_beads.js integration", () => {
 
     it("blocks Edit when no in_progress bead", () => {
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Edit",
@@ -100,7 +100,7 @@ describe("prove_it_beads.js integration", () => {
 
     it("blocks Write when no in_progress bead", () => {
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Write",
@@ -119,7 +119,7 @@ describe("prove_it_beads.js integration", () => {
 
     it("blocks NotebookEdit when no in_progress bead", () => {
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "NotebookEdit",
@@ -138,7 +138,7 @@ describe("prove_it_beads.js integration", () => {
 
     it("blocks Bash cat redirect when no in_progress bead", () => {
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
@@ -163,7 +163,7 @@ describe("prove_it_beads.js integration", () => {
 
     it("allows Read tool", () => {
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Read",
@@ -179,7 +179,7 @@ describe("prove_it_beads.js integration", () => {
 
     it("allows Glob tool", () => {
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Glob",
@@ -195,7 +195,7 @@ describe("prove_it_beads.js integration", () => {
 
     it("allows Bash without write patterns", () => {
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
@@ -211,7 +211,7 @@ describe("prove_it_beads.js integration", () => {
 
     it("allows bd commands", () => {
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
@@ -237,7 +237,7 @@ describe("prove_it_beads.js integration", () => {
 
     it("allows Edit to non-source file (README.md) without bead", () => {
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Edit",
@@ -253,7 +253,7 @@ describe("prove_it_beads.js integration", () => {
 
     it("allows Write to non-source file (docs/guide.md) without bead", () => {
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Write",
@@ -269,7 +269,7 @@ describe("prove_it_beads.js integration", () => {
 
     it("blocks Edit to source file (lib/foo.js) without bead", () => {
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Edit",
@@ -292,7 +292,7 @@ describe("prove_it_beads.js integration", () => {
     it("still enforces Bash write ops regardless of sources", () => {
       // Bash write ops can't reliably determine target file, so always enforce
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
@@ -315,7 +315,7 @@ describe("prove_it_beads.js integration", () => {
       const { spawnSync } = require("child_process");
       const path = require("path");
 
-      const hookPath = path.join(__dirname, "..", "..", "lib", "hooks", "prove_it_beads.js");
+      const hookPath = path.join(__dirname, "..", "..", "lib", "hooks", "prove_it_edit.js");
 
       const result = spawnSync("node", [hookPath], {
         input: "invalid json!@#$",
@@ -332,10 +332,96 @@ describe("prove_it_beads.js integration", () => {
     });
   });
 
+  describe("config file protection", () => {
+    it("blocks writes to prove_it.local.json via Bash", () => {
+      const result = invokeHook(
+        "prove_it_edit.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: 'echo \'{"suiteGate":{"require":false}}\' > .claude/prove_it.local.json' },
+          cwd: tmpDir,
+        },
+        { projectDir: tmpDir }
+      );
+
+      assert.strictEqual(result.exitCode, 0);
+      assert.ok(result.output, "Should produce output");
+      assert.ok(result.output.hookSpecificOutput, "Should have hookSpecificOutput");
+      assert.strictEqual(
+        result.output.hookSpecificOutput.permissionDecision,
+        "deny",
+        "Should deny the command"
+      );
+      assert.ok(
+        result.output.hookSpecificOutput.permissionDecisionReason.includes("prove_it"),
+        "Should mention the protected file pattern"
+      );
+    });
+
+    it("blocks Write to prove_it.json", () => {
+      const result = invokeHook(
+        "prove_it_edit.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Write",
+          tool_input: { file_path: ".claude/prove_it.json", content: '{"enabled":false}' },
+          cwd: tmpDir,
+        },
+        { projectDir: tmpDir }
+      );
+
+      assert.strictEqual(result.exitCode, 0);
+      assert.ok(result.output, "Should produce output");
+      assert.strictEqual(
+        result.output.hookSpecificOutput.permissionDecision,
+        "deny",
+        "Should deny Write to prove_it.json"
+      );
+    });
+
+    it("blocks Edit to prove_it.local.json", () => {
+      const result = invokeHook(
+        "prove_it_edit.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Edit",
+          tool_input: { file_path: ".claude/prove_it.local.json", old_string: "a", new_string: "b" },
+          cwd: tmpDir,
+        },
+        { projectDir: tmpDir }
+      );
+
+      assert.strictEqual(result.exitCode, 0);
+      assert.ok(result.output, "Should produce output");
+      assert.strictEqual(
+        result.output.hookSpecificOutput.permissionDecision,
+        "deny",
+        "Should deny Edit to prove_it.local.json"
+      );
+    });
+
+    it("allows reading prove_it.local.json via Bash", () => {
+      const result = invokeHook(
+        "prove_it_edit.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "cat .claude/prove_it.local.json" },
+          cwd: tmpDir,
+        },
+        { projectDir: tmpDir }
+      );
+
+      assert.strictEqual(result.exitCode, 0);
+      assert.strictEqual(result.output, null, "Should not block read operations");
+    });
+  });
+
   describe("ignores non-PreToolUse events", () => {
     it("ignores Stop event", () => {
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "Stop",
           session_id: "test-123",
@@ -349,7 +435,7 @@ describe("prove_it_beads.js integration", () => {
 
     it("ignores SessionStart event", () => {
       const result = invokeHook(
-        "prove_it_beads.js",
+        "prove_it_edit.js",
         {
           hook_event_name: "SessionStart",
           session_id: "test-123",

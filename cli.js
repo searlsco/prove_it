@@ -150,18 +150,18 @@ function cmdInstall() {
     hooks: [
       {
         type: "command",
-        command: "prove_it hook test",
+        command: "prove_it hook done",
       },
     ],
   });
 
-  // Beads enforcement for Edit/Write/NotebookEdit
+  // Edit gate: config protection + beads enforcement + source filtering
   addHookGroup(settings.hooks, "PreToolUse", {
     matcher: "Edit|Write|NotebookEdit|Bash",
     hooks: [
       {
         type: "command",
-        command: "prove_it hook beads",
+        command: "prove_it hook edit",
       },
     ],
   });
@@ -170,7 +170,7 @@ function cmdInstall() {
     hooks: [
       {
         type: "command",
-        command: "prove_it hook test",
+        command: "prove_it hook stop",
         timeout: 3600,
       },
     ],
@@ -206,6 +206,9 @@ function removeProveItGroups(groups) {
       !serialized.includes("prove_it_test.js") &&
       !serialized.includes("prove_it_session_start.js") &&
       !serialized.includes("prove_it_beads.js") &&
+      !serialized.includes("prove_it_stop.js") &&
+      !serialized.includes("prove_it_done.js") &&
+      !serialized.includes("prove_it_edit.js") &&
       !serialized.includes("prove_it hook")
     );
   });
@@ -546,16 +549,18 @@ function cmdDiagnose() {
   if (settings && settings.hooks) {
     const serialized = JSON.stringify(settings.hooks);
     const hasSessionStart = serialized.includes("prove_it hook session-start");
-    const hasTest = serialized.includes("prove_it hook test");
-    const hasBeads = serialized.includes("prove_it hook beads");
+    const hasStop = serialized.includes("prove_it hook stop");
+    const hasDone = serialized.includes("prove_it hook done");
+    const hasEdit = serialized.includes("prove_it hook edit");
 
-    if (hasSessionStart && hasTest && hasBeads) {
+    if (hasSessionStart && hasStop && hasDone && hasEdit) {
       log("  [x] Hooks registered in settings.json");
     } else {
       log("  [ ] Hooks not fully registered in settings.json");
       if (!hasSessionStart) issues.push("SessionStart hook not registered");
-      if (!hasTest) issues.push("Test enforcement hook not registered");
-      if (!hasBeads) issues.push("Beads enforcement hook not registered");
+      if (!hasStop) issues.push("Stop hook not registered");
+      if (!hasDone) issues.push("Done hook not registered");
+      if (!hasEdit) issues.push("Edit hook not registered");
     }
   } else {
     log("  [ ] settings.json missing or has no hooks");
@@ -685,15 +690,16 @@ function cmdMigrate() {
 
 function cmdHook(hookType) {
   const hookMap = {
-    test: "./lib/hooks/prove_it_test.js",
-    beads: "./lib/hooks/prove_it_beads.js",
+    stop: "./lib/hooks/prove_it_stop.js",
+    done: "./lib/hooks/prove_it_done.js",
+    edit: "./lib/hooks/prove_it_edit.js",
     "session-start": "./lib/hooks/prove_it_session_start.js",
   };
 
   const hookPath = hookMap[hookType];
   if (!hookPath) {
     console.error(`Unknown hook type: ${hookType}`);
-    console.error("Available hooks: test, beads, session-start");
+    console.error("Available hooks: stop, done, edit, session-start");
     process.exit(1);
   }
 

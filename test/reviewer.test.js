@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const { parseVerdict, parseJsonlOutput, runReviewer } = require("../lib/hooks/prove_it_test");
+const { parseVerdict, parseJsonlOutput, runReviewer } = require("../lib/shared");
 
 const FIXTURES_DIR = path.join(__dirname, "fixtures");
 

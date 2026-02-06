@@ -54,7 +54,7 @@ describe("E2E: beads enforcement via claude CLI", { skip: !canRunE2E && "require
   });
 
   it("denies file edit when no bead is in_progress", () => {
-    const beadsHookPath = path.join(HOOKS_DIR, "prove_it_beads.js");
+    const beadsHookPath = path.join(HOOKS_DIR, "prove_it_edit.js");
     const hookLog = path.join(tmpDir, "hook.log");
 
     // Wrapper that logs invocation details and delegates to the real hook

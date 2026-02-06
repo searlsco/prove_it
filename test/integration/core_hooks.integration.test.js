@@ -97,7 +97,7 @@ describe("README promises: prove_it blocks when it should", () => {
         "#!/bin/bash\necho 'FAIL: 2 tests broken' >&2\nexit 1\n");
       makeExecutable(path.join(tmpDir, "script", "test_fast"));
 
-      const result = invokeHook("prove_it_test.js", {
+      const result = invokeHook("prove_it_stop.js", {
         hook_event_name: "Stop",
         session_id: "test-stop-fail",
         cwd: tmpDir,
@@ -132,7 +132,7 @@ describe("README promises: prove_it blocks when it should", () => {
       const sessionId = "test-stop-reviewer";
       setupSessionWithDiffs(tmpDir, sessionId, tmpDir);
 
-      const result = invokeHook("prove_it_test.js", {
+      const result = invokeHook("prove_it_stop.js", {
         hook_event_name: "Stop",
         session_id: sessionId,
         cwd: tmpDir,
@@ -157,7 +157,7 @@ describe("README promises: prove_it blocks when it should", () => {
         "#!/bin/bash\necho 'FAIL: 3 tests broken' >&2\nexit 1\n");
       makeExecutable(path.join(tmpDir, "script", "test"));
 
-      const result = invokeHook("prove_it_test.js", {
+      const result = invokeHook("prove_it_done.js", {
         hook_event_name: "PreToolUse",
         tool_name: "Bash",
         tool_input: { command: 'git commit -m "ship it"' },
@@ -181,7 +181,7 @@ describe("README promises: prove_it blocks when it should", () => {
     it("allows commit through unchanged when tests pass", () => {
       createTestScript(tmpDir, true); // passing script/test
 
-      const result = invokeHook("prove_it_test.js", {
+      const result = invokeHook("prove_it_done.js", {
         hook_event_name: "PreToolUse",
         tool_name: "Bash",
         tool_input: { command: 'git commit -m "ship it"' },
@@ -218,7 +218,7 @@ describe("README promises: prove_it blocks when it should", () => {
       createFile(tmpDir, "src/app.js", "function app() {}\nfunction unused() {}\n");
       spawnSync("git", ["add", "src/app.js"], { cwd: tmpDir });
 
-      const result = invokeHook("prove_it_test.js", {
+      const result = invokeHook("prove_it_done.js", {
         hook_event_name: "PreToolUse",
         tool_name: "Bash",
         tool_input: { command: 'git commit -m "add app"' },

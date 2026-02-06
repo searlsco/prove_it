@@ -12,8 +12,7 @@
     "done": {
       "enabled": true,
       "triggers": [
-        "(^|\\s)git\\s+commit\\b",
-        "(^|\\s)(beads|bd)\\s+(done|finish|close)\\b"
+        "(^|\\s)git\\s+commit\\b"
       ],
       "reviewer": { "enabled": true }
     },

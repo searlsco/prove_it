@@ -9,8 +9,9 @@ prove_it uses Claude Code [hooks](https://code.claude.com/docs/en/hooks) to enfo
 | Hook | Event | File |
 |------|-------|------|
 | Session Start | `SessionStart` | `lib/hooks/prove_it_session_start.js` |
-| Test Enforcement | `Stop`, `PreToolUse` | `lib/hooks/prove_it_test.js` |
-| Beads Enforcement | `PreToolUse` | `lib/hooks/prove_it_beads.js` |
+| Edit Gate | `PreToolUse` | `lib/hooks/prove_it_edit.js` |
+| Stop | `Stop` | `lib/hooks/prove_it_stop.js` |
+| Done | `PreToolUse` | `lib/hooks/prove_it_done.js` |
 
 Prompts serve two distinct purposes:
 1. **Context injection** — text appended to Claude's context to shape behavior (SessionStart stdout, Stop `reason`)
@@ -45,7 +46,7 @@ The user should receive verified, working code - not a verification checklist.
 
 ### 2. Soft Stop Reminder
 
-**File:** `lib/hooks/prove_it_test.js:150-155`
+**File:** `lib/hooks/prove_it_stop.js / prove_it_done.js:150-155`
 **Function:** `softStopReminder()`
 **Event:** Stop (when tests pass and work is allowed to stop)
 **Mechanism:** Included in `decision: "approve"` response `reason` field
@@ -64,7 +65,7 @@ prove_it: Tests passed. Before finishing, verify:
 
 ### 3. Default Coverage Review Prompt
 
-**File:** `lib/hooks/prove_it_test.js:157-173`
+**File:** `lib/hooks/prove_it_stop.js / prove_it_done.js:157-173`
 **Variable:** `DEFAULT_COVERAGE_PROMPT`
 **Event:** Stop (after fast tests pass)
 **Mechanism:** Injected into `getCoverageReviewerPrompt()` wrapper, sent to reviewer CLI
@@ -103,7 +104,7 @@ The prompt is designed with a skeptical-by-default, lenient-for-good-reasons sta
 
 ### 4. Coverage Reviewer Prompt Wrapper
 
-**File:** `lib/hooks/prove_it_test.js:175-205`
+**File:** `lib/hooks/prove_it_stop.js / prove_it_done.js:175-205`
 **Function:** `getCoverageReviewerPrompt(userPrompt, diffs)`
 **Event:** Stop
 **Mechanism:** Assembles the full prompt sent to the reviewer CLI
@@ -148,7 +149,7 @@ The "when in doubt, PASS" rule is important — it prevents false positives from
 
 ### 5. Default Code Review Prompt
 
-**File:** `lib/hooks/prove_it_test.js:207-229`
+**File:** `lib/hooks/prove_it_stop.js / prove_it_done.js:207-229`
 **Variable:** `DEFAULT_CODE_PROMPT`
 **Event:** PreToolUse (when `git commit` is intercepted)
 **Mechanism:** Injected into `getCodeReviewerPrompt()` wrapper, sent to reviewer CLI
@@ -187,7 +188,7 @@ Do NOT flag:
 
 ### 6. Code Reviewer Prompt Wrapper
 
-**File:** `lib/hooks/prove_it_test.js:231-258`
+**File:** `lib/hooks/prove_it_stop.js / prove_it_done.js:231-258`
 **Function:** `getCodeReviewerPrompt(userPrompt, stagedDiff)`
 **Event:** PreToolUse (commit)
 **Mechanism:** Assembles the full prompt sent to the reviewer CLI
@@ -226,7 +227,7 @@ One line only. Be concise.
 
 ### 7. Test Script Missing Message
 
-**File:** `lib/hooks/prove_it_test.js:338-361`
+**File:** `lib/hooks/prove_it_stop.js / prove_it_done.js:338-361`
 **Function:** `testScriptMissingMessage(testCmd, projectDir)`
 **Event:** PreToolUse or Stop
 **Mechanism:** Shown as error output to Claude agent
@@ -260,7 +261,7 @@ Options:
 
 ### 8. Beads Enforcement Denial
 
-**File:** `lib/hooks/prove_it_beads.js:211-224`
+**File:** `lib/hooks/prove_it_edit.js:211-224`
 **Event:** PreToolUse (Edit, Write, NotebookEdit, or Bash write operations)
 **Mechanism:** Returned as `permissionDecisionReason` with `permissionDecision: "deny"`
 **Audience:** The primary Claude agent
@@ -288,7 +289,7 @@ Tip: If this is exploratory work, you can disable beads enforcement in
 
 ### 9. Config File Modification Block
 
-**File:** `lib/hooks/prove_it_test.js:457-461` and `lib/hooks/prove_it_beads.js:211` (similar)
+**File:** `lib/hooks/prove_it_stop.js / prove_it_done.js:457-461` and `lib/hooks/prove_it_edit.js:211` (similar)
 **Event:** PreToolUse (Edit, Write, or Bash redirect targeting prove_it config files)
 **Mechanism:** `permissionDecision: "deny"`
 **Audience:** The primary Claude agent

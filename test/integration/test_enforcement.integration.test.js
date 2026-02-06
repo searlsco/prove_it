@@ -10,7 +10,7 @@ const {
   createSuiteGate,
 } = require("./hook-harness");
 
-describe("prove_it_test.js integration", () => {
+describe("prove_it_done.js integration", () => {
   let tmpDir;
 
   beforeEach(() => {
@@ -28,7 +28,7 @@ describe("prove_it_test.js integration", () => {
         createSuiteGate(tmpDir, true);
 
         const result = invokeHook(
-          "prove_it_test.js",
+          "prove_it_done.js",
           {
             hook_event_name: "PreToolUse",
             tool_name: "Bash",
@@ -54,7 +54,7 @@ describe("prove_it_test.js integration", () => {
       it("does not require tests for git push by default", () => {
         // git push is no longer blocked by default - commit already runs full tests
         const result = invokeHook(
-          "prove_it_test.js",
+          "prove_it_done.js",
           {
             hook_event_name: "PreToolUse",
             tool_name: "Bash",
@@ -72,7 +72,7 @@ describe("prove_it_test.js integration", () => {
         createSuiteGate(tmpDir, true);
 
         const result = invokeHook(
-          "prove_it_test.js",
+          "prove_it_done.js",
           {
             hook_event_name: "PreToolUse",
             tool_name: "Bash",
@@ -90,7 +90,7 @@ describe("prove_it_test.js integration", () => {
     describe("commands that don't require tests", () => {
       it("ignores git status", () => {
         const result = invokeHook(
-          "prove_it_test.js",
+          "prove_it_done.js",
           {
             hook_event_name: "PreToolUse",
             tool_name: "Bash",
@@ -106,7 +106,7 @@ describe("prove_it_test.js integration", () => {
 
       it("ignores npm test", () => {
         const result = invokeHook(
-          "prove_it_test.js",
+          "prove_it_done.js",
           {
             hook_event_name: "PreToolUse",
             tool_name: "Bash",
@@ -122,7 +122,7 @@ describe("prove_it_test.js integration", () => {
 
       it("ignores non-Bash tools", () => {
         const result = invokeHook(
-          "prove_it_test.js",
+          "prove_it_done.js",
           {
             hook_event_name: "PreToolUse",
             tool_name: "Edit",
@@ -142,7 +142,7 @@ describe("prove_it_test.js integration", () => {
         // Don't create test script
 
         const result = invokeHook(
-          "prove_it_test.js",
+          "prove_it_done.js",
           {
             hook_event_name: "PreToolUse",
             tool_name: "Bash",
@@ -170,7 +170,7 @@ describe("prove_it_test.js integration", () => {
       const { spawnSync } = require("child_process");
       const path = require("path");
 
-      const hookPath = path.join(__dirname, "..", "..", "lib", "hooks", "prove_it_test.js");
+      const hookPath = path.join(__dirname, "..", "..", "lib", "hooks", "prove_it_done.js");
 
       const result = spawnSync("node", [hookPath], {
         input: "not valid json {{{",
@@ -184,50 +184,6 @@ describe("prove_it_test.js integration", () => {
       const output = JSON.parse(result.stdout);
       assert.strictEqual(output.decision, "block", "Should block on invalid input");
       assert.ok(output.reason.includes("Failed to parse"), "Should explain the parse failure");
-    });
-  });
-
-  describe("local config write protection", () => {
-    it("blocks writes to prove_it.local.json", () => {
-      const result = invokeHook(
-        "prove_it_test.js",
-        {
-          hook_event_name: "PreToolUse",
-          tool_name: "Bash",
-          tool_input: { command: 'echo \'{"suiteGate":{"require":false}}\' > .claude/prove_it.local.json' },
-          cwd: tmpDir,
-        },
-        { projectDir: tmpDir }
-      );
-
-      assert.strictEqual(result.exitCode, 0);
-      assert.ok(result.output, "Should produce output");
-      assert.ok(result.output.hookSpecificOutput, "Should have hookSpecificOutput");
-      assert.strictEqual(
-        result.output.hookSpecificOutput.permissionDecision,
-        "deny",
-        "Should deny the command"
-      );
-      assert.ok(
-        result.output.hookSpecificOutput.permissionDecisionReason.includes("prove_it"),
-        "Should mention the protected file pattern"
-      );
-    });
-
-    it("allows reading prove_it.local.json", () => {
-      const result = invokeHook(
-        "prove_it_test.js",
-        {
-          hook_event_name: "PreToolUse",
-          tool_name: "Bash",
-          tool_input: { command: "cat .claude/prove_it.local.json" },
-          cwd: tmpDir,
-        },
-        { projectDir: tmpDir }
-      );
-
-      assert.strictEqual(result.exitCode, 0);
-      assert.strictEqual(result.output, null, "Should not block read operations");
     });
   });
 
@@ -247,7 +203,7 @@ describe("prove_it_test.js integration", () => {
       spawnSync("git", ["commit", "-m", "init"], { cwd: specialDir });
 
       const result = invokeHook(
-        "prove_it_test.js",
+        "prove_it_done.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
@@ -278,7 +234,7 @@ describe("prove_it_test.js integration", () => {
       createSuiteGate(subDir, true); // subdir has its own script/test
 
       const result = invokeHook(
-        "prove_it_test.js",
+        "prove_it_done.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
@@ -304,7 +260,7 @@ describe("prove_it_test.js integration", () => {
       // subdir has no script/test
 
       const result = invokeHook(
-        "prove_it_test.js",
+        "prove_it_done.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
@@ -334,7 +290,7 @@ describe("prove_it_test.js integration", () => {
       // subDir has prove_it.json but no script/test
 
       const result = invokeHook(
-        "prove_it_test.js",
+        "prove_it_done.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
@@ -361,7 +317,7 @@ describe("prove_it_test.js integration", () => {
       // inner repo has no script/test
 
       const result = invokeHook(
-        "prove_it_test.js",
+        "prove_it_done.js",
         {
           hook_event_name: "PreToolUse",
           tool_name: "Bash",
