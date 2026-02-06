@@ -145,7 +145,7 @@ describe('session state functions', () => {
 
     it('reads the most recent file-history-snapshot', () => {
       // Create the JSONL file that Claude Code would write
-      const encoded = '/project'.replace(/\//g, '-')
+      const encoded = '/project'.replace(/[^a-zA-Z0-9-]/g, '-')
       const jsonlDir = path.join(tmpDir, '.claude', 'projects', encoded)
       fs.mkdirSync(jsonlDir, { recursive: true })
 
@@ -195,7 +195,7 @@ describe('session state functions', () => {
       fs.writeFileSync(path.join(fileHistoryDir, 'hello.js.bak'), 'console.log("hello");\n')
 
       // Create the JSONL snapshot that references the backup
-      const encoded = projectDir.replace(/\//g, '-')
+      const encoded = projectDir.replace(/[^a-zA-Z0-9-]/g, '-')
       const jsonlDir = path.join(tmpDir, '.claude', 'projects', encoded)
       fs.mkdirSync(jsonlDir, { recursive: true })
 

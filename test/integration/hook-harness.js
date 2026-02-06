@@ -167,7 +167,7 @@ function assertValidPermissionDecision (result, label) {
  * @param {string} projectDir - The project directory (usually same as tmpDir)
  */
 function setupSessionWithDiffs (tmpDir, sessionId, projectDir) {
-  const encoded = projectDir.replace(/\//g, '-')
+  const encoded = projectDir.replace(/[^a-zA-Z0-9-]/g, '-')
   const sessDir = path.join(tmpDir, '.claude', 'projects', encoded)
   fs.mkdirSync(sessDir, { recursive: true })
 
