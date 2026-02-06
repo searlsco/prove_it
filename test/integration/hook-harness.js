@@ -6,19 +6,19 @@
  * - Create temporary directories with controlled state
  * - Parse and validate hook output
  */
-const assert = require("node:assert");
-const { spawnSync } = require("child_process");
-const fs = require("fs");
-const path = require("path");
-const os = require("os");
+const assert = require('node:assert')
+const { spawnSync } = require('child_process')
+const fs = require('fs')
+const path = require('path')
+const os = require('os')
 
 // Test source hooks directly (they export main() and work standalone)
-const HOOKS_DIR = path.join(__dirname, "..", "..", "lib", "hooks");
+const HOOKS_DIR = path.join(__dirname, '..', '..', 'lib', 'hooks')
 
 // Claude Code's valid permissionDecision values for PreToolUse hooks.
 // Source: https://docs.anthropic.com/en/docs/claude-code/hooks
 // Using any other value (e.g. "block", "approve") is silently ignored.
-const VALID_PERMISSION_DECISIONS = ["allow", "deny", "ask"];
+const VALID_PERMISSION_DECISIONS = ['allow', 'deny', 'ask']
 
 /**
  * Invoke a hook with the given input.
@@ -28,25 +28,25 @@ const VALID_PERMISSION_DECISIONS = ["allow", "deny", "ask"];
  * @param {object} options - Options including projectDir, env overrides
  * @returns {object} - { exitCode, stdout, stderr, output (parsed JSON if valid) }
  */
-function invokeHook(hookName, input, options = {}) {
-  const hookPath = path.join(HOOKS_DIR, hookName);
+function invokeHook (hookName, input, options = {}) {
+  const hookPath = path.join(HOOKS_DIR, hookName)
 
-  const env = { ...process.env, ...options.env };
+  const env = { ...process.env, ...options.env }
   if (options.projectDir) {
-    env.CLAUDE_PROJECT_DIR = options.projectDir;
+    env.CLAUDE_PROJECT_DIR = options.projectDir
   }
 
-  const result = spawnSync("node", [hookPath], {
+  const result = spawnSync('node', [hookPath], {
     input: JSON.stringify(input),
-    encoding: "utf8",
+    encoding: 'utf8',
     env,
-    cwd: options.cwd || process.cwd(),
-  });
+    cwd: options.cwd || process.cwd()
+  })
 
-  let output = null;
+  let output = null
   try {
     if (result.stdout && result.stdout.trim()) {
-      output = JSON.parse(result.stdout);
+      output = JSON.parse(result.stdout)
     }
   } catch {
     // Output is not valid JSON
@@ -54,10 +54,10 @@ function invokeHook(hookName, input, options = {}) {
 
   return {
     exitCode: result.status,
-    stdout: result.stdout || "",
-    stderr: result.stderr || "",
-    output,
-  };
+    stdout: result.stdout || '',
+    stderr: result.stderr || '',
+    output
+  }
 }
 
 /**
@@ -66,8 +66,8 @@ function invokeHook(hookName, input, options = {}) {
  * @param {string} prefix - Prefix for the temp directory name
  * @returns {string} - Path to the created directory
  */
-function createTempDir(prefix = "prove_it_test_") {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+function createTempDir (prefix = 'prove_it_test_') {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix))
 }
 
 /**
@@ -75,8 +75,8 @@ function createTempDir(prefix = "prove_it_test_") {
  *
  * @param {string} dir - Path to the directory to remove
  */
-function cleanupTempDir(dir) {
-  fs.rmSync(dir, { recursive: true, force: true });
+function cleanupTempDir (dir) {
+  fs.rmSync(dir, { recursive: true, force: true })
 }
 
 /**
@@ -84,10 +84,10 @@ function cleanupTempDir(dir) {
  *
  * @param {string} dir - Path to the directory
  */
-function initGitRepo(dir) {
-  spawnSync("git", ["init"], { cwd: dir, encoding: "utf8" });
-  spawnSync("git", ["config", "user.email", "test@test.com"], { cwd: dir, encoding: "utf8" });
-  spawnSync("git", ["config", "user.name", "Test"], { cwd: dir, encoding: "utf8" });
+function initGitRepo (dir) {
+  spawnSync('git', ['init'], { cwd: dir, encoding: 'utf8' })
+  spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir, encoding: 'utf8' })
+  spawnSync('git', ['config', 'user.name', 'Test'], { cwd: dir, encoding: 'utf8' })
 }
 
 /**
@@ -97,10 +97,10 @@ function initGitRepo(dir) {
  * @param {string} relativePath - Path relative to dir
  * @param {string} content - File content
  */
-function createFile(dir, relativePath, content) {
-  const fullPath = path.join(dir, relativePath);
-  fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-  fs.writeFileSync(fullPath, content, "utf8");
+function createFile (dir, relativePath, content) {
+  const fullPath = path.join(dir, relativePath)
+  fs.mkdirSync(path.dirname(fullPath), { recursive: true })
+  fs.writeFileSync(fullPath, content, 'utf8')
 }
 
 /**
@@ -108,8 +108,8 @@ function createFile(dir, relativePath, content) {
  *
  * @param {string} filePath - Path to the file
  */
-function makeExecutable(filePath) {
-  fs.chmodSync(filePath, 0o755);
+function makeExecutable (filePath) {
+  fs.chmodSync(filePath, 0o755)
 }
 
 /**
@@ -118,15 +118,12 @@ function makeExecutable(filePath) {
  * @param {string} dir - Base directory
  * @param {boolean} shouldPass - Whether the script should exit 0
  */
-function createTestScript(dir, shouldPass = true) {
-  const scriptPath = path.join(dir, "script", "test");
-  const content = shouldPass ? "#!/bin/bash\nexit 0\n" : "#!/bin/bash\necho 'Tests failed' >&2\nexit 1\n";
-  createFile(dir, "script/test", content);
-  makeExecutable(scriptPath);
+function createTestScript (dir, shouldPass = true) {
+  const scriptPath = path.join(dir, 'script', 'test')
+  const content = shouldPass ? '#!/bin/bash\nexit 0\n' : "#!/bin/bash\necho 'Tests failed' >&2\nexit 1\n"
+  createFile(dir, 'script/test', content)
+  makeExecutable(scriptPath)
 }
-
-// Alias for backwards compatibility
-const createSuiteGate = createTestScript;
 
 /**
  * Initialize beads in the given directory.
@@ -134,11 +131,11 @@ const createSuiteGate = createTestScript;
  *
  * @param {string} dir - Path to the directory
  */
-function initBeads(dir) {
-  const beadsDir = path.join(dir, ".beads");
-  fs.mkdirSync(beadsDir, { recursive: true });
+function initBeads (dir) {
+  const beadsDir = path.join(dir, '.beads')
+  fs.mkdirSync(beadsDir, { recursive: true })
   // Create config.yaml to indicate this is a beads project (not just global config)
-  fs.writeFileSync(path.join(beadsDir, "config.yaml"), "# beads config\n", "utf8");
+  fs.writeFileSync(path.join(beadsDir, 'config.yaml'), '# beads config\n', 'utf8')
 }
 
 /**
@@ -148,15 +145,61 @@ function initBeads(dir) {
  * @param {object} result - The result from invokeHook
  * @param {string} label - Test context for error messages
  */
-function assertValidPermissionDecision(result, label) {
-  if (!result.output?.hookSpecificOutput?.permissionDecision) return;
+function assertValidPermissionDecision (result, label) {
+  if (!result.output?.hookSpecificOutput?.permissionDecision) return
 
-  const decision = result.output.hookSpecificOutput.permissionDecision;
+  const decision = result.output.hookSpecificOutput.permissionDecision
   assert.ok(
     VALID_PERMISSION_DECISIONS.includes(decision),
     `${label}: permissionDecision "${decision}" is not valid for Claude Code. ` +
-    `Must be one of: ${VALID_PERMISSION_DECISIONS.join(", ")}`
-  );
+    `Must be one of: ${VALID_PERMISSION_DECISIONS.join(', ')}`
+  )
+}
+
+/**
+ * Create fake session snapshot data so a reviewer hook can find diffs.
+ *
+ * Without this, generateDiffsSince returns [] and the reviewer is auto-PASS'd.
+ * Override HOME so os.homedir() resolves inside tmpDir.
+ *
+ * @param {string} tmpDir - The temp directory (used as HOME)
+ * @param {string} sessionId - Session ID for the snapshot
+ * @param {string} projectDir - The project directory (usually same as tmpDir)
+ */
+function setupSessionWithDiffs (tmpDir, sessionId, projectDir) {
+  const encoded = projectDir.replace(/\//g, '-')
+  const sessDir = path.join(tmpDir, '.claude', 'projects', encoded)
+  fs.mkdirSync(sessDir, { recursive: true })
+
+  const snapshot = {
+    type: 'file-history-snapshot',
+    snapshot: {
+      messageId: 'msg-001',
+      trackedFileBackups: {
+        'src/feature.js': {
+          backupFileName: 'src_feature.js.bak',
+          version: 1
+        }
+      }
+    }
+  }
+  fs.writeFileSync(
+    path.join(sessDir, `${sessionId}.jsonl`),
+    JSON.stringify(snapshot) + '\n'
+  )
+
+  // Backup file (old content)
+  const histDir = path.join(tmpDir, '.claude', 'file-history', sessionId)
+  fs.mkdirSync(histDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(histDir, 'src_feature.js.bak'),
+    'function feature() {}\n'
+  )
+
+  // Current file (new content — produces a diff)
+  createFile(projectDir, 'src/feature.js',
+    'function feature() {}\nfunction untested() { return 42; }\n'
+  )
 }
 
 module.exports = {
@@ -167,9 +210,9 @@ module.exports = {
   createFile,
   makeExecutable,
   createTestScript,
-  createSuiteGate, // Alias for backwards compatibility
   initBeads,
   assertValidPermissionDecision,
+  setupSessionWithDiffs,
   VALID_PERMISSION_DECISIONS,
-  HOOKS_DIR,
-};
+  HOOKS_DIR
+}
