@@ -35,7 +35,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "test:integration": "node --test test/integration/beads.integration.test.js test/integration/test_enforcement.integration.test.js test/integration/hook_contract.integration.test.js test/integration/e2e_beads.integration.test.js",
+    "test:integration": "node --test test/integration/beads.integration.test.js test/integration/test_enforcement.integration.test.js test/integration/hook_contract.integration.test.js test/integration/readme_promises.integration.test.js test/integration/e2e_beads.integration.test.js",
     "test:reviewer": "node --test test/integration/reviewer.integration.test.js",
     "test:all": "node --test test/*.test.js test/integration/*.test.js"
   }
