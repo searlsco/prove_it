@@ -446,8 +446,6 @@ const PROVE_IT_PROJECT_FILES = [
   ".claude/prove_it.local.json",
 ];
 
-const PROVE_IT_PROJECT_DIRS = [];
-
 function cmdDeinit() {
   const repoRoot = process.cwd();
   const removed = [];
@@ -459,24 +457,6 @@ function cmdDeinit() {
     if (fs.existsSync(absPath)) {
       rmIfExists(absPath);
       removed.push(relPath);
-    }
-  }
-
-  // Remove directories if empty
-  for (const relPath of PROVE_IT_PROJECT_DIRS) {
-    const absPath = path.join(repoRoot, relPath);
-    if (fs.existsSync(absPath)) {
-      try {
-        const contents = fs.readdirSync(absPath);
-        if (contents.length === 0) {
-          fs.rmdirSync(absPath);
-          removed.push(relPath + "/");
-        } else {
-          skipped.push(`${relPath}/ (not empty)`);
-        }
-      } catch {
-        skipped.push(`${relPath}/ (error)`);
-      }
     }
   }
 

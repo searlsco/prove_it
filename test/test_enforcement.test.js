@@ -242,16 +242,7 @@ describe("local config write protection", () => {
 });
 
 describe("config merging", () => {
-  function mergeDeep(a, b) {
-    if (b === undefined || b === null) return a;
-    if (Array.isArray(a) && Array.isArray(b)) return b;
-    if (typeof a === "object" && a && typeof b === "object" && b) {
-      const out = { ...a };
-      for (const k of Object.keys(b)) out[k] = mergeDeep(a[k], b[k]);
-      return out;
-    }
-    return b;
-  }
+  const { mergeDeep } = require("../lib/shared");
 
   it("merges nested objects", () => {
     const base = { suiteGate: { command: "./scripts/test", require: true } };
@@ -459,25 +450,26 @@ describe("logReview", () => {
   const path = require("path");
   const { logReview } = require("../lib/shared");
 
-  const testSessionDir = path.join(os.tmpdir(), "prove_it_log_test_" + Date.now());
-  const originalEnv = process.env.CLAUDE_SESSION_ID;
+  const tmpBase = path.join(os.tmpdir(), "prove_it_log_test_" + Date.now());
+  const originalSessionId = process.env.CLAUDE_SESSION_ID;
+  const originalProveItDir = process.env.PROVE_IT_DIR;
 
   function setup() {
-    // Clean up any previous test directory
-    try {
-      fs.rmSync(testSessionDir, { recursive: true, force: true });
-    } catch {}
+    fs.mkdirSync(tmpBase, { recursive: true });
+    process.env.PROVE_IT_DIR = tmpBase;
   }
 
   function cleanup() {
-    try {
-      fs.rmSync(testSessionDir, { recursive: true, force: true });
-    } catch {}
-    // Restore original env
-    if (originalEnv !== undefined) {
-      process.env.CLAUDE_SESSION_ID = originalEnv;
+    try { fs.rmSync(tmpBase, { recursive: true, force: true }); } catch {}
+    if (originalSessionId !== undefined) {
+      process.env.CLAUDE_SESSION_ID = originalSessionId;
     } else {
       delete process.env.CLAUDE_SESSION_ID;
+    }
+    if (originalProveItDir !== undefined) {
+      process.env.PROVE_IT_DIR = originalProveItDir;
+    } else {
+      delete process.env.PROVE_IT_DIR;
     }
   }
 
@@ -485,21 +477,16 @@ describe("logReview", () => {
     setup();
     process.env.CLAUDE_SESSION_ID = "test-session-123";
 
-    // Mock the log directory by temporarily patching os.homedir
-    // Instead, we'll just verify the function doesn't throw
     logReview("/some/project", "code", "PASS", null);
 
-    // Check that the file was created
-    const logFile = path.join(os.homedir(), ".claude", "prove_it", "sessions", "test-session-123.jsonl");
-    if (fs.existsSync(logFile)) {
-      const content = fs.readFileSync(logFile, "utf8");
-      const lines = content.trim().split("\n");
-      const lastEntry = JSON.parse(lines[lines.length - 1]);
-      assert.strictEqual(lastEntry.reviewer, "code");
-      assert.strictEqual(lastEntry.status, "PASS");
-      assert.strictEqual(lastEntry.projectDir, "/some/project");
-      assert.strictEqual(lastEntry.sessionId, "test-session-123");
-    }
+    const logFile = path.join(tmpBase, "sessions", "test-session-123.jsonl");
+    assert.ok(fs.existsSync(logFile), "Log file should be created");
+    const content = fs.readFileSync(logFile, "utf8");
+    const lastEntry = JSON.parse(content.trim().split("\n").pop());
+    assert.strictEqual(lastEntry.reviewer, "code");
+    assert.strictEqual(lastEntry.status, "PASS");
+    assert.strictEqual(lastEntry.projectDir, "/some/project");
+    assert.strictEqual(lastEntry.sessionId, "test-session-123");
 
     cleanup();
   });
@@ -510,15 +497,12 @@ describe("logReview", () => {
 
     logReview("/another/project", "coverage", "FAIL", "Missing tests for new function");
 
-    const logFile = path.join(os.homedir(), ".claude", "prove_it", "sessions", "test-session-456.jsonl");
-    if (fs.existsSync(logFile)) {
-      const content = fs.readFileSync(logFile, "utf8");
-      const lines = content.trim().split("\n");
-      const lastEntry = JSON.parse(lines[lines.length - 1]);
-      assert.strictEqual(lastEntry.reviewer, "coverage");
-      assert.strictEqual(lastEntry.status, "FAIL");
-      assert.strictEqual(lastEntry.reason, "Missing tests for new function");
-    }
+    const logFile = path.join(tmpBase, "sessions", "test-session-456.jsonl");
+    assert.ok(fs.existsSync(logFile), "Log file should be created");
+    const lastEntry = JSON.parse(fs.readFileSync(logFile, "utf8").trim().split("\n").pop());
+    assert.strictEqual(lastEntry.reviewer, "coverage");
+    assert.strictEqual(lastEntry.status, "FAIL");
+    assert.strictEqual(lastEntry.reason, "Missing tests for new function");
 
     cleanup();
   });
@@ -529,13 +513,10 @@ describe("logReview", () => {
 
     logReview("/project", "code", "PASS", null);
 
-    const logFile = path.join(os.homedir(), ".claude", "prove_it", "sessions", "unknown.jsonl");
-    if (fs.existsSync(logFile)) {
-      const content = fs.readFileSync(logFile, "utf8");
-      const lines = content.trim().split("\n");
-      const lastEntry = JSON.parse(lines[lines.length - 1]);
-      assert.strictEqual(lastEntry.sessionId, null);
-    }
+    const logFile = path.join(tmpBase, "sessions", "unknown.jsonl");
+    assert.ok(fs.existsSync(logFile), "Log file should be created");
+    const lastEntry = JSON.parse(fs.readFileSync(logFile, "utf8").trim().split("\n").pop());
+    assert.strictEqual(lastEntry.sessionId, null);
 
     cleanup();
   });
@@ -547,24 +528,31 @@ describe("session state", () => {
   const path = require("path");
   const { loadSessionState, saveSessionState } = require("../lib/shared");
 
-  const originalEnv = process.env.CLAUDE_SESSION_ID;
+  const tmpBase = path.join(os.tmpdir(), "prove_it_state_test_" + Date.now());
+  const originalSessionId = process.env.CLAUDE_SESSION_ID;
+  const originalProveItDir = process.env.PROVE_IT_DIR;
+
+  function setup() {
+    fs.mkdirSync(tmpBase, { recursive: true });
+    process.env.PROVE_IT_DIR = tmpBase;
+  }
 
   function cleanup() {
-    if (originalEnv !== undefined) {
-      process.env.CLAUDE_SESSION_ID = originalEnv;
+    try { fs.rmSync(tmpBase, { recursive: true, force: true }); } catch {}
+    if (originalSessionId !== undefined) {
+      process.env.CLAUDE_SESSION_ID = originalSessionId;
     } else {
       delete process.env.CLAUDE_SESSION_ID;
     }
-  }
-
-  function cleanupStateFile(sessionId) {
-    const stateFile = path.join(os.homedir(), ".claude", "prove_it", "sessions", `${sessionId}.json`);
-    try {
-      fs.unlinkSync(stateFile);
-    } catch {}
+    if (originalProveItDir !== undefined) {
+      process.env.PROVE_IT_DIR = originalProveItDir;
+    } else {
+      delete process.env.PROVE_IT_DIR;
+    }
   }
 
   it("returns null when no session ID is set", () => {
+    setup();
     delete process.env.CLAUDE_SESSION_ID;
     const result = loadSessionState("last_review_snapshot");
     assert.strictEqual(result, null);
@@ -572,27 +560,26 @@ describe("session state", () => {
   });
 
   it("saveSessionState is a no-op when no session ID is set", () => {
+    setup();
     delete process.env.CLAUDE_SESSION_ID;
-    // Should not throw
     saveSessionState("last_review_snapshot", "some-value");
     cleanup();
   });
 
   it("round-trips a value via save and load", () => {
-    const testSessionId = "test-state-roundtrip-" + Date.now();
-    process.env.CLAUDE_SESSION_ID = testSessionId;
+    setup();
+    process.env.CLAUDE_SESSION_ID = "test-roundtrip";
 
     saveSessionState("last_review_snapshot", "msg-abc-123");
     const result = loadSessionState("last_review_snapshot");
     assert.strictEqual(result, "msg-abc-123");
 
-    cleanupStateFile(testSessionId);
     cleanup();
   });
 
   it("supports multiple keys in the same state file", () => {
-    const testSessionId = "test-state-multikey-" + Date.now();
-    process.env.CLAUDE_SESSION_ID = testSessionId;
+    setup();
+    process.env.CLAUDE_SESSION_ID = "test-multikey";
 
     saveSessionState("key_a", "value_a");
     saveSessionState("key_b", "value_b");
@@ -600,65 +587,214 @@ describe("session state", () => {
     assert.strictEqual(loadSessionState("key_a"), "value_a");
     assert.strictEqual(loadSessionState("key_b"), "value_b");
 
-    cleanupStateFile(testSessionId);
     cleanup();
   });
 
   it("returns null for a key that does not exist in state file", () => {
-    const testSessionId = "test-state-missing-key-" + Date.now();
-    process.env.CLAUDE_SESSION_ID = testSessionId;
+    setup();
+    process.env.CLAUDE_SESSION_ID = "test-missing-key";
 
     saveSessionState("existing_key", "some_value");
     const result = loadSessionState("nonexistent_key");
     assert.strictEqual(result, null);
 
-    cleanupStateFile(testSessionId);
     cleanup();
   });
 
   it("isolates state between sessions (the core property)", () => {
-    const sessionA = "test-state-isolation-A-" + Date.now();
-    const sessionB = "test-state-isolation-B-" + Date.now();
+    setup();
 
-    // Session A writes a snapshot
-    process.env.CLAUDE_SESSION_ID = sessionA;
+    process.env.CLAUDE_SESSION_ID = "session-A";
     saveSessionState("last_review_snapshot", "msg-from-A");
 
-    // Session B writes a different snapshot for the same key
-    process.env.CLAUDE_SESSION_ID = sessionB;
+    process.env.CLAUDE_SESSION_ID = "session-B";
     saveSessionState("last_review_snapshot", "msg-from-B");
 
-    // Session A still sees its own value
-    process.env.CLAUDE_SESSION_ID = sessionA;
+    process.env.CLAUDE_SESSION_ID = "session-A";
     assert.strictEqual(loadSessionState("last_review_snapshot"), "msg-from-A");
 
-    // Session B still sees its own value
-    process.env.CLAUDE_SESSION_ID = sessionB;
+    process.env.CLAUDE_SESSION_ID = "session-B";
     assert.strictEqual(loadSessionState("last_review_snapshot"), "msg-from-B");
 
-    cleanupStateFile(sessionA);
-    cleanupStateFile(sessionB);
     cleanup();
   });
 
   it("does not write to prove_it.local.json", () => {
-    const testSessionId = "test-state-no-local-" + Date.now();
-    const tmpDir = path.join(os.tmpdir(), "prove_it_local_check_" + Date.now());
-    fs.mkdirSync(path.join(tmpDir, ".claude"), { recursive: true });
-    const localCfgPath = path.join(tmpDir, ".claude", "prove_it.local.json");
+    setup();
+    const projectTmp = path.join(os.tmpdir(), "prove_it_local_check_" + Date.now());
+    fs.mkdirSync(path.join(projectTmp, ".claude"), { recursive: true });
+    const localCfgPath = path.join(projectTmp, ".claude", "prove_it.local.json");
 
-    process.env.CLAUDE_SESSION_ID = testSessionId;
+    process.env.CLAUDE_SESSION_ID = "test-no-local";
     saveSessionState("last_review_snapshot", "msg-xyz");
 
-    // prove_it.local.json should not exist (session state goes elsewhere)
     assert.strictEqual(fs.existsSync(localCfgPath), false,
       "saveSessionState should not create prove_it.local.json");
-
-    // The value lives in session state, not local config
     assert.strictEqual(loadSessionState("last_review_snapshot"), "msg-xyz");
 
-    cleanupStateFile(testSessionId);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(projectTmp, { recursive: true, force: true });
     cleanup();
+  });
+});
+
+describe("generateUnifiedDiff", () => {
+  const { generateUnifiedDiff } = require("../lib/shared");
+
+  it("returns null when content is identical", () => {
+    assert.strictEqual(generateUnifiedDiff("file.js", "hello\n", "hello\n"), null);
+  });
+
+  it("shows a single-line change", () => {
+    const diff = generateUnifiedDiff("file.js", "hello\n", "world\n");
+    assert.ok(diff.includes("--- a/file.js"));
+    assert.ok(diff.includes("+++ b/file.js"));
+    assert.ok(diff.includes("-hello"));
+    assert.ok(diff.includes("+world"));
+  });
+
+  it("shows added lines", () => {
+    const diff = generateUnifiedDiff("file.js", "a\nb\n", "a\nb\nc\n");
+    assert.ok(diff.includes("+c"));
+    assert.ok(!diff.includes("-c"));
+  });
+
+  it("shows removed lines", () => {
+    const diff = generateUnifiedDiff("file.js", "a\nb\nc\n", "a\nb\n");
+    assert.ok(diff.includes("-c"));
+    assert.ok(!diff.includes("+c"));
+  });
+
+  it("handles empty old content (new file)", () => {
+    const diff = generateUnifiedDiff("new.js", "", "line1\nline2\n");
+    assert.ok(diff.includes("+line1"));
+    assert.ok(diff.includes("+line2"));
+  });
+
+  it("handles empty new content (deleted file)", () => {
+    const diff = generateUnifiedDiff("old.js", "line1\nline2\n", "");
+    assert.ok(diff.includes("-line1"));
+    assert.ok(diff.includes("-line2"));
+  });
+
+  it("includes context lines around changes", () => {
+    const old = "a\nb\nc\nd\ne\n";
+    const nu = "a\nb\nX\nd\ne\n";
+    const diff = generateUnifiedDiff("file.js", old, nu);
+    // Context should include 'a' or 'b' before the change
+    assert.ok(diff.includes(" a") || diff.includes(" b"), "Should include context before change");
+    assert.ok(diff.includes("-c"));
+    assert.ok(diff.includes("+X"));
+  });
+
+  it("handles multiple hunks", () => {
+    const old = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n";
+    const nu = "1\nX\n3\n4\n5\n6\n7\n8\nY\n10\n";
+    const diff = generateUnifiedDiff("file.js", old, nu);
+    assert.ok(diff.includes("-2"));
+    assert.ok(diff.includes("+X"));
+    assert.ok(diff.includes("-9"));
+    assert.ok(diff.includes("+Y"));
+  });
+});
+
+describe("globToRegex", () => {
+  const { globToRegex } = require("../lib/shared");
+
+  it("matches simple wildcard", () => {
+    const re = globToRegex("*.js");
+    assert.ok(re.test("foo.js"));
+    assert.ok(re.test("bar.js"));
+    assert.ok(!re.test("foo.ts"));
+    assert.ok(!re.test("dir/foo.js"), "Single * should not match path separators");
+  });
+
+  it("matches globstar (**)", () => {
+    const re = globToRegex("**/*.js");
+    // **/ requires at least one directory level (the / is literal)
+    assert.ok(!re.test("foo.js"), "Root-level files need a separate *.js pattern");
+    assert.ok(re.test("src/foo.js"));
+    assert.ok(re.test("src/deep/foo.js"));
+    assert.ok(!re.test("src/foo.ts"));
+  });
+
+  it("matches single character wildcard (?)", () => {
+    const re = globToRegex("file?.js");
+    assert.ok(re.test("file1.js"));
+    assert.ok(re.test("fileA.js"));
+    assert.ok(!re.test("file12.js"), "? should match exactly one character");
+  });
+
+  it("escapes regex special characters", () => {
+    const re = globToRegex("file.test.js");
+    assert.ok(re.test("file.test.js"));
+    assert.ok(!re.test("fileXtestXjs"), "Dots should be literal, not regex wildcards");
+  });
+
+  it("matches exact filename without wildcards", () => {
+    const re = globToRegex("package.json");
+    assert.ok(re.test("package.json"));
+    assert.ok(!re.test("other.json"));
+    assert.ok(!re.test("dir/package.json"));
+  });
+});
+
+describe("walkDir", () => {
+  const os = require("os");
+  const fs = require("fs");
+  const path = require("path");
+  const { walkDir, globToRegex } = require("../lib/shared");
+
+  function createTree(base, structure) {
+    for (const [name, content] of Object.entries(structure)) {
+      const full = path.join(base, name);
+      if (typeof content === "object") {
+        fs.mkdirSync(full, { recursive: true });
+        createTree(full, content);
+      } else {
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        fs.writeFileSync(full, content);
+      }
+    }
+  }
+
+  it("finds files matching a glob pattern", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "prove_it_walk_"));
+    createTree(tmp, { "a.js": "1", "b.ts": "2", "sub": { "c.js": "3" } });
+
+    const files = new Set();
+    walkDir(tmp, tmp, globToRegex("*.js"), files);
+    assert.ok(files.has("a.js"));
+    assert.ok(!files.has("b.ts"));
+    assert.ok(!files.has(path.join("sub", "c.js")), "*.js should not match subdirectory files");
+
+    // **/*.js matches subdirectory files but not root
+    const deepFiles = new Set();
+    walkDir(tmp, tmp, globToRegex("**/*.js"), deepFiles);
+    assert.ok(deepFiles.has(path.join("sub", "c.js")));
+    assert.ok(!deepFiles.has("a.js"), "**/*.js requires at least one directory level");
+
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("skips dotfiles and node_modules", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "prove_it_walk_"));
+    createTree(tmp, {
+      "src": { "a.js": "1" },
+      ".hidden": { "b.js": "2" },
+      "node_modules": { "c.js": "3" },
+    });
+
+    const files = new Set();
+    walkDir(tmp, tmp, globToRegex("**/*.js"), files);
+    assert.ok(files.has(path.join("src", "a.js")));
+    assert.strictEqual(files.size, 1, "Should only find src/a.js, skipping .hidden and node_modules");
+
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("returns empty set for nonexistent directory", () => {
+    const files = new Set();
+    walkDir("/nonexistent", "/nonexistent", globToRegex("*.js"), files);
+    assert.strictEqual(files.size, 0);
   });
 });
