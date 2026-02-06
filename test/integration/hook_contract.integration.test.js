@@ -249,9 +249,9 @@ describe('Claude Code hook output contract', () => {
       const output = JSON.parse(result.stdout)
       assert.strictEqual(output.loadResult, null)
 
-      // logReview falls back to unknown.jsonl
+      // logReview skips logging when no session ID
       const unknownLog = path.join(proveItDir, 'sessions', 'unknown.jsonl')
-      assert.ok(fs.existsSync(unknownLog), 'Should fall back to unknown.jsonl')
+      assert.ok(!fs.existsSync(unknownLog), 'Should not create unknown.jsonl')
     })
   })
 

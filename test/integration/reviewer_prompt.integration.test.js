@@ -41,9 +41,9 @@ describe('Reviewer prompt passthrough', () => {
     // Create capture file path
     captureFile = path.join(tmpDir, 'reviewer_capture.txt')
 
-    // Create mock reviewer that captures prompt and outputs PASS
+    // Create mock reviewer that captures stdin prompt and outputs PASS
     createFile(tmpDir, 'capture_reviewer.sh',
-      `#!/bin/bash\nprintf '%s' "$*" > "${captureFile}"\necho "PASS"\n`)
+      `#!/bin/bash\ncat > "${captureFile}"\necho "PASS"\n`)
     makeExecutable(path.join(tmpDir, 'capture_reviewer.sh'))
   })
 
@@ -67,7 +67,7 @@ describe('Reviewer prompt passthrough', () => {
           done: {
             reviewer: {
               enabled: true,
-              command: `${path.join(tmpDir, 'capture_reviewer.sh')} {prompt}`
+              command: `${path.join(tmpDir, 'capture_reviewer.sh')}`
             }
           }
         }
@@ -102,7 +102,7 @@ describe('Reviewer prompt passthrough', () => {
           stop: {
             reviewer: {
               enabled: true,
-              command: `${path.join(tmpDir, 'capture_reviewer.sh')} {prompt}`
+              command: `${path.join(tmpDir, 'capture_reviewer.sh')}`
             }
           }
         }
@@ -137,7 +137,7 @@ describe('Reviewer prompt passthrough', () => {
           done: {
             reviewer: {
               enabled: true,
-              command: `${path.join(tmpDir, 'capture_reviewer.sh')} {prompt}`,
+              command: `${path.join(tmpDir, 'capture_reviewer.sh')}`,
               prompt: 'Check for SQL injection only'
             }
           }
@@ -172,7 +172,7 @@ describe('Reviewer prompt passthrough', () => {
           stop: {
             reviewer: {
               enabled: true,
-              command: `${path.join(tmpDir, 'capture_reviewer.sh')} {prompt}`,
+              command: `${path.join(tmpDir, 'capture_reviewer.sh')}`,
               prompt: 'Check for SQL injection only'
             }
           }

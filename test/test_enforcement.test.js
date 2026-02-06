@@ -135,17 +135,7 @@ describe('commands that require tests', () => {
 })
 
 describe('local config write protection', () => {
-  function isLocalConfigWrite (command) {
-    const cmd = command || ''
-    if (!cmd.includes('prove_it.local.json')) return false
-    return /[^<]>|>>|\btee\b/.test(cmd)
-  }
-
-  function isConfigFileEdit (toolName, toolInput) {
-    if (toolName !== 'Write' && toolName !== 'Edit') return false
-    const filePath = toolInput?.file_path || ''
-    return filePath.includes('prove_it.json') || filePath.includes('prove_it.local.json')
-  }
+  const { isConfigFileEdit, isLocalConfigWrite } = require('../lib/hooks/prove_it_edit')
 
   describe('blocks Write/Edit tools', () => {
     it('blocks Write to prove_it.json', () => {
@@ -162,6 +152,14 @@ describe('local config write protection', () => {
 
     it('blocks Edit to prove_it.local.json', () => {
       assert.ok(isConfigFileEdit('Edit', { file_path: '.claude/prove_it.local.json' }))
+    })
+
+    it('blocks Write to global prove_it/config.json', () => {
+      assert.ok(isConfigFileEdit('Write', { file_path: '/Users/me/.claude/prove_it/config.json' }))
+    })
+
+    it('blocks Edit to global prove_it/config.json', () => {
+      assert.ok(isConfigFileEdit('Edit', { file_path: '/home/user/.claude/prove_it/config.json' }))
     })
 
     it('allows Write to other files', () => {
@@ -205,6 +203,14 @@ describe('local config write protection', () => {
     it('blocks mkdir && echo combo', () => {
       assert.ok(isLocalConfigWrite('mkdir -p .claude && echo \'{"suiteGate":{"require":false}}\' > .claude/prove_it.local.json'))
     })
+
+    it('blocks redirect to prove_it.json', () => {
+      assert.ok(isLocalConfigWrite('echo {} > .claude/prove_it.json'))
+    })
+
+    it('blocks redirect to global prove_it/config.json', () => {
+      assert.ok(isLocalConfigWrite('echo {} > ~/.claude/prove_it/config.json'))
+    })
   })
 
   describe('allows reads', () => {
@@ -230,8 +236,8 @@ describe('local config write protection', () => {
       assert.ok(!isLocalConfigWrite('echo {} > .claude/other.json'))
     })
 
-    it('allows writing to config.json', () => {
-      assert.ok(!isLocalConfigWrite('echo {} > ~/.claude/prove_it/config.json'))
+    it('blocks writing to global prove_it/config.json', () => {
+      assert.ok(isLocalConfigWrite('echo {} > ~/.claude/prove_it/config.json'))
     })
   })
 })
@@ -494,15 +500,13 @@ describe('logReview', () => {
     cleanup()
   })
 
-  it('uses unknown.jsonl when no session ID', () => {
+  it('skips logging when no session ID', () => {
     setup()
 
     logReview(null, '/project', 'code', 'PASS', null)
 
     const logFile = path.join(tmpBase, 'sessions', 'unknown.jsonl')
-    assert.ok(fs.existsSync(logFile), 'Log file should be created')
-    const lastEntry = JSON.parse(fs.readFileSync(logFile, 'utf8').trim().split('\n').pop())
-    assert.strictEqual(lastEntry.sessionId, null)
+    assert.ok(!fs.existsSync(logFile), 'Should not create unknown.jsonl')
 
     cleanup()
   })

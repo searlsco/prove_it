@@ -146,7 +146,7 @@ describe('runReviewer with fixture shims', () => {
       setup()
       process.env.FRAUDE_RESPONSE = 'PASS'
       const review = runReviewer(tmpDir, {
-        command: `${fraudePath} -p {prompt}`,
+        command: `${fraudePath} -p`,
         outputMode: 'text'
       }, 'test prompt')
 
@@ -159,7 +159,7 @@ describe('runReviewer with fixture shims', () => {
       setup()
       process.env.FRAUDE_RESPONSE = 'FAIL: no tests for new function'
       const review = runReviewer(tmpDir, {
-        command: `${fraudePath} -p {prompt}`,
+        command: `${fraudePath} -p`,
         outputMode: 'text'
       }, 'test prompt')
 
@@ -175,7 +175,7 @@ describe('runReviewer with fixture shims', () => {
       setup()
       process.env.FAUDEX_RESPONSE = 'PASS'
       const review = runReviewer(tmpDir, {
-        command: `${faudexPath} exec --sandbox read-only --json {prompt}`,
+        command: `${faudexPath} exec --sandbox read-only --json`,
         outputMode: 'jsonl'
       }, 'test prompt')
 
@@ -188,7 +188,7 @@ describe('runReviewer with fixture shims', () => {
       setup()
       process.env.FAUDEX_RESPONSE = 'FAIL: missing coverage for auth.js'
       const review = runReviewer(tmpDir, {
-        command: `${faudexPath} exec --json {prompt}`,
+        command: `${faudexPath} exec --json`,
         outputMode: 'jsonl'
       }, 'test prompt')
 
@@ -203,7 +203,7 @@ describe('runReviewer with fixture shims', () => {
     it('returns available: false when binary not found', () => {
       setup()
       const review = runReviewer(tmpDir, {
-        command: 'nonexistent_binary_xyz {prompt}',
+        command: 'nonexistent_binary_xyz',
         outputMode: 'text'
       }, 'test')
 
@@ -219,7 +219,7 @@ describe('runReviewer with fixture shims', () => {
       process.env.FRAUDE_RESPONSE = 'PASS'
       // Prove that if the default command were fraude, text mode works end-to-end
       const review = runReviewer(tmpDir, {
-        command: `${fraudePath} -p {prompt}`
+        command: `${fraudePath} -p`
       }, 'test')
 
       assert.strictEqual(review.available, true)

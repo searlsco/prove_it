@@ -127,10 +127,10 @@ describe('session state functions', () => {
       assert.strictEqual(entries[2].status, 'fail')
     })
 
-    it('falls back to unknown.jsonl when sessionId is null', () => {
+    it('skips logging when sessionId is null', () => {
       logReview(null, '/project', 'done', 'pass', 'OK')
       const logFile = path.join(tmpDir, 'prove_it', 'sessions', 'unknown.jsonl')
-      assert.ok(fs.existsSync(logFile), 'Should fall back to unknown.jsonl')
+      assert.ok(!fs.existsSync(logFile), 'Should not create unknown.jsonl')
     })
   })
 
