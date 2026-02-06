@@ -86,8 +86,8 @@ describe("prove_it_beads.js integration", () => {
         assert.ok(result.output.hookSpecificOutput, "Should have hookSpecificOutput when blocking");
         assert.strictEqual(
           result.output.hookSpecificOutput.permissionDecision,
-          "block",
-          "Should block Edit without in_progress bead"
+          "deny",
+          "Should deny Edit without in_progress bead"
         );
         assert.ok(
           result.output.hookSpecificOutput.permissionDecisionReason.includes("No bead"),
@@ -112,7 +112,7 @@ describe("prove_it_beads.js integration", () => {
       assert.strictEqual(result.exitCode, 0);
 
       if (result.output) {
-        assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, "block");
+        assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, "deny");
       }
     });
 
@@ -131,7 +131,7 @@ describe("prove_it_beads.js integration", () => {
       assert.strictEqual(result.exitCode, 0);
 
       if (result.output) {
-        assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, "block");
+        assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, "deny");
       }
     });
 
@@ -150,7 +150,7 @@ describe("prove_it_beads.js integration", () => {
       assert.strictEqual(result.exitCode, 0);
 
       if (result.output) {
-        assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, "block");
+        assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, "deny");
       }
     });
   });

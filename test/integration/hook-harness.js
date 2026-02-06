@@ -6,6 +6,7 @@
  * - Create temporary directories with controlled state
  * - Parse and validate hook output
  */
+const assert = require("node:assert");
 const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
@@ -13,6 +14,11 @@ const os = require("os");
 
 // Test source hooks directly (they export main() and work standalone)
 const HOOKS_DIR = path.join(__dirname, "..", "..", "lib", "hooks");
+
+// Claude Code's valid permissionDecision values for PreToolUse hooks.
+// Source: https://docs.anthropic.com/en/docs/claude-code/hooks
+// Using any other value (e.g. "block", "approve") is silently ignored.
+const VALID_PERMISSION_DECISIONS = ["allow", "deny", "ask"];
 
 /**
  * Invoke a hook with the given input.
@@ -135,6 +141,24 @@ function initBeads(dir) {
   fs.writeFileSync(path.join(beadsDir, "config.yaml"), "# beads config\n", "utf8");
 }
 
+/**
+ * Assert that a hook result's permissionDecision uses a valid Claude Code value.
+ * This catches bugs like using "block" instead of "deny".
+ *
+ * @param {object} result - The result from invokeHook
+ * @param {string} label - Test context for error messages
+ */
+function assertValidPermissionDecision(result, label) {
+  if (!result.output?.hookSpecificOutput?.permissionDecision) return;
+
+  const decision = result.output.hookSpecificOutput.permissionDecision;
+  assert.ok(
+    VALID_PERMISSION_DECISIONS.includes(decision),
+    `${label}: permissionDecision "${decision}" is not valid for Claude Code. ` +
+    `Must be one of: ${VALID_PERMISSION_DECISIONS.join(", ")}`
+  );
+}
+
 module.exports = {
   invokeHook,
   createTempDir,
@@ -145,5 +169,7 @@ module.exports = {
   createTestScript,
   createSuiteGate, // Alias for backwards compatibility
   initBeads,
+  assertValidPermissionDecision,
+  VALID_PERMISSION_DECISIONS,
   HOOKS_DIR,
 };

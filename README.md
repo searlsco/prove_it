@@ -1,10 +1,29 @@
-# prove_it
+# prove_it - Force Claude to actually verify its work
 
 [![Certified Shovelware](https://justin.searls.co/img/shovelware.svg)](https://justin.searls.co/shovelware/)
 
-Hooks for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) that enforce verified workflows. If Claude says "done" but didn't run the tests, it wasn't actually done.
+By far the most frustrating thing about [Claude Code](https://docs.anthropic.com/en/docs/claude-code) is its penchant for prematurely declaring success. Out-of-the-box, Claude will happily announce a task is complete. Has it run the tests? No. Did it add any tests? No. Did it run the code? Also no.
 
-**This is for Claude Code users.** If you're not using Claude Code, this tool won't do anything for you.
+That's why I (well, Claude) wrote **prove_it**: to introduce more structured and unstructured verifiability checks into its workflow. It accomplishes this by registering a few [hooks](https://code.claude.com/docs/en/hooks), and is designed to be just-configurable-enough to be used on any project.
+
+If it's not obvious, **prove_it only works with Claude Code.** If you're not using Claude Code, this tool won't do anything for you.
+
+## What does prove_it prove?
+
+The two most important things prove_it does:
+
+* **Blocks stop** - each time Claude finishes its response and hands control back to the user, it fires any ["stop" hooks](https://code.claude.com/docs/en/hooks#subagentstop). prove_it leverages this hook to do two things:
+  - Run your unit tests (`script/test_fast` if defined, otherwise `script/test`) and blocks if they fail
+  - Deploy a [reviewer agent](#reviewer-agents) to ensure commensurate verification methods (e.g. test coverage) were introduced for whatever code was added during the response
+* **Blocks commits** - each time Claude attempts to make a git commit, prove_it runs a hook that will:
+  - Run `./script/test` and block unless it passes
+  - Deploy a [reviewer agent](#reviewer-agents) that will—in addition to inspecting test coverage—inspect all code introduced since the previous commit and hunt for potential bugs and dead code, blocking if it finds anything significant
+
+Other stuff prove_it does:
+
+* **Beads integration** - if your project uses [beads](https://github.com/steveyegge/beads) to track work, prove_it will stop Claude from editing code until or unless a current task is in progress, essentially forcing it to know what it's working on before it starts editing code
+* **Tracks runs** - If Claude stops work or attempts a commit and your code hasn't changed since the last successful test run, it won't waste daylight re-running your tests
+
 
 ## Setup
 
@@ -12,66 +31,45 @@ Hooks for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) that enf
 # Install the CLI
 brew install searlsco/tap/prove_it
 
-# Register hooks with Claude Code
+# Register prove_it hooks in ~/.claude/settings.json
 prove_it install
-
-# IMPORTANT: Restart Claude Code (hooks load at startup)
 ```
 
-Then in each project:
+Then, in each project:
 
 ```bash
 cd your-project
 prove_it init
 ```
 
-Now create these executable scripts in your project:
+This will create project-specific settings in `.claude` and ensure a `script/test` exists (don't like it? You can change it later).
+
+## Test scripts
+
+By default, prove_it looks for two test scripts by convention:
 
 | Script | Purpose | When it runs |
 |--------|---------|--------------|
-| `script/test_fast` | Fast unit tests | Every time Claude stops work |
 | `script/test` | Full test suite (units, integration, linters, etc.) | Before every `git commit` |
+| `script/test_fast` | Fast unit tests | Every time Claude stops work |
 
-Example `script/test_fast`:
+For example, your `script/test_fast` script might run:
+
 ```bash
 #!/bin/bash
-npm test
+
+rake test
 ```
 
-Example `script/test`:
+And your full  `script/test` command will probably run that and more:
+
 ```bash
 #!/bin/bash
-npm test && npm run lint && npm run typecheck
+
+rake test standard:fix test:system
 ```
 
-That's it. Now Claude must pass your tests before committing or claiming completion.
-
-## What It Does
-
-1. **Blocks commits** - `git commit` won't run until `./script/test` passes
-2. **Blocks stop** - Claude can't stop working until `./script/test_fast` passes
-3. **Tracks runs** - Only re-runs tests when source files actually changed
-
-## Disabling
-
-**Ignore specific directories** (e.g., `~/bin` that happens to be a git repo):
-
-Edit `~/.claude/prove_it/config.json`:
-```json
-{
-  "ignoredPaths": ["~/bin", "~/dotfiles"]
-}
-```
-
-**Disable for this project:**
-```bash
-echo '{"enabled":false}' > .claude/prove_it.json
-```
-
-**Disable globally:**
-```bash
-export PROVE_IT_DISABLED=1
-```
+That's it. Now Claude must see your tests pass before claiming the job's done or committing your code.
 
 ## Commands
 
@@ -125,7 +123,7 @@ Config files layer (later overrides earlier):
 }
 ```
 
-## AI Code Reviewer
+## Reviewer Agents
 
 Each hook has an optional AI reviewer that gates Claude's work with an independent PASS/FAIL check:
 
@@ -199,7 +197,49 @@ Disable with:
 }
 ```
 
+## Disabling prove_it
+
+If you run `claude` in a directory that is not a typical project (as I often do in `~/tmp` or `~/bin`), you may find that Claude will run erroneously afoul of prove_it's stop hook. To minimize this risk, prove_it will only run by default in directories that are tracked by a git repository.
+
+To disable prove_it, you have a few options:
+
+### Ignore specific directories
+
+Edit `~/.claude/prove_it/config.json`:
+
+```json
+{
+  "ignoredPaths": ["~/bin", "~/dotfiles"]
+}
+```
+
+Each of these paths and their descendants will be ignored by prove_it's hooks
+
+### Disable for a particular project
+
+Disable prove_it for all contributors of a project by editing `.claude/prove_it.json`:
+
+```bash
+echo '{"enabled":false}' > .claude/prove_it.json
+```
+
+Disable prove_it locally in a project with the untracked `.claude/prove_it.local.json`:
+
+```bash
+echo '{"enabled":false}' > .claude/prove_it.local.json
+```
+
+### Disable prove_it with an environment variable
+
+You can disable prove_it globally by setting the `PROVE_IT_DISABLED` env var:
+
+```bash
+export PROVE_IT_DISABLED=1
+```
+
 ## Troubleshooting
+
+Run the `diagnose` command to see the current state of your installation/setup:
 
 ```bash
 prove_it diagnose

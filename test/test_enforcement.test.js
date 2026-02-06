@@ -451,7 +451,6 @@ describe("logReview", () => {
   const { logReview } = require("../lib/shared");
 
   const tmpBase = path.join(os.tmpdir(), "prove_it_log_test_" + Date.now());
-  const originalSessionId = process.env.CLAUDE_SESSION_ID;
   const originalProveItDir = process.env.PROVE_IT_DIR;
 
   function setup() {
@@ -461,11 +460,6 @@ describe("logReview", () => {
 
   function cleanup() {
     try { fs.rmSync(tmpBase, { recursive: true, force: true }); } catch {}
-    if (originalSessionId !== undefined) {
-      process.env.CLAUDE_SESSION_ID = originalSessionId;
-    } else {
-      delete process.env.CLAUDE_SESSION_ID;
-    }
     if (originalProveItDir !== undefined) {
       process.env.PROVE_IT_DIR = originalProveItDir;
     } else {
@@ -475,9 +469,8 @@ describe("logReview", () => {
 
   it("appends review entry to session log file", () => {
     setup();
-    process.env.CLAUDE_SESSION_ID = "test-session-123";
 
-    logReview("/some/project", "code", "PASS", null);
+    logReview("test-session-123", "/some/project", "code", "PASS", null);
 
     const logFile = path.join(tmpBase, "sessions", "test-session-123.jsonl");
     assert.ok(fs.existsSync(logFile), "Log file should be created");
@@ -493,9 +486,8 @@ describe("logReview", () => {
 
   it("logs FAIL with reason", () => {
     setup();
-    process.env.CLAUDE_SESSION_ID = "test-session-456";
 
-    logReview("/another/project", "coverage", "FAIL", "Missing tests for new function");
+    logReview("test-session-456", "/another/project", "coverage", "FAIL", "Missing tests for new function");
 
     const logFile = path.join(tmpBase, "sessions", "test-session-456.jsonl");
     assert.ok(fs.existsSync(logFile), "Log file should be created");
@@ -509,9 +501,8 @@ describe("logReview", () => {
 
   it("uses unknown.jsonl when no session ID", () => {
     setup();
-    delete process.env.CLAUDE_SESSION_ID;
 
-    logReview("/project", "code", "PASS", null);
+    logReview(null, "/project", "code", "PASS", null);
 
     const logFile = path.join(tmpBase, "sessions", "unknown.jsonl");
     assert.ok(fs.existsSync(logFile), "Log file should be created");
@@ -529,7 +520,6 @@ describe("session state", () => {
   const { loadSessionState, saveSessionState } = require("../lib/shared");
 
   const tmpBase = path.join(os.tmpdir(), "prove_it_state_test_" + Date.now());
-  const originalSessionId = process.env.CLAUDE_SESSION_ID;
   const originalProveItDir = process.env.PROVE_IT_DIR;
 
   function setup() {
@@ -539,11 +529,6 @@ describe("session state", () => {
 
   function cleanup() {
     try { fs.rmSync(tmpBase, { recursive: true, force: true }); } catch {}
-    if (originalSessionId !== undefined) {
-      process.env.CLAUDE_SESSION_ID = originalSessionId;
-    } else {
-      delete process.env.CLAUDE_SESSION_ID;
-    }
     if (originalProveItDir !== undefined) {
       process.env.PROVE_IT_DIR = originalProveItDir;
     } else {
@@ -551,27 +536,24 @@ describe("session state", () => {
     }
   }
 
-  it("returns null when no session ID is set", () => {
+  it("returns null when sessionId is null", () => {
     setup();
-    delete process.env.CLAUDE_SESSION_ID;
-    const result = loadSessionState("last_review_snapshot");
+    const result = loadSessionState(null, "last_review_snapshot");
     assert.strictEqual(result, null);
     cleanup();
   });
 
-  it("saveSessionState is a no-op when no session ID is set", () => {
+  it("saveSessionState is a no-op when sessionId is null", () => {
     setup();
-    delete process.env.CLAUDE_SESSION_ID;
-    saveSessionState("last_review_snapshot", "some-value");
+    saveSessionState(null, "last_review_snapshot", "some-value");
     cleanup();
   });
 
   it("round-trips a value via save and load", () => {
     setup();
-    process.env.CLAUDE_SESSION_ID = "test-roundtrip";
 
-    saveSessionState("last_review_snapshot", "msg-abc-123");
-    const result = loadSessionState("last_review_snapshot");
+    saveSessionState("test-roundtrip", "last_review_snapshot", "msg-abc-123");
+    const result = loadSessionState("test-roundtrip", "last_review_snapshot");
     assert.strictEqual(result, "msg-abc-123");
 
     cleanup();
@@ -579,23 +561,21 @@ describe("session state", () => {
 
   it("supports multiple keys in the same state file", () => {
     setup();
-    process.env.CLAUDE_SESSION_ID = "test-multikey";
 
-    saveSessionState("key_a", "value_a");
-    saveSessionState("key_b", "value_b");
+    saveSessionState("test-multikey", "key_a", "value_a");
+    saveSessionState("test-multikey", "key_b", "value_b");
 
-    assert.strictEqual(loadSessionState("key_a"), "value_a");
-    assert.strictEqual(loadSessionState("key_b"), "value_b");
+    assert.strictEqual(loadSessionState("test-multikey", "key_a"), "value_a");
+    assert.strictEqual(loadSessionState("test-multikey", "key_b"), "value_b");
 
     cleanup();
   });
 
   it("returns null for a key that does not exist in state file", () => {
     setup();
-    process.env.CLAUDE_SESSION_ID = "test-missing-key";
 
-    saveSessionState("existing_key", "some_value");
-    const result = loadSessionState("nonexistent_key");
+    saveSessionState("test-missing-key", "existing_key", "some_value");
+    const result = loadSessionState("test-missing-key", "nonexistent_key");
     assert.strictEqual(result, null);
 
     cleanup();
@@ -604,17 +584,11 @@ describe("session state", () => {
   it("isolates state between sessions (the core property)", () => {
     setup();
 
-    process.env.CLAUDE_SESSION_ID = "session-A";
-    saveSessionState("last_review_snapshot", "msg-from-A");
+    saveSessionState("session-A", "last_review_snapshot", "msg-from-A");
+    saveSessionState("session-B", "last_review_snapshot", "msg-from-B");
 
-    process.env.CLAUDE_SESSION_ID = "session-B";
-    saveSessionState("last_review_snapshot", "msg-from-B");
-
-    process.env.CLAUDE_SESSION_ID = "session-A";
-    assert.strictEqual(loadSessionState("last_review_snapshot"), "msg-from-A");
-
-    process.env.CLAUDE_SESSION_ID = "session-B";
-    assert.strictEqual(loadSessionState("last_review_snapshot"), "msg-from-B");
+    assert.strictEqual(loadSessionState("session-A", "last_review_snapshot"), "msg-from-A");
+    assert.strictEqual(loadSessionState("session-B", "last_review_snapshot"), "msg-from-B");
 
     cleanup();
   });
@@ -625,12 +599,11 @@ describe("session state", () => {
     fs.mkdirSync(path.join(projectTmp, ".claude"), { recursive: true });
     const localCfgPath = path.join(projectTmp, ".claude", "prove_it.local.json");
 
-    process.env.CLAUDE_SESSION_ID = "test-no-local";
-    saveSessionState("last_review_snapshot", "msg-xyz");
+    saveSessionState("test-no-local", "last_review_snapshot", "msg-xyz");
 
     assert.strictEqual(fs.existsSync(localCfgPath), false,
       "saveSessionState should not create prove_it.local.json");
-    assert.strictEqual(loadSessionState("last_review_snapshot"), "msg-xyz");
+    assert.strictEqual(loadSessionState("test-no-local", "last_review_snapshot"), "msg-xyz");
 
     fs.rmSync(projectTmp, { recursive: true, force: true });
     cleanup();
