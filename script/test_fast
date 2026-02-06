@@ -1,4 +1,4 @@
 #!/bin/bash
 set -e
-npx standard
+npx standard --fix
 npm test
