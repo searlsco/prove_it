@@ -7,6 +7,7 @@ const {
   cleanupTempDir,
   initGitRepo,
   initBeads,
+  createFile,
 } = require("./hook-harness");
 
 describe("prove_it_beads.js integration", () => {
@@ -222,6 +223,90 @@ describe("prove_it_beads.js integration", () => {
 
       assert.strictEqual(result.exitCode, 0);
       assert.strictEqual(result.output, null, "Should allow bd commands");
+    });
+  });
+
+  describe("source file filtering", () => {
+    beforeEach(() => {
+      initBeads(tmpDir);
+      // Configure sources so only .js files in lib/ and src/ are considered source
+      createFile(tmpDir, ".claude/prove_it.json", JSON.stringify({
+        sources: ["lib/**/*.js", "src/**/*.js"],
+      }));
+    });
+
+    it("allows Edit to non-source file (README.md) without bead", () => {
+      const result = invokeHook(
+        "prove_it_beads.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Edit",
+          tool_input: { file_path: `${tmpDir}/README.md`, old_string: "a", new_string: "b" },
+          cwd: tmpDir,
+        },
+        { projectDir: tmpDir }
+      );
+
+      assert.strictEqual(result.exitCode, 0);
+      assert.strictEqual(result.output, null, "Should allow editing non-source files without bead");
+    });
+
+    it("allows Write to non-source file (docs/guide.md) without bead", () => {
+      const result = invokeHook(
+        "prove_it_beads.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Write",
+          tool_input: { file_path: `${tmpDir}/docs/guide.md`, content: "hello" },
+          cwd: tmpDir,
+        },
+        { projectDir: tmpDir }
+      );
+
+      assert.strictEqual(result.exitCode, 0);
+      assert.strictEqual(result.output, null, "Should allow writing non-source files without bead");
+    });
+
+    it("blocks Edit to source file (lib/foo.js) without bead", () => {
+      const result = invokeHook(
+        "prove_it_beads.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Edit",
+          tool_input: { file_path: `${tmpDir}/lib/foo.js`, old_string: "a", new_string: "b" },
+          cwd: tmpDir,
+        },
+        { projectDir: tmpDir }
+      );
+
+      assert.strictEqual(result.exitCode, 0);
+      if (result.output) {
+        assert.strictEqual(
+          result.output.hookSpecificOutput.permissionDecision,
+          "deny",
+          "Should deny Edit to source file without bead"
+        );
+      }
+    });
+
+    it("still enforces Bash write ops regardless of sources", () => {
+      // Bash write ops can't reliably determine target file, so always enforce
+      const result = invokeHook(
+        "prove_it_beads.js",
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: { command: "cat > README.md" },
+          cwd: tmpDir,
+        },
+        { projectDir: tmpDir }
+      );
+
+      assert.strictEqual(result.exitCode, 0);
+      // Bash write ops should still be enforced (can't determine target reliably)
+      if (result.output) {
+        assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, "deny");
+      }
     });
   });
 

@@ -683,11 +683,19 @@ describe("globToRegex", () => {
 
   it("matches globstar (**)", () => {
     const re = globToRegex("**/*.js");
-    // **/ requires at least one directory level (the / is literal)
-    assert.ok(!re.test("foo.js"), "Root-level files need a separate *.js pattern");
+    // **/ matches zero or more directory segments
+    assert.ok(re.test("foo.js"), "**/ should match zero directory segments (root-level)");
     assert.ok(re.test("src/foo.js"));
     assert.ok(re.test("src/deep/foo.js"));
     assert.ok(!re.test("src/foo.ts"));
+  });
+
+  it("matches globstar with prefix (lib/**/*.js)", () => {
+    const re = globToRegex("lib/**/*.js");
+    assert.ok(re.test("lib/shared.js"), "Should match files directly in lib/");
+    assert.ok(re.test("lib/hooks/beads.js"), "Should match nested files");
+    assert.ok(!re.test("lib/shared.ts"), "Should not match wrong extension");
+    assert.ok(!re.test("src/shared.js"), "Should not match wrong prefix");
   });
 
   it("matches single character wildcard (?)", () => {
@@ -740,11 +748,11 @@ describe("walkDir", () => {
     assert.ok(!files.has("b.ts"));
     assert.ok(!files.has(path.join("sub", "c.js")), "*.js should not match subdirectory files");
 
-    // **/*.js matches subdirectory files but not root
+    // **/*.js matches files at any depth including root
     const deepFiles = new Set();
     walkDir(tmp, tmp, globToRegex("**/*.js"), deepFiles);
     assert.ok(deepFiles.has(path.join("sub", "c.js")));
-    assert.ok(!deepFiles.has("a.js"), "**/*.js requires at least one directory level");
+    assert.ok(deepFiles.has("a.js"), "**/*.js should match root-level files too");
 
     fs.rmSync(tmp, { recursive: true, force: true });
   });

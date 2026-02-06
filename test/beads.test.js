@@ -1,5 +1,8 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert");
+const path = require("path");
+
+const { isSourceFile } = require("../lib/hooks/prove_it_beads");
 
 // Test the beads enforcement logic
 
@@ -147,5 +150,61 @@ describe("tools that require a bead", () => {
 
   it("does not require bead for Grep", () => {
     assert.ok(!requiresBead("Grep"));
+  });
+});
+
+describe("isSourceFile", () => {
+  const rootDir = "/repo";
+  const sources = ["lib/**/*.js", "src/**/*.js", "cli.js", "test/**/*.js"];
+
+  it("matches files in lib/", () => {
+    assert.ok(isSourceFile("/repo/lib/shared.js", rootDir, sources));
+    assert.ok(isSourceFile("/repo/lib/hooks/prove_it_beads.js", rootDir, sources));
+  });
+
+  it("matches files in src/", () => {
+    assert.ok(isSourceFile("/repo/src/index.js", rootDir, sources));
+  });
+
+  it("matches root-level source files", () => {
+    assert.ok(isSourceFile("/repo/cli.js", rootDir, sources));
+  });
+
+  it("matches test files", () => {
+    assert.ok(isSourceFile("/repo/test/beads.test.js", rootDir, sources));
+  });
+
+  it("does not match README", () => {
+    assert.ok(!isSourceFile("/repo/README.md", rootDir, sources));
+  });
+
+  it("does not match docs", () => {
+    assert.ok(!isSourceFile("/repo/docs/guide.md", rootDir, sources));
+  });
+
+  it("does not match config files", () => {
+    assert.ok(!isSourceFile("/repo/.claude/prove_it.json", rootDir, sources));
+    assert.ok(!isSourceFile("/repo/package.json", rootDir, sources));
+  });
+
+  it("does not match non-js files in lib/", () => {
+    assert.ok(!isSourceFile("/repo/lib/README.md", rootDir, sources));
+  });
+
+  it("does not match files outside the repo", () => {
+    assert.ok(!isSourceFile("/other/repo/lib/foo.js", rootDir, sources));
+  });
+
+  it("treats all files as source when sources is null", () => {
+    assert.ok(isSourceFile("/repo/README.md", rootDir, null));
+  });
+
+  it("treats all files as source when sources is empty", () => {
+    assert.ok(isSourceFile("/repo/README.md", rootDir, []));
+  });
+
+  it("works with relative paths", () => {
+    assert.ok(isSourceFile("lib/shared.js", rootDir, sources));
+    assert.ok(!isSourceFile("README.md", rootDir, sources));
   });
 });
