@@ -29,17 +29,12 @@ function bdAvailable() {
   return r.status === 0;
 }
 
-describe("E2E: beads enforcement via claude CLI", () => {
+const canRunE2E = claudeAvailable() && bdAvailable();
+
+describe("E2E: beads enforcement via claude CLI", { skip: !canRunE2E && "requires claude + bd CLIs" }, () => {
   let tmpDir;
 
   beforeEach(() => {
-    if (!claudeAvailable()) {
-      throw new Error("claude CLI not found in PATH");
-    }
-    if (!bdAvailable()) {
-      throw new Error("bd CLI not found in PATH");
-    }
-
     tmpDir = createTempDir("prove_it_e2e_");
     initGitRepo(tmpDir);
 
