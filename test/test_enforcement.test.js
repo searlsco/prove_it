@@ -8,13 +8,16 @@ describe("commands that require tests", () => {
   // Note: git push removed from defaults - commit already runs full tests
   const defaultRegexes = [
     "(^|\\s)git\\s+commit\\b",
-    "(^|\\s)(beads|bd)\\s+(done|finish|close)\\b",
   ];
 
-  // For testing git push separately (users can add it back)
+  // For testing additional triggers that users can add via config
   const withPushRegexes = [
     "(^|\\s)git\\s+commit\\b",
     "(^|\\s)git\\s+push\\b",
+  ];
+
+  const withBeadsRegexes = [
+    "(^|\\s)git\\s+commit\\b",
     "(^|\\s)(beads|bd)\\s+(done|finish|close)\\b",
   ];
 
@@ -72,33 +75,25 @@ describe("commands that require tests", () => {
     });
   });
 
-  describe("beads/bd done/finish/close", () => {
-    it("requires tests for 'beads done'", () => {
-      assert.ok(shouldRequireTests("beads done"));
+  describe("beads/bd done/finish/close (not triggered by default)", () => {
+    it("does not require tests for 'beads done' by default", () => {
+      assert.ok(!shouldRequireTests("beads done"));
     });
 
-    it("requires tests for 'bd done'", () => {
-      assert.ok(shouldRequireTests("bd done"));
+    it("does not require tests for 'bd close' by default", () => {
+      assert.ok(!shouldRequireTests("bd close"));
     });
 
-    it("requires tests for 'beads finish'", () => {
-      assert.ok(shouldRequireTests("beads finish"));
+    it("requires tests for 'bd close' when added to regexes", () => {
+      assert.ok(shouldRequireTests("bd close", withBeadsRegexes));
     });
 
-    it("requires tests for 'bd close'", () => {
-      assert.ok(shouldRequireTests("bd close"));
+    it("requires tests for 'beads done 123' when added to regexes", () => {
+      assert.ok(shouldRequireTests("beads done 123", withBeadsRegexes));
     });
 
-    it("requires tests for 'beads done 123'", () => {
-      assert.ok(shouldRequireTests("beads done 123"));
-    });
-
-    it("does not require tests for 'beads list'", () => {
-      assert.ok(!shouldRequireTests("beads list"));
-    });
-
-    it("does not require tests for 'bd show'", () => {
-      assert.ok(!shouldRequireTests("bd show"));
+    it("does not require tests for 'beads list' even when beads triggers added", () => {
+      assert.ok(!shouldRequireTests("beads list", withBeadsRegexes));
     });
   });
 

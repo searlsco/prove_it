@@ -13,6 +13,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { loadEffectiveConfig, defaultTestConfig, defaultBeadsConfig } = require("./lib/shared");
 
 // Current config version
 const CURRENT_CONFIG_VERSION = 4;
@@ -633,6 +634,17 @@ function cmdDiagnose() {
     log("      (beads enforcement is active for this repo)");
   } else {
     log("  [ ] Beads not initialized (optional): .beads/");
+  }
+
+  // Effective merged config
+  log("\nEffective config (merged):");
+  try {
+    const { cfg: testCfg } = loadEffectiveConfig(repoRoot, defaultTestConfig);
+    const { cfg: beadsCfg } = loadEffectiveConfig(repoRoot, defaultBeadsConfig);
+    const effective = { ...testCfg, ...beadsCfg };
+    log(JSON.stringify(effective, null, 2).split("\n").map(l => "  " + l).join("\n"));
+  } catch (e) {
+    log(`  (error loading config: ${e.message})`);
   }
 
   // Summary

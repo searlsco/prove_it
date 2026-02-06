@@ -16,8 +16,8 @@ The two most important things prove_it does:
   - Run your unit tests (`script/test_fast` if defined, otherwise `script/test`) and blocks if they fail
   - Deploy a [reviewer agent](#reviewer-agents) to ensure commensurate verification methods (e.g. test coverage) were introduced for whatever code was added during the response
 * **Blocks commits** - each time Claude attempts to make a git commit, prove_it runs a hook that will:
-  - Run `./script/test` and block unless it passes
-  - Deploy a [reviewer agent](#reviewer-agents) that will—in addition to inspecting test coverage—inspect all code introduced since the previous commit and hunt for potential bugs and dead code, blocking if it finds anything significant
+  - Run `./script/test` at hook time and block unless it passes
+  - Then deploy a [reviewer agent](#reviewer-agents) that will—in addition to inspecting test coverage—inspect all code introduced since the previous commit and hunt for potential bugs and dead code, blocking if it finds anything significant
 
 Other stuff prove_it does:
 

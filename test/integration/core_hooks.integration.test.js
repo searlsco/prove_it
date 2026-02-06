@@ -19,8 +19,9 @@ const {
  *
  * 1. Stop blocks when fast tests fail
  * 2. Stop blocks when coverage reviewer fails (tests pass)
- * 3. Pre-commit wraps command so test failure prevents commit
- * 4. Pre-commit blocks when code reviewer fails
+ * 3. Pre-commit runs tests at hook time and blocks on failure
+ * 4. Pre-commit blocks when code reviewer fails (after tests pass)
+ * 5. Pre-commit allows commit through unchanged when tests + reviewer pass
  */
 
 /**
@@ -150,8 +151,11 @@ describe("README promises: prove_it blocks when it should", () => {
   });
 
   describe("Pre-commit hook (PreToolUse)", () => {
-    it("wraps git commit with test suite so test failure prevents commit", () => {
-      createTestScript(tmpDir, true); // script/test exists
+    it("blocks commit at hook time when tests fail", () => {
+      // Failing test script
+      createFile(tmpDir, "script/test",
+        "#!/bin/bash\necho 'FAIL: 3 tests broken' >&2\nexit 1\n");
+      makeExecutable(path.join(tmpDir, "script", "test"));
 
       const result = invokeHook("prove_it_test.js", {
         hook_event_name: "PreToolUse",
@@ -163,23 +167,40 @@ describe("README promises: prove_it blocks when it should", () => {
       assert.strictEqual(result.exitCode, 0);
       assert.ok(result.output, "Hook should produce JSON output");
 
-      const wrappedCmd = result.output.hookSpecificOutput.updatedInput.command;
-      assert.ok(wrappedCmd.includes("./script/test"),
-        "Wrapped command must include test suite");
-      assert.ok(wrappedCmd.includes("&&"),
-        "Test suite and commit must be chained with &&");
-      assert.ok(wrappedCmd.includes("git commit"),
-        "Original commit command must be preserved after test suite");
-
-      // The && chain means: if ./script/test fails, git commit never runs
-      const testPos = wrappedCmd.indexOf("./script/test");
-      const commitPos = wrappedCmd.indexOf("git commit");
-      assert.ok(testPos < commitPos,
-        "Test suite must run BEFORE the commit command");
+      const cmd = result.output.hookSpecificOutput.updatedInput.command;
+      assert.ok(cmd.includes("exit 1"),
+        "Command must be replaced with exit 1 when tests fail");
+      assert.ok(!cmd.includes("git commit"),
+        "Original git commit must NOT appear — tests blocked it");
+      assert.ok(
+        result.output.hookSpecificOutput.permissionDecisionReason.includes("tests failed"),
+        "Reason should mention test failure"
+      );
     });
 
-    it("blocks commit when code reviewer fails", () => {
-      createTestScript(tmpDir, true); // script/test exists (passing)
+    it("allows commit through unchanged when tests pass", () => {
+      createTestScript(tmpDir, true); // passing script/test
+
+      const result = invokeHook("prove_it_test.js", {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: 'git commit -m "ship it"' },
+        cwd: tmpDir,
+      }, { projectDir: tmpDir, env: isolatedEnv() });
+
+      assert.strictEqual(result.exitCode, 0);
+      assert.ok(result.output, "Hook should produce JSON output");
+
+      // Command should NOT be modified — tests ran at hook time
+      const output = result.output.hookSpecificOutput;
+      assert.ok(!output.updatedInput,
+        "Command must not be modified when tests pass");
+      assert.ok(output.permissionDecisionReason.includes("tests passed"),
+        "Reason should confirm tests passed");
+    });
+
+    it("blocks commit when code reviewer fails (after tests pass)", () => {
+      createTestScript(tmpDir, true); // passing script/test
 
       // Reviewer mock that always FAILs
       createFile(tmpDir, ".claude/prove_it.json", JSON.stringify({

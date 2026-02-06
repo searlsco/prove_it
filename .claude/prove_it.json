@@ -8,8 +8,6 @@
   "sources": [
     "cli.js",
     "lib/**/*.js",
-    "src/**/*.js",
-    "scripts/**/*.js",
     "test/**/*.js"
   ]
 }

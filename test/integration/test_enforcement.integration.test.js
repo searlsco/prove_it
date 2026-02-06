@@ -1,5 +1,6 @@
 const { describe, it, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert");
+const { spawnSync } = require("child_process");
 
 const {
   invokeHook,
@@ -23,7 +24,7 @@ describe("prove_it_test.js integration", () => {
 
   describe("PreToolUse event", () => {
     describe("commands that require tests", () => {
-      it("wraps git commit with test script", () => {
+      it("runs tests at hook time and allows commit when tests pass", () => {
         createSuiteGate(tmpDir, true);
 
         const result = invokeHook(
@@ -41,12 +42,12 @@ describe("prove_it_test.js integration", () => {
         assert.ok(result.output, "Should produce JSON output");
         assert.ok(result.output.hookSpecificOutput, "Should have hookSpecificOutput");
         assert.ok(
-          result.output.hookSpecificOutput.updatedInput.command.includes("./script/test"),
-          "Command should include test script"
+          result.output.hookSpecificOutput.permissionDecisionReason.includes("tests passed"),
+          "Should report tests passed"
         );
         assert.ok(
-          result.output.hookSpecificOutput.updatedInput.command.includes("git commit"),
-          "Command should include original command"
+          !result.output.hookSpecificOutput.updatedInput,
+          "Command should not be modified when tests pass"
         );
       });
 
@@ -67,7 +68,7 @@ describe("prove_it_test.js integration", () => {
         assert.strictEqual(result.output, null, "Should not require tests for git push");
       });
 
-      it("wraps bd done with test script", () => {
+      it("does not wrap bd done by default", () => {
         createSuiteGate(tmpDir, true);
 
         const result = invokeHook(
@@ -82,7 +83,7 @@ describe("prove_it_test.js integration", () => {
         );
 
         assert.strictEqual(result.exitCode, 0);
-        assert.ok(result.output?.hookSpecificOutput?.updatedInput?.command.includes("./script/test"));
+        assert.strictEqual(result.output, null, "bd done should not trigger tests by default");
       });
     });
 
@@ -240,6 +241,11 @@ describe("prove_it_test.js integration", () => {
       initGitRepo(specialDir);
       createSuiteGate(specialDir, true);
 
+      // Initial commit so git HEAD exists
+      fs.writeFileSync(path.join(specialDir, ".gitkeep"), "");
+      spawnSync("git", ["add", "."], { cwd: specialDir });
+      spawnSync("git", ["commit", "-m", "init"], { cwd: specialDir });
+
       const result = invokeHook(
         "prove_it_test.js",
         {
@@ -253,9 +259,11 @@ describe("prove_it_test.js integration", () => {
 
       assert.strictEqual(result.exitCode, 0);
       assert.ok(result.output, "Should produce output");
-      // The command should be properly escaped
-      const cmd = result.output.hookSpecificOutput.updatedInput.command;
-      assert.ok(cmd.includes("'"), "Should use single-quote escaping");
+      // Tests run at hook time — verify they passed without crashing on special paths
+      assert.ok(
+        result.output.hookSpecificOutput.permissionDecisionReason.includes("tests passed"),
+        "Should handle special-character paths without crashing"
+      );
     });
   });
 
@@ -281,9 +289,12 @@ describe("prove_it_test.js integration", () => {
       );
 
       assert.strictEqual(result.exitCode, 0);
-      const cmd = result.output.hookSpecificOutput.updatedInput.command;
-      // Should run from subdir, not parent
-      assert.ok(cmd.includes(subDir), "Should run tests from cwd with script/test");
+      assert.ok(result.output, "Should produce output");
+      // Tests run at hook time — verify they passed (found script/test in subdir)
+      assert.ok(
+        result.output.hookSpecificOutput.permissionDecisionReason.includes("tests passed"),
+        "Should find and run script/test from cwd"
+      );
     });
 
     it("walks up to find script/test in parent", () => {
@@ -304,9 +315,12 @@ describe("prove_it_test.js integration", () => {
       );
 
       assert.strictEqual(result.exitCode, 0);
-      const cmd = result.output.hookSpecificOutput.updatedInput.command;
-      // Should run from root where script/test exists
-      assert.ok(cmd.includes(tmpDir), "Should find script/test in parent");
+      assert.ok(result.output, "Should produce output");
+      // Tests run at hook time — verify they passed (walked up to find script/test)
+      assert.ok(
+        result.output.hookSpecificOutput.permissionDecisionReason.includes("tests passed"),
+        "Should walk up to find script/test in parent"
+      );
     });
 
     it("stops at .claude/prove_it.json marker even without script/test", () => {
