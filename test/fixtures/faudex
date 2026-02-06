@@ -1,0 +1,11 @@
+#!/bin/bash
+# faudex: fake codex for testing JSONL-mode reviewer output
+# Usage: faudex exec --sandbox read-only --json "prompt"
+# Set FAUDEX_RESPONSE env var to control the agent_message text.
+# Defaults to "PASS" if not set.
+RESPONSE="${FAUDEX_RESPONSE:-PASS}"
+echo '{"type":"thread.started","thread_id":"test-thread-001"}'
+echo '{"type":"turn.started"}'
+echo '{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"Reviewing..."}}'
+echo "{\"type\":\"item.completed\",\"item\":{\"id\":\"item_1\",\"type\":\"agent_message\",\"text\":\"${RESPONSE}\"}}"
+echo '{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":0,"output_tokens":10}}'

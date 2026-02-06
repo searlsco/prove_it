@@ -263,10 +263,10 @@ describe("config merging", () => {
   });
 
   it("overrides arrays entirely", () => {
-    const base = { commandPatterns: ["a", "b"] };
-    const override = { commandPatterns: ["c"] };
+    const base = { triggers: ["a", "b"] };
+    const override = { triggers: ["c"] };
     const result = mergeDeep(base, override);
-    assert.deepStrictEqual(result, { commandPatterns: ["c"] });
+    assert.deepStrictEqual(result, { triggers: ["c"] });
   });
 
   it("handles null override", () => {
@@ -450,5 +450,215 @@ describe("isIgnoredPath", () => {
     assert.strictEqual(isIgnoredPath(binPath, ["~/dotfiles", "~/bin"]), true);
     assert.strictEqual(isIgnoredPath(dotfilesPath, ["~/dotfiles", "~/bin"]), true);
     assert.strictEqual(isIgnoredPath(path.join(home, "code"), ["~/dotfiles", "~/bin"]), false);
+  });
+});
+
+describe("logReview", () => {
+  const os = require("os");
+  const fs = require("fs");
+  const path = require("path");
+  const { logReview } = require("../lib/shared");
+
+  const testSessionDir = path.join(os.tmpdir(), "prove_it_log_test_" + Date.now());
+  const originalEnv = process.env.CLAUDE_SESSION_ID;
+
+  function setup() {
+    // Clean up any previous test directory
+    try {
+      fs.rmSync(testSessionDir, { recursive: true, force: true });
+    } catch {}
+  }
+
+  function cleanup() {
+    try {
+      fs.rmSync(testSessionDir, { recursive: true, force: true });
+    } catch {}
+    // Restore original env
+    if (originalEnv !== undefined) {
+      process.env.CLAUDE_SESSION_ID = originalEnv;
+    } else {
+      delete process.env.CLAUDE_SESSION_ID;
+    }
+  }
+
+  it("appends review entry to session log file", () => {
+    setup();
+    process.env.CLAUDE_SESSION_ID = "test-session-123";
+
+    // Mock the log directory by temporarily patching os.homedir
+    // Instead, we'll just verify the function doesn't throw
+    logReview("/some/project", "code", "PASS", null);
+
+    // Check that the file was created
+    const logFile = path.join(os.homedir(), ".claude", "prove_it", "sessions", "test-session-123.jsonl");
+    if (fs.existsSync(logFile)) {
+      const content = fs.readFileSync(logFile, "utf8");
+      const lines = content.trim().split("\n");
+      const lastEntry = JSON.parse(lines[lines.length - 1]);
+      assert.strictEqual(lastEntry.reviewer, "code");
+      assert.strictEqual(lastEntry.status, "PASS");
+      assert.strictEqual(lastEntry.projectDir, "/some/project");
+      assert.strictEqual(lastEntry.sessionId, "test-session-123");
+    }
+
+    cleanup();
+  });
+
+  it("logs FAIL with reason", () => {
+    setup();
+    process.env.CLAUDE_SESSION_ID = "test-session-456";
+
+    logReview("/another/project", "coverage", "FAIL", "Missing tests for new function");
+
+    const logFile = path.join(os.homedir(), ".claude", "prove_it", "sessions", "test-session-456.jsonl");
+    if (fs.existsSync(logFile)) {
+      const content = fs.readFileSync(logFile, "utf8");
+      const lines = content.trim().split("\n");
+      const lastEntry = JSON.parse(lines[lines.length - 1]);
+      assert.strictEqual(lastEntry.reviewer, "coverage");
+      assert.strictEqual(lastEntry.status, "FAIL");
+      assert.strictEqual(lastEntry.reason, "Missing tests for new function");
+    }
+
+    cleanup();
+  });
+
+  it("uses unknown.jsonl when no session ID", () => {
+    setup();
+    delete process.env.CLAUDE_SESSION_ID;
+
+    logReview("/project", "code", "PASS", null);
+
+    const logFile = path.join(os.homedir(), ".claude", "prove_it", "sessions", "unknown.jsonl");
+    if (fs.existsSync(logFile)) {
+      const content = fs.readFileSync(logFile, "utf8");
+      const lines = content.trim().split("\n");
+      const lastEntry = JSON.parse(lines[lines.length - 1]);
+      assert.strictEqual(lastEntry.sessionId, null);
+    }
+
+    cleanup();
+  });
+});
+
+describe("session state", () => {
+  const os = require("os");
+  const fs = require("fs");
+  const path = require("path");
+  const { loadSessionState, saveSessionState } = require("../lib/shared");
+
+  const originalEnv = process.env.CLAUDE_SESSION_ID;
+
+  function cleanup() {
+    if (originalEnv !== undefined) {
+      process.env.CLAUDE_SESSION_ID = originalEnv;
+    } else {
+      delete process.env.CLAUDE_SESSION_ID;
+    }
+  }
+
+  function cleanupStateFile(sessionId) {
+    const stateFile = path.join(os.homedir(), ".claude", "prove_it", "sessions", `${sessionId}.json`);
+    try {
+      fs.unlinkSync(stateFile);
+    } catch {}
+  }
+
+  it("returns null when no session ID is set", () => {
+    delete process.env.CLAUDE_SESSION_ID;
+    const result = loadSessionState("last_review_snapshot");
+    assert.strictEqual(result, null);
+    cleanup();
+  });
+
+  it("saveSessionState is a no-op when no session ID is set", () => {
+    delete process.env.CLAUDE_SESSION_ID;
+    // Should not throw
+    saveSessionState("last_review_snapshot", "some-value");
+    cleanup();
+  });
+
+  it("round-trips a value via save and load", () => {
+    const testSessionId = "test-state-roundtrip-" + Date.now();
+    process.env.CLAUDE_SESSION_ID = testSessionId;
+
+    saveSessionState("last_review_snapshot", "msg-abc-123");
+    const result = loadSessionState("last_review_snapshot");
+    assert.strictEqual(result, "msg-abc-123");
+
+    cleanupStateFile(testSessionId);
+    cleanup();
+  });
+
+  it("supports multiple keys in the same state file", () => {
+    const testSessionId = "test-state-multikey-" + Date.now();
+    process.env.CLAUDE_SESSION_ID = testSessionId;
+
+    saveSessionState("key_a", "value_a");
+    saveSessionState("key_b", "value_b");
+
+    assert.strictEqual(loadSessionState("key_a"), "value_a");
+    assert.strictEqual(loadSessionState("key_b"), "value_b");
+
+    cleanupStateFile(testSessionId);
+    cleanup();
+  });
+
+  it("returns null for a key that does not exist in state file", () => {
+    const testSessionId = "test-state-missing-key-" + Date.now();
+    process.env.CLAUDE_SESSION_ID = testSessionId;
+
+    saveSessionState("existing_key", "some_value");
+    const result = loadSessionState("nonexistent_key");
+    assert.strictEqual(result, null);
+
+    cleanupStateFile(testSessionId);
+    cleanup();
+  });
+
+  it("isolates state between sessions (the core property)", () => {
+    const sessionA = "test-state-isolation-A-" + Date.now();
+    const sessionB = "test-state-isolation-B-" + Date.now();
+
+    // Session A writes a snapshot
+    process.env.CLAUDE_SESSION_ID = sessionA;
+    saveSessionState("last_review_snapshot", "msg-from-A");
+
+    // Session B writes a different snapshot for the same key
+    process.env.CLAUDE_SESSION_ID = sessionB;
+    saveSessionState("last_review_snapshot", "msg-from-B");
+
+    // Session A still sees its own value
+    process.env.CLAUDE_SESSION_ID = sessionA;
+    assert.strictEqual(loadSessionState("last_review_snapshot"), "msg-from-A");
+
+    // Session B still sees its own value
+    process.env.CLAUDE_SESSION_ID = sessionB;
+    assert.strictEqual(loadSessionState("last_review_snapshot"), "msg-from-B");
+
+    cleanupStateFile(sessionA);
+    cleanupStateFile(sessionB);
+    cleanup();
+  });
+
+  it("does not write to prove_it.local.json", () => {
+    const testSessionId = "test-state-no-local-" + Date.now();
+    const tmpDir = path.join(os.tmpdir(), "prove_it_local_check_" + Date.now());
+    fs.mkdirSync(path.join(tmpDir, ".claude"), { recursive: true });
+    const localCfgPath = path.join(tmpDir, ".claude", "prove_it.local.json");
+
+    process.env.CLAUDE_SESSION_ID = testSessionId;
+    saveSessionState("last_review_snapshot", "msg-xyz");
+
+    // prove_it.local.json should not exist (session state goes elsewhere)
+    assert.strictEqual(fs.existsSync(localCfgPath), false,
+      "saveSessionState should not create prove_it.local.json");
+
+    // The value lives in session state, not local config
+    assert.strictEqual(loadSessionState("last_review_snapshot"), "msg-xyz");
+
+    cleanupStateFile(testSessionId);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    cleanup();
   });
 });

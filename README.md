@@ -116,7 +116,7 @@ Config files layer (later overrides earlier):
 {
   "hooks": {
     "done": {
-      "commandPatterns": [
+      "triggers": [
         "(^|\\s)git\\s+commit\\b",
         "(^|\\s)git\\s+push\\b"
       ]
@@ -127,17 +127,66 @@ Config files layer (later overrides earlier):
 
 ## AI Code Reviewer
 
-prove_it includes an optional AI reviewer that checks test coverage. It runs when Claude stops or commits and reports PASS/FAIL based on whether changes have adequate test coverage.
+Each hook has an optional AI reviewer that gates Claude's work with an independent PASS/FAIL check:
 
-Enabled by default. Disable with:
+- **stop reviewer** - when Claude stops work, checks that changes have test coverage
+- **done reviewer** - before `git commit`, reviews staged changes for bugs, dead code, and missing tests
+
+Enabled by default using `claude -p`. Disable with:
 ```json
 {
-  "reviewer": {
-    "onStop": { "enabled": false },
-    "onDone": { "enabled": false }
+  "hooks": {
+    "stop": { "reviewer": { "enabled": false } },
+    "done": { "reviewer": { "enabled": false } }
   }
 }
 ```
+
+### Setting up the reviewer agent
+
+The reviewer is any CLI command that accepts a prompt and returns `PASS` or `FAIL: <reason>` on stdout. By default, prove_it uses `claude -p`, but you can point it at any tool.
+
+Each reviewer has three options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `command` | `"claude -p {prompt}"` | Command template. `{prompt}` is replaced with the review prompt. |
+| `outputMode` | `"text"` | How to read the response from stdout. |
+| `prompt` | (built-in) | Custom review instructions (replaces the default prompt). |
+
+**`outputMode`** values:
+
+| Mode | Behavior |
+|------|----------|
+| `text` | First line of stdout is the verdict. Use with CLIs that output clean text (e.g. `claude -p`). |
+| `jsonl` | Parses JSONL events, extracts the last `agent_message`. Use with CLIs that mix progress into stdout (e.g. `codex exec --json`). |
+
+The command must exit 0 on success. The response (after parsing per `outputMode`) must start with `PASS` or `FAIL: <reason>`.
+
+### Example: mixing Claude and Codex
+
+You can use different models for each reviewer. This is useful for adversarial review — the agent doing the work is checked by a different model:
+
+```json
+{
+  "hooks": {
+    "stop": {
+      "reviewer": {
+        "command": "claude -p {prompt}",
+        "outputMode": "text"
+      }
+    },
+    "done": {
+      "reviewer": {
+        "command": "codex exec --sandbox read-only --json {prompt}",
+        "outputMode": "jsonl"
+      }
+    }
+  }
+}
+```
+
+For [Codex CLI](https://github.com/openai/codex), use `--sandbox read-only` (the reviewer shouldn't write files) and `--json` (so prove_it can parse the structured output instead of the noisy default). The `jsonl` output mode extracts the model's actual response from Codex's `item.completed` events.
 
 ## Beads Integration
 

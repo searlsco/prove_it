@@ -11,18 +11,16 @@
   "hooks": {
     "done": {
       "enabled": true,
-      "commandPatterns": [
+      "triggers": [
         "(^|\\s)git\\s+commit\\b",
         "(^|\\s)(beads|bd)\\s+(done|finish|close)\\b"
-      ]
+      ],
+      "reviewer": { "enabled": true }
     },
     "stop": {
-      "enabled": true
+      "enabled": true,
+      "reviewer": { "enabled": true }
     }
-  },
-  "reviewer": {
-    "onStop": { "enabled": true },
-    "onDone": { "enabled": true }
   },
   "format": {
     "maxOutputChars": 12000

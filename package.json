@@ -1,8 +1,8 @@
 {
   "name": "prove_it",
-  "version": "0.0.18",
+  "version": "0.0.19",
   "description": "Verifiability-first hooks for Claude Code - enforce verified workflows",
-  "author": "Justin Searls",
+  "author": "Justin Searls <justin@searls.co>",
   "license": "MIT",
   "repository": {
     "type": "git",

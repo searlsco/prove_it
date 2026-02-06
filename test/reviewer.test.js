@@ -4,71 +4,49 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-// Test the reviewer logic
-// These tests verify that the reviewer correctly parses PASS/FAIL responses
+const { parseVerdict, parseJsonlOutput, runReviewer } = require("../lib/hooks/prove_it_test");
 
-describe("reviewer output parsing", () => {
-  // We test the parsing logic by simulating what runReviewer does
+const FIXTURES_DIR = path.join(__dirname, "fixtures");
 
-  function parseReviewerOutput(output) {
-    const trimmed = output.trim();
-    const firstLine = trimmed.split("\n")[0].trim();
-
-    if (firstLine === "PASS") {
-      return { pass: true };
-    }
-
-    if (firstLine.startsWith("FAIL:")) {
-      return { pass: false, reason: firstLine.slice(5).trim() };
-    }
-
-    if (firstLine === "FAIL") {
-      const lines = trimmed.split("\n");
-      const reason = lines.length > 1 ? lines[1].trim() : "No reason provided";
-      return { pass: false, reason };
-    }
-
-    return { error: `Unexpected output: ${firstLine}` };
-  }
-
+describe("parseVerdict", () => {
   describe("PASS responses", () => {
     it("parses 'PASS'", () => {
-      const result = parseReviewerOutput("PASS");
+      const result = parseVerdict("PASS");
       assert.strictEqual(result.pass, true);
     });
 
     it("parses 'PASS' with trailing whitespace", () => {
-      const result = parseReviewerOutput("PASS\n\n");
+      const result = parseVerdict("PASS\n\n");
       assert.strictEqual(result.pass, true);
     });
 
     it("parses 'PASS' with leading whitespace", () => {
-      const result = parseReviewerOutput("  PASS");
+      const result = parseVerdict("  PASS");
       assert.strictEqual(result.pass, true);
     });
   });
 
   describe("FAIL responses", () => {
     it("parses 'FAIL: reason'", () => {
-      const result = parseReviewerOutput("FAIL: no tests for new function");
+      const result = parseVerdict("FAIL: no tests for new function");
       assert.strictEqual(result.pass, false);
       assert.strictEqual(result.reason, "no tests for new function");
     });
 
     it("parses 'FAIL:reason' (no space)", () => {
-      const result = parseReviewerOutput("FAIL:missing tests");
+      const result = parseVerdict("FAIL:missing tests");
       assert.strictEqual(result.pass, false);
       assert.strictEqual(result.reason, "missing tests");
     });
 
     it("parses 'FAIL' on its own line with reason on next line", () => {
-      const result = parseReviewerOutput("FAIL\nno tests added");
+      const result = parseVerdict("FAIL\nno tests added");
       assert.strictEqual(result.pass, false);
       assert.strictEqual(result.reason, "no tests added");
     });
 
     it("parses 'FAIL' alone as failure with default reason", () => {
-      const result = parseReviewerOutput("FAIL");
+      const result = parseVerdict("FAIL");
       assert.strictEqual(result.pass, false);
       assert.strictEqual(result.reason, "No reason provided");
     });
@@ -76,84 +54,178 @@ describe("reviewer output parsing", () => {
 
   describe("unexpected responses", () => {
     it("returns error for unexpected output", () => {
-      const result = parseReviewerOutput("I think the code looks good");
+      const result = parseVerdict("I think the code looks good");
       assert.ok(result.error);
-      assert.ok(result.error.includes("Unexpected output"));
+      assert.ok(result.error.includes("Unexpected reviewer output"));
     });
 
-    it("returns error for empty output", () => {
-      const result = parseReviewerOutput("");
+    it("returns error for null output", () => {
+      const result = parseVerdict(null);
+      assert.ok(result.error);
+    });
+
+    it("returns error for empty string", () => {
+      const result = parseVerdict("");
       assert.ok(result.error);
     });
   });
 });
 
-describe("reviewer prompt", () => {
-  // Test that the prompt contains key instructions
+describe("parseJsonlOutput", () => {
+  it("extracts agent_message from codex JSONL", () => {
+    const jsonl = [
+      '{"type":"thread.started","thread_id":"t-001"}',
+      '{"type":"turn.started"}',
+      '{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"Thinking..."}}',
+      '{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"PASS"}}',
+      '{"type":"turn.completed","usage":{"input_tokens":100}}',
+    ].join("\n");
 
-  function getReviewerPrompt() {
-    return `You are a code review gatekeeper. A coding agent claims their work is complete.
+    assert.strictEqual(parseJsonlOutput(jsonl), "PASS");
+  });
 
-Your job: verify that code changes have corresponding test coverage.
+  it("extracts FAIL message from codex JSONL", () => {
+    const jsonl = [
+      '{"type":"thread.started","thread_id":"t-001"}',
+      '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"FAIL: no tests"}}',
+      '{"type":"turn.completed","usage":{}}',
+    ].join("\n");
 
-## Instructions
+    assert.strictEqual(parseJsonlOutput(jsonl), "FAIL: no tests");
+  });
 
-1. Run: git diff --stat
-   - If no changes, return PASS (nothing to verify)
+  it("returns last agent_message when multiple exist", () => {
+    const jsonl = [
+      '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"thinking out loud"}}',
+      '{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"PASS"}}',
+    ].join("\n");
 
-2. For each changed source file (src/, lib/, or main code files):
-   - Check if corresponding test files were also modified
-   - If test files exist, read them to verify they actually test the changed behavior
+    assert.strictEqual(parseJsonlOutput(jsonl), "PASS");
+  });
 
-3. Be skeptical of:
-   - Source changes with no test changes
-   - Claims like "existing tests cover it" without evidence
-   - New functions/methods without corresponding test cases
-   - Bug fixes without regression tests
+  it("returns null when no agent_message found", () => {
+    const jsonl = [
+      '{"type":"thread.started","thread_id":"t-001"}',
+      '{"type":"turn.completed","usage":{}}',
+    ].join("\n");
 
-4. Be lenient for:
-   - Documentation-only changes
-   - Config file changes
-   - Refactors where behavior is unchanged and existing tests still apply
-   - Test-only changes
+    assert.strictEqual(parseJsonlOutput(jsonl), null);
+  });
 
-## Response Format
+  it("skips non-JSON lines gracefully", () => {
+    const jsonl = [
+      "not json at all",
+      '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"PASS"}}',
+      "2026-02-06 ERROR something",
+    ].join("\n");
 
-Return EXACTLY one of:
-- PASS
-- FAIL: <reason>
+    assert.strictEqual(parseJsonlOutput(jsonl), "PASS");
+  });
 
-Examples:
-- PASS
-- FAIL: src/hooks/gate.js changed but no tests added for new isLocalConfigWrite() function
-- FAIL: 5 source files changed, 0 test files changed
+  it("returns null for empty input", () => {
+    assert.strictEqual(parseJsonlOutput(""), null);
+  });
+});
 
-Be concise. One line only.`;
+describe("runReviewer with fixture shims", () => {
+  const tmpDir = path.join(require("os").tmpdir(), "prove_it_reviewer_shim_" + Date.now());
+  const fraudePath = path.join(FIXTURES_DIR, "fraude");
+  const faudexPath = path.join(FIXTURES_DIR, "faudex");
+
+  function setup() {
+    fs.mkdirSync(tmpDir, { recursive: true });
   }
 
-  it("instructs to run git diff", () => {
-    const prompt = getReviewerPrompt();
-    assert.ok(prompt.includes("git diff"));
+  function cleanup() {
+    delete process.env.FRAUDE_RESPONSE;
+    delete process.env.FAUDEX_RESPONSE;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+
+  describe("fraude (text mode)", () => {
+    it("returns PASS via text mode", () => {
+      setup();
+      process.env.FRAUDE_RESPONSE = "PASS";
+      const review = runReviewer(tmpDir, {
+        command: `${fraudePath} -p {prompt}`,
+        outputMode: "text",
+      }, "test prompt");
+
+      assert.strictEqual(review.available, true);
+      assert.strictEqual(review.pass, true);
+      cleanup();
+    });
+
+    it("returns FAIL with reason via text mode", () => {
+      setup();
+      process.env.FRAUDE_RESPONSE = "FAIL: no tests for new function";
+      const review = runReviewer(tmpDir, {
+        command: `${fraudePath} -p {prompt}`,
+        outputMode: "text",
+      }, "test prompt");
+
+      assert.strictEqual(review.available, true);
+      assert.strictEqual(review.pass, false);
+      assert.strictEqual(review.reason, "no tests for new function");
+      cleanup();
+    });
   });
 
-  it("specifies PASS/FAIL response format", () => {
-    const prompt = getReviewerPrompt();
-    assert.ok(prompt.includes("PASS"));
-    assert.ok(prompt.includes("FAIL"));
+  describe("faudex (jsonl mode)", () => {
+    it("returns PASS via jsonl mode", () => {
+      setup();
+      process.env.FAUDEX_RESPONSE = "PASS";
+      const review = runReviewer(tmpDir, {
+        command: `${faudexPath} exec --sandbox read-only --json {prompt}`,
+        outputMode: "jsonl",
+      }, "test prompt");
+
+      assert.strictEqual(review.available, true);
+      assert.strictEqual(review.pass, true);
+      cleanup();
+    });
+
+    it("returns FAIL with reason via jsonl mode", () => {
+      setup();
+      process.env.FAUDEX_RESPONSE = "FAIL: missing coverage for auth.js";
+      const review = runReviewer(tmpDir, {
+        command: `${faudexPath} exec --json {prompt}`,
+        outputMode: "jsonl",
+      }, "test prompt");
+
+      assert.strictEqual(review.available, true);
+      assert.strictEqual(review.pass, false);
+      assert.strictEqual(review.reason, "missing coverage for auth.js");
+      cleanup();
+    });
   });
 
-  it("mentions test coverage verification", () => {
-    const prompt = getReviewerPrompt();
-    assert.ok(prompt.includes("test coverage"));
+  describe("binary availability", () => {
+    it("returns available: false when binary not found", () => {
+      setup();
+      const review = runReviewer(tmpDir, {
+        command: "nonexistent_binary_xyz {prompt}",
+        outputMode: "text",
+      }, "test");
+
+      assert.strictEqual(review.available, false);
+      assert.strictEqual(review.binary, "nonexistent_binary_xyz");
+      cleanup();
+    });
   });
 
-  it("is skeptical of source changes without test changes", () => {
-    const prompt = getReviewerPrompt();
-    assert.ok(prompt.includes("Source changes with no test changes"));
-  });
+  describe("defaults", () => {
+    it("uses fraude as default when configured, proving default plumbing works", () => {
+      setup();
+      process.env.FRAUDE_RESPONSE = "PASS";
+      // Prove that if the default command were fraude, text mode works end-to-end
+      const review = runReviewer(tmpDir, {
+        command: `${fraudePath} -p {prompt}`,
+      }, "test");
 
-  it("is lenient for documentation changes", () => {
-    const prompt = getReviewerPrompt();
-    assert.ok(prompt.includes("Documentation-only changes"));
+      assert.strictEqual(review.available, true);
+      assert.strictEqual(review.pass, true);
+      cleanup();
+    });
   });
 });
