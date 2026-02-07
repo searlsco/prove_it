@@ -1,7 +1,6 @@
 const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
 const { spawnSync } = require('child_process')
-const path = require('path')
 
 const {
   invokeHook,
@@ -10,28 +9,18 @@ const {
   initGitRepo,
   createFile,
   createTestScript,
-  makeExecutable,
-  setupSessionWithDiffs
+  createFastTestScript,
+  writeConfig,
+  makeConfig,
+  isolatedEnv
 } = require('./hook-harness')
 
-/**
- * Integration tests for the four README promises:
- *
- * 1. Stop blocks when fast tests fail
- * 2. Stop blocks when coverage reviewer fails (tests pass)
- * 3. Pre-commit runs tests at hook time and blocks on failure
- * 4. Pre-commit blocks when code reviewer fails (after tests pass)
- * 5. Pre-commit allows commit through unchanged when tests + reviewer pass
- */
-
-describe('README promises: prove_it blocks when it should', () => {
+describe('v2 dispatcher: core hook behaviors', () => {
   let tmpDir
 
   beforeEach(() => {
-    tmpDir = createTempDir('prove_it_readme_')
+    tmpDir = createTempDir('prove_it_core_')
     initGitRepo(tmpDir)
-
-    // Initial commit so git HEAD exists
     createFile(tmpDir, '.gitkeep', '')
     spawnSync('git', ['add', '.'], { cwd: tmpDir })
     spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
@@ -41,160 +30,265 @@ describe('README promises: prove_it blocks when it should', () => {
     if (tmpDir) cleanupTempDir(tmpDir)
   })
 
-  // Shared env overrides to isolate from real user config
-  function isolatedEnv () {
-    return {
-      HOME: tmpDir,
-      PROVE_IT_DIR: path.join(tmpDir, '.prove_it_test')
-    }
-  }
-
   describe('Stop hook', () => {
-    it('blocks when test_fast fails', () => {
-      createFile(tmpDir, 'script/test_fast',
-        "#!/bin/bash\necho 'FAIL: 2 tests broken' >&2\nexit 1\n")
-      makeExecutable(path.join(tmpDir, 'script', 'test_fast'))
+    it('blocks when fast tests fail', () => {
+      createFastTestScript(tmpDir, false)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          checks: [
+            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+          ]
+        }
+      ]))
 
-      const result = invokeHook('prove_it_stop.js', {
+      const result = invokeHook('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-stop-fail',
         cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'Hook should produce JSON output')
       assert.strictEqual(result.output.decision, 'block',
         'Stop must block when fast tests fail')
-      assert.ok(result.output.reason.includes('Tests failed'),
-        'Reason should mention test failure')
+      assert.ok(result.output.reason.includes('fast-tests failed'),
+        `Reason should mention failure, got: ${result.output.reason}`)
     })
 
-    it('blocks when coverage reviewer fails (even though tests pass)', () => {
-      // Passing fast tests
-      createFile(tmpDir, 'script/test_fast', '#!/bin/bash\nexit 0\n')
-      makeExecutable(path.join(tmpDir, 'script', 'test_fast'))
-
-      // Reviewer mock that always FAILs
-      createFile(tmpDir, '.claude/prove_it.json', JSON.stringify({
-        hooks: {
-          stop: {
-            reviewer: {
-              enabled: true,
-              command: "echo 'FAIL: insufficient test coverage for new code'"
-            }
-          }
+    it('approves when fast tests pass', () => {
+      createFastTestScript(tmpDir, true)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          checks: [
+            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+          ]
         }
-      }))
+      ]))
 
-      // Session snapshot data so diffs exist (otherwise reviewer is skipped)
-      const sessionId = 'test-stop-reviewer'
-      setupSessionWithDiffs(tmpDir, sessionId, tmpDir)
-
-      const result = invokeHook('prove_it_stop.js', {
+      const result = invokeHook('claude:Stop', {
         hook_event_name: 'Stop',
-        session_id: sessionId,
+        session_id: 'test-stop-pass',
         cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'Hook should produce JSON output')
-      assert.strictEqual(result.output.decision, 'block',
-        'Stop must block when coverage reviewer fails')
-      assert.ok(
-        result.output.reason.includes('Coverage reviewer: FAIL') ||
-        result.output.reason.includes('insufficient test coverage'),
-        `Reason should mention reviewer failure, got: ${result.output.reason}`
-      )
+      assert.strictEqual(result.output.decision, 'approve',
+        'Stop must approve when tests pass')
     })
   })
 
   describe('Pre-commit hook (PreToolUse)', () => {
-    it('blocks commit at hook time when tests fail', () => {
-      // Failing test script
-      createFile(tmpDir, 'script/test',
-        "#!/bin/bash\necho 'FAIL: 3 tests broken' >&2\nexit 1\n")
-      makeExecutable(path.join(tmpDir, 'script', 'test'))
+    it('blocks commit when tests fail', () => {
+      createTestScript(tmpDir, false)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Bash',
+          triggers: ['(^|\\s)git\\s+commit\\b'],
+          checks: [
+            { name: 'full-tests', type: 'script', command: './script/test' }
+          ]
+        }
+      ]))
 
-      const result = invokeHook('prove_it_done.js', {
+      const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "ship it"' },
         cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'Hook should produce JSON output')
-
       assert.strictEqual(
         result.output.hookSpecificOutput.permissionDecision,
         'deny',
         'Must deny when tests fail'
       )
       assert.ok(
-        result.output.hookSpecificOutput.permissionDecisionReason.includes('Tests failed'),
+        result.output.hookSpecificOutput.permissionDecisionReason.includes('full-tests failed'),
         'Reason should mention test failure'
       )
     })
 
-    it('allows commit through unchanged when tests pass', () => {
-      createTestScript(tmpDir, true) // passing script/test
+    it('allows commit when tests pass', () => {
+      createTestScript(tmpDir, true)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Bash',
+          triggers: ['(^|\\s)git\\s+commit\\b'],
+          checks: [
+            { name: 'full-tests', type: 'script', command: './script/test' }
+          ]
+        }
+      ]))
 
-      const result = invokeHook('prove_it_done.js', {
+      const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "ship it"' },
         cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'Hook should produce JSON output')
-
-      // Command should NOT be modified — tests ran at hook time
-      const output = result.output.hookSpecificOutput
-      assert.ok(!output.updatedInput,
-        'Command must not be modified when tests pass')
-      assert.ok(output.permissionDecisionReason.includes('tests passed'),
-        'Reason should confirm tests passed')
-    })
-
-    it('blocks commit when code reviewer fails (after tests pass)', () => {
-      createTestScript(tmpDir, true) // passing script/test
-
-      // Reviewer mock that always FAILs
-      createFile(tmpDir, '.claude/prove_it.json', JSON.stringify({
-        hooks: {
-          done: {
-            reviewer: {
-              enabled: true,
-              command: "echo 'FAIL: dead code detected in new function'"
-            }
-          }
-        }
-      }))
-
-      // Stage changes so git diff --cached produces output
-      createFile(tmpDir, 'src/app.js', 'function app() {}\nfunction unused() {}\n')
-      spawnSync('git', ['add', 'src/app.js'], { cwd: tmpDir })
-
-      const result = invokeHook('prove_it_done.js', {
-        hook_event_name: 'PreToolUse',
-        tool_name: 'Bash',
-        tool_input: { command: 'git commit -m "add app"' },
-        cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.ok(result.output, 'Hook should produce JSON output')
-
       assert.strictEqual(
         result.output.hookSpecificOutput.permissionDecision,
-        'deny',
-        'Must deny when code reviewer fails'
+        'allow',
+        'Must allow when tests pass'
       )
-      assert.ok(
-        result.output.hookSpecificOutput.permissionDecisionReason.includes('Code review failed'),
-        'Reason should mention reviewer failure'
-      )
+    })
+
+    it('ignores non-matching Bash commands', () => {
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Bash',
+          triggers: ['(^|\\s)git\\s+commit\\b'],
+          checks: [
+            { name: 'full-tests', type: 'script', command: './script/test' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git status' },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      // Should exit silently (no matching hook entry)
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(result.output, null, 'Should produce no output for non-matching commands')
+    })
+  })
+
+  describe('SessionStart hook', () => {
+    it('emits text output', () => {
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'SessionStart',
+          checks: [
+            { name: 'beads-reminder', type: 'script', command: 'prove_it builtin:beads-reminder' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:SessionStart', {
+        hook_event_name: 'SessionStart',
+        session_id: 'test-session',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.stdout.includes('prove_it active'),
+        'Should include reminder text in stdout')
+    })
+
+    it('does not block on failing check — collects output instead', () => {
+      createFile(tmpDir, 'fail_check.sh', '#!/bin/bash\necho "startup failure" >&2\nexit 1\n')
+      const fs = require('fs')
+      const path = require('path')
+      fs.chmodSync(path.join(tmpDir, 'fail_check.sh'), 0o755)
+
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'SessionStart',
+          checks: [
+            { name: 'fail-check', type: 'script', command: './fail_check.sh' },
+            { name: 'beads-reminder', type: 'script', command: 'prove_it builtin:beads-reminder' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:SessionStart', {
+        hook_event_name: 'SessionStart',
+        session_id: 'test-session-fail',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      // SessionStart never blocks — exit 0, no JSON decision output
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(result.output, null, 'SessionStart should not emit JSON')
+      // Should still include the passing check's output
+      assert.ok(result.stdout.includes('prove_it active'),
+        'Should still emit passing checks output')
+      // Should include failing check's reason too
+      assert.ok(result.stdout.includes('failed'),
+        `Should include failure reason, got: ${result.stdout}`)
+    })
+  })
+
+  describe('disabled hooks', () => {
+    it('exits silently when enabled: false', () => {
+      writeConfig(tmpDir, makeConfig([], { enabled: false }))
+
+      const result = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: 'test-disabled',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(result.output, null)
+    })
+
+    it('exits silently when PROVE_IT_DISABLED is set', () => {
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          checks: [
+            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: 'test-env-disabled',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: { ...isolatedEnv(tmpDir), PROVE_IT_DISABLED: '1' } })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(result.output, null)
+    })
+  })
+
+  describe('non-git directory', () => {
+    it('exits silently for non-git directory', () => {
+      const nonGitDir = createTempDir('prove_it_nongit_')
+      writeConfig(nonGitDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          checks: [
+            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: 'test-nongit',
+        cwd: nonGitDir
+      }, { projectDir: nonGitDir, env: isolatedEnv(nonGitDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(result.output, null)
+      cleanupTempDir(nonGitDir)
     })
   })
 })

@@ -11,19 +11,20 @@ const {
   initGitRepo,
   createFile,
   createTestScript,
-  makeExecutable,
-  initBeads
+  createFastTestScript,
+  writeConfig,
+  makeConfig,
+  isolatedEnv
 } = require('./hook-harness')
 
 /**
- * Config-driven hook behaviors.
+ * Config-driven hook behaviors for the v2 dispatcher.
  *
- * Covers GAPs 2-9 and 13: test fallbacks, custom commands, hook enable/disable,
- * configurable triggers, env disable, non-git passthrough, ignoredPaths,
- * beads.enabled, and .local.json overrides.
+ * Covers: custom test commands, hook disable via config, PROVE_IT_DISABLED
+ * env var, non-git passthrough, ignoredPaths, and .local.json overrides.
  */
 
-describe('Config-driven hook behavior', () => {
+describe('Config-driven hook behavior (v2)', () => {
   let tmpDir
 
   beforeEach(() => {
@@ -39,85 +40,58 @@ describe('Config-driven hook behavior', () => {
     if (tmpDir) cleanupTempDir(tmpDir)
   })
 
-  function isolatedEnv (extra) {
-    return {
-      HOME: tmpDir,
-      PROVE_IT_DIR: path.join(tmpDir, '.prove_it_test'),
-      ...extra
-    }
-  }
-
-  // ──── GAP 2: Stop fallback test_fast → test ────
-
-  describe('Stop fallback test_fast → test', () => {
-    it('runs script/test when test_fast absent', () => {
-      // Only create script/test (no test_fast)
-      createTestScript(tmpDir, true)
-
-      const result = invokeHook('prove_it_stop.js', {
-        hook_event_name: 'Stop',
-        session_id: 'test-fallback-pass',
-        cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.ok(result.output, 'Hook should produce JSON output')
-      assert.strictEqual(result.output.decision, 'approve',
-        'Stop should approve when script/test passes as fallback')
-    })
-
-    it('blocks via script/test fallback when tests fail', () => {
-      createTestScript(tmpDir, false)
-
-      const result = invokeHook('prove_it_stop.js', {
-        hook_event_name: 'Stop',
-        session_id: 'test-fallback-fail',
-        cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.ok(result.output, 'Hook should produce JSON output')
-      assert.strictEqual(result.output.decision, 'block',
-        'Stop should block when script/test fallback fails')
-    })
-  })
-
-  // ──── GAP 3: Custom test commands via config ────
+  // ──── Custom test commands via config ────
 
   describe('Custom test commands via config', () => {
-    it('done hook uses commands.test.full from config', () => {
-      createFile(tmpDir, '.claude/prove_it.json', JSON.stringify({
-        commands: { test: { full: './script/custom_test' } }
-      }))
+    it('commit gate uses custom test command', () => {
       createFile(tmpDir, 'script/custom_test', '#!/bin/bash\nexit 0\n')
-      makeExecutable(path.join(tmpDir, 'script', 'custom_test'))
+      fs.chmodSync(path.join(tmpDir, 'script', 'custom_test'), 0o755)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Bash',
+          triggers: ['(^|\\s)git\\s+commit\\b'],
+          checks: [
+            { name: 'custom-tests', type: 'script', command: './script/custom_test' }
+          ]
+        }
+      ]))
 
-      const result = invokeHook('prove_it_done.js', {
+      const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "test"' },
         cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'Hook should produce JSON output')
-      const reason = result.output.hookSpecificOutput.permissionDecisionReason
-      assert.ok(reason.includes('custom_test'),
-        `Reason should mention custom_test, got: ${reason}`)
+      assert.strictEqual(
+        result.output.hookSpecificOutput.permissionDecision,
+        'allow',
+        'Should allow when custom test command passes'
+      )
     })
 
-    it('stop hook uses commands.test.fast from config', () => {
-      createFile(tmpDir, '.claude/prove_it.json', JSON.stringify({
-        commands: { test: { fast: './script/custom_fast' } }
-      }))
+    it('stop hook uses custom fast test command', () => {
       createFile(tmpDir, 'script/custom_fast', '#!/bin/bash\nexit 0\n')
-      makeExecutable(path.join(tmpDir, 'script', 'custom_fast'))
+      fs.chmodSync(path.join(tmpDir, 'script', 'custom_fast'), 0o755)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          checks: [
+            { name: 'custom-fast', type: 'script', command: './script/custom_fast' }
+          ]
+        }
+      ]))
 
-      const result = invokeHook('prove_it_stop.js', {
+      const result = invokeHook('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-custom-fast',
         cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'Hook should produce JSON output')
@@ -126,126 +100,103 @@ describe('Config-driven hook behavior', () => {
     })
   })
 
-  // ──── GAP 4: Hook disable via config ────
+  // ──── Hook disable via config ────
 
   describe('Hook disable via config', () => {
-    it('stop hook no-ops when hooks.stop.enabled is false', () => {
-      createFile(tmpDir, '.claude/prove_it.json', JSON.stringify({
-        hooks: { stop: { enabled: false } }
-      }))
+    it('exits silently when enabled: false', () => {
+      writeConfig(tmpDir, makeConfig([], { enabled: false }))
       createTestScript(tmpDir, true)
 
-      const result = invokeHook('prove_it_stop.js', {
+      const result = invokeHook('claude:Stop', {
         hook_event_name: 'Stop',
-        session_id: 'test-disable-stop',
+        session_id: 'test-disabled',
         cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
       assert.strictEqual(result.output, null,
         'Stop hook should exit silently when disabled')
     })
 
-    it('done hook no-ops when hooks.done.enabled is false', () => {
-      createFile(tmpDir, '.claude/prove_it.json', JSON.stringify({
-        hooks: { done: { enabled: false } }
-      }))
-      createTestScript(tmpDir, true)
+    it('exit silently for PreToolUse when no matching hooks', () => {
+      // Config has Stop hooks but no PreToolUse hooks
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          checks: [
+            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+          ]
+        }
+      ]))
 
-      const result = invokeHook('prove_it_done.js', {
+      const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "test"' },
         cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
       assert.strictEqual(result.output, null,
-        'Done hook should exit silently when disabled')
+        'Should exit silently when no matching hook entries')
     })
   })
 
-  // ──── GAP 5: Configurable triggers ────
-
-  describe('Configurable triggers', () => {
-    it('done hook triggers on git push when configured', () => {
-      createFile(tmpDir, '.claude/prove_it.json', JSON.stringify({
-        hooks: {
-          done: {
-            enabled: true,
-            triggers: [
-              '(^|\\s)git\\s+commit\\b',
-              '(^|\\s)git\\s+push\\b'
-            ]
-          }
-        }
-      }))
-      createTestScript(tmpDir, true)
-
-      const result = invokeHook('prove_it_done.js', {
-        hook_event_name: 'PreToolUse',
-        tool_name: 'Bash',
-        tool_input: { command: 'git push origin main' },
-        cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.ok(result.output, 'Hook should produce output for git push trigger')
-      const reason = result.output.hookSpecificOutput.permissionDecisionReason
-      assert.ok(reason.includes('tests passed'),
-        `Reason should mention tests passed, got: ${reason}`)
-    })
-  })
-
-  // ──── GAP 6: PROVE_IT_DISABLED env var ────
+  // ──── PROVE_IT_DISABLED env var ────
 
   describe('PROVE_IT_DISABLED env var', () => {
     it('stop hook exits silently when PROVE_IT_DISABLED=1', () => {
-      createTestScript(tmpDir, false) // Would block if not disabled
+      createFastTestScript(tmpDir, false) // Would block if not disabled
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          checks: [
+            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+          ]
+        }
+      ]))
 
-      const result = invokeHook('prove_it_stop.js', {
+      const result = invokeHook('claude:Stop', {
         hook_event_name: 'Stop',
-        session_id: 'test-disabled',
+        session_id: 'test-env-disabled',
         cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv({ PROVE_IT_DISABLED: '1' }) })
+      }, { projectDir: tmpDir, env: { ...isolatedEnv(tmpDir), PROVE_IT_DISABLED: '1' } })
 
       assert.strictEqual(result.exitCode, 0)
       assert.strictEqual(result.output, null,
         'Stop hook should exit silently when PROVE_IT_DISABLED=1')
     })
 
-    it('done hook exits silently when PROVE_IT_DISABLED=1', () => {
+    it('PreToolUse exits silently when PROVE_IT_DISABLED=1', () => {
       createTestScript(tmpDir, false)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Bash',
+          triggers: ['(^|\\s)git\\s+commit\\b'],
+          checks: [
+            { name: 'full-tests', type: 'script', command: './script/test' }
+          ]
+        }
+      ]))
 
-      const result = invokeHook('prove_it_done.js', {
+      const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "test"' },
         cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv({ PROVE_IT_DISABLED: '1' }) })
+      }, { projectDir: tmpDir, env: { ...isolatedEnv(tmpDir), PROVE_IT_DISABLED: '1' } })
 
       assert.strictEqual(result.exitCode, 0)
       assert.strictEqual(result.output, null,
-        'Done hook should exit silently when PROVE_IT_DISABLED=1')
-    })
-
-    it('edit hook exits silently when PROVE_IT_DISABLED=1', () => {
-      initBeads(tmpDir)
-
-      const result = invokeHook('prove_it_edit.js', {
-        hook_event_name: 'PreToolUse',
-        tool_name: 'Edit',
-        tool_input: { file_path: path.join(tmpDir, 'src/app.js') },
-        cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv({ PROVE_IT_DISABLED: '1' }) })
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null,
-        'Edit hook should exit silently when PROVE_IT_DISABLED=1')
+        'PreToolUse should exit silently when PROVE_IT_DISABLED=1')
     })
   })
 
-  // ──── GAP 7: Non-git directory passthrough ────
+  // ──── Non-git directory passthrough ────
 
   describe('Non-git directory passthrough', () => {
     let nonGitDir
@@ -259,49 +210,67 @@ describe('Config-driven hook behavior', () => {
     })
 
     it('stop hook exits silently in non-git directory', () => {
-      const result = invokeHook('prove_it_stop.js', {
+      writeConfig(nonGitDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          checks: [
+            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-nongit',
         cwd: nonGitDir
-      }, { projectDir: nonGitDir, env: isolatedEnv() })
+      }, { projectDir: nonGitDir, env: isolatedEnv(nonGitDir) })
 
       assert.strictEqual(result.exitCode, 0)
       assert.strictEqual(result.output, null,
         'Stop hook should exit silently in non-git directory')
     })
 
-    it('done hook exits silently in non-git directory', () => {
-      const result = invokeHook('prove_it_done.js', {
+    it('PreToolUse exits silently in non-git directory', () => {
+      writeConfig(nonGitDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Bash',
+          triggers: ['(^|\\s)git\\s+commit\\b'],
+          checks: [
+            { name: 'full-tests', type: 'script', command: './script/test' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "test"' },
         cwd: nonGitDir
-      }, { projectDir: nonGitDir, env: isolatedEnv() })
+      }, { projectDir: nonGitDir, env: isolatedEnv(nonGitDir) })
 
       assert.strictEqual(result.exitCode, 0)
       assert.strictEqual(result.output, null,
-        'Done hook should exit silently in non-git directory')
-    })
-
-    it('edit hook exits silently in non-git directory', () => {
-      const result = invokeHook('prove_it_edit.js', {
-        hook_event_name: 'PreToolUse',
-        tool_name: 'Edit',
-        tool_input: { file_path: path.join(nonGitDir, 'src/app.js') },
-        cwd: nonGitDir
-      }, { projectDir: nonGitDir, env: isolatedEnv() })
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null,
-        'Edit hook should exit silently in non-git directory')
+        'PreToolUse should exit silently in non-git directory')
     })
   })
 
-  // ──── GAP 8: ignoredPaths ────
+  // ──── ignoredPaths ────
 
   describe('ignoredPaths', () => {
-    it('stop hook exits silently when project is in ignoredPaths', () => {
-      createTestScript(tmpDir, false) // Would block if not ignored
+    it('exits silently when project is in ignoredPaths', () => {
+      createFastTestScript(tmpDir, false) // Would block if not ignored
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          checks: [
+            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+          ]
+        }
+      ]))
 
       // Write global config with this tmpDir in ignoredPaths
       const proveItDir = path.join(tmpDir, '.prove_it_test')
@@ -309,83 +278,88 @@ describe('Config-driven hook behavior', () => {
       fs.writeFileSync(path.join(proveItDir, 'config.json'),
         JSON.stringify({ ignoredPaths: [tmpDir] }), 'utf8')
 
-      const result = invokeHook('prove_it_stop.js', {
+      const result = invokeHook('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-ignored',
         cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
       assert.strictEqual(result.output, null,
         'Stop hook should exit silently when project is in ignoredPaths')
     })
-
-    it('done hook exits silently when project is in ignoredPaths', () => {
-      createTestScript(tmpDir, false)
-
-      const proveItDir = path.join(tmpDir, '.prove_it_test')
-      fs.mkdirSync(proveItDir, { recursive: true })
-      fs.writeFileSync(path.join(proveItDir, 'config.json'),
-        JSON.stringify({ ignoredPaths: [tmpDir] }), 'utf8')
-
-      const result = invokeHook('prove_it_done.js', {
-        hook_event_name: 'PreToolUse',
-        tool_name: 'Bash',
-        tool_input: { command: 'git commit -m "test"' },
-        cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null,
-        'Done hook should exit silently when project is in ignoredPaths')
-    })
   })
 
-  // ──── GAP 9: beads.enabled: false ────
-
-  describe('beads.enabled: false', () => {
-    it('edit hook allows Edit when beads.enabled is false', () => {
-      initBeads(tmpDir)
-      createFile(tmpDir, '.claude/prove_it.json', JSON.stringify({
-        beads: { enabled: false }
-      }))
-
-      const result = invokeHook('prove_it_edit.js', {
-        hook_event_name: 'PreToolUse',
-        tool_name: 'Edit',
-        tool_input: { file_path: path.join(tmpDir, 'src/app.js') },
-        cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null,
-        'Edit hook should exit silently when beads.enabled is false')
-    })
-  })
-
-  // ──── GAP 13: .local.json overrides ────
+  // ──── .local.json overrides ────
 
   describe('.local.json overrides', () => {
-    it('local.json overrides project config to disable stop hook', () => {
-      // Project config: stop enabled
-      createFile(tmpDir, '.claude/prove_it.json', JSON.stringify({
-        hooks: { stop: { enabled: true } }
-      }))
-      // Local override: stop disabled
+    it('local.json overrides project config to disable', () => {
+      // Project config has a hook entry
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          checks: [
+            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+          ]
+        }
+      ]))
+      // Local override: disabled entirely
       createFile(tmpDir, '.claude/prove_it.local.json', JSON.stringify({
-        hooks: { stop: { enabled: false } }
+        enabled: false
       }))
-      createTestScript(tmpDir, false) // Would block if not disabled
+      createFastTestScript(tmpDir, false) // Would block if not disabled
 
-      const result = invokeHook('prove_it_stop.js', {
+      const result = invokeHook('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-local-override',
         cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
       assert.strictEqual(result.output, null,
         'Stop hook should respect local.json override to disable')
+    })
+  })
+
+  // ──── when conditions ────
+
+  describe('when conditions', () => {
+    it('skips check when fileExists condition is not met', () => {
+      // beads-gate has when: { fileExists: '.beads' } — no .beads dir exists
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Edit|Write',
+          checks: [
+            {
+              name: 'beads-gate',
+              type: 'script',
+              command: 'prove_it builtin:beads-gate',
+              when: { fileExists: '.beads' }
+            }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Edit',
+        tool_input: { file_path: path.join(tmpDir, 'src/app.js') },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      // No checks matched (when condition skipped the only check) → silent exit
+      // because the matching hook entry's checks all got skipped
+      if (result.output) {
+        assert.notStrictEqual(
+          result.output.hookSpecificOutput?.permissionDecision,
+          'deny',
+          'Should not deny when fileExists condition is not met'
+        )
+      }
     })
   })
 })

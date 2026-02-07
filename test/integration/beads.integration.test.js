@@ -1,5 +1,7 @@
 const { describe, it, beforeEach, afterEach } = require('node:test')
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
+const path = require('path')
+const { spawnSync } = require('child_process')
 
 const {
   invokeHook,
@@ -7,14 +9,36 @@ const {
   cleanupTempDir,
   initGitRepo,
   initBeads,
-  createFile
+  writeConfig,
+  makeConfig,
+  assertValidPermissionDecision,
+  isolatedEnv,
+  CLI_PATH
 } = require('./hook-harness')
 
-describe('prove_it_edit.js integration', () => {
+const HOOK_SPEC = 'claude:PreToolUse'
+
+function beadsHooks () {
+  return [
+    {
+      type: 'claude',
+      event: 'PreToolUse',
+      matcher: 'Edit|Write|NotebookEdit|Bash',
+      checks: [
+        { name: 'config-protection', type: 'script', command: 'prove_it builtin:config-protection' },
+        { name: 'beads-gate', type: 'script', command: 'prove_it builtin:beads-gate', when: { fileExists: '.beads' } }
+      ]
+    }
+  ]
+}
+
+describe('beads integration (v2 dispatcher)', () => {
   let tmpDir
+  let env
 
   beforeEach(() => {
     tmpDir = createTempDir('prove_it_beads_')
+    env = isolatedEnv(tmpDir)
     initGitRepo(tmpDir)
   })
 
@@ -22,429 +46,184 @@ describe('prove_it_edit.js integration', () => {
     cleanupTempDir(tmpDir)
   })
 
-  describe('non-beads repo', () => {
-    it('allows Edit without beads directory', () => {
-      // No .beads directory
-
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Edit',
-          tool_input: { file_path: '/some/file.js', old_string: 'a', new_string: 'b' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null, 'Should not block in non-beads repo')
+  describe('config-protection', () => {
+    beforeEach(() => {
+      writeConfig(tmpDir, makeConfig(beadsHooks()))
     })
 
-    it('allows Write without beads directory', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Write',
-          tool_input: { file_path: '/some/file.js', content: 'hello' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
+    it('blocks Edit to prove_it.json', () => {
+      const result = invokeHook(HOOK_SPEC, {
+        session_id: 'test-session',
+        tool_name: 'Edit',
+        tool_input: {
+          file_path: path.join(tmpDir, '.claude', 'prove_it.json'),
+          old_string: '"enabled": true',
+          new_string: '"enabled": false'
+        }
+      }, { cwd: tmpDir, env })
 
-      assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null)
+      assertValidPermissionDecision(result, 'config-protection blocks Edit prove_it.json')
+      assert.equal(result.output.hookSpecificOutput.permissionDecision, 'deny')
+    })
+
+    it('blocks Write to prove_it.local.json', () => {
+      const result = invokeHook(HOOK_SPEC, {
+        session_id: 'test-session',
+        tool_name: 'Write',
+        tool_input: {
+          file_path: path.join(tmpDir, '.claude', 'prove_it.local.json'),
+          content: '{"hooks":[]}'
+        }
+      }, { cwd: tmpDir, env })
+
+      assertValidPermissionDecision(result, 'config-protection blocks Write prove_it.local.json')
+      assert.equal(result.output.hookSpecificOutput.permissionDecision, 'deny')
+    })
+
+    it('blocks Bash redirect to prove_it config', () => {
+      const result = invokeHook(HOOK_SPEC, {
+        session_id: 'test-session',
+        tool_name: 'Bash',
+        tool_input: {
+          command: `echo '{}' > ${path.join(tmpDir, '.claude', 'prove_it.json')}`
+        }
+      }, { cwd: tmpDir, env })
+
+      assertValidPermissionDecision(result, 'config-protection blocks Bash redirect')
+      assert.equal(result.output.hookSpecificOutput.permissionDecision, 'deny')
+    })
+
+    it('allows Write to other files', () => {
+      const result = invokeHook(HOOK_SPEC, {
+        session_id: 'test-session',
+        tool_name: 'Write',
+        tool_input: {
+          file_path: path.join(tmpDir, 'src', 'app.js'),
+          content: 'console.log("hello")'
+        }
+      }, { cwd: tmpDir, env })
+
+      assertValidPermissionDecision(result, 'config-protection allows non-config Write')
+      // Config-protection passes and beads-gate is skipped (no .beads dir),
+      // so the dispatcher emits an allow decision or exits silently.
+      if (result.output) {
+        assert.notEqual(
+          result.output.hookSpecificOutput?.permissionDecision,
+          'deny',
+          'Should not deny Write to non-config files'
+        )
+      }
     })
   })
 
-  describe('beads repo without in_progress bead', () => {
+  describe('beads-gate', () => {
     beforeEach(() => {
-      initBeads(tmpDir)
+      writeConfig(tmpDir, makeConfig(beadsHooks()))
     })
 
-    it('blocks Edit when no in_progress bead', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Edit',
-          tool_input: { file_path: '/some/file.js', old_string: 'a', new_string: 'b' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
+    it('denies Edit when no in_progress bead', () => {
+      initBeads(tmpDir)
 
-      assert.strictEqual(result.exitCode, 0)
+      const result = invokeHook(HOOK_SPEC, {
+        session_id: 'test-session',
+        tool_name: 'Edit',
+        tool_input: {
+          file_path: path.join(tmpDir, 'src', 'app.js'),
+          old_string: 'foo',
+          new_string: 'bar'
+        }
+      }, { cwd: tmpDir, env })
 
-      // Note: This test may fail if bd is not installed or fails
-      // The hook should either block (if bd works and returns no beads)
-      // or allow (if bd fails and it fails open)
-      // For robust testing, we accept both outcomes here
-
-      if (result.output) {
-        // bd worked and found no in_progress beads - should block
-        assert.ok(result.output.hookSpecificOutput, 'Should have hookSpecificOutput when blocking')
-        assert.strictEqual(
-          result.output.hookSpecificOutput.permissionDecision,
-          'deny',
-          'Should deny Edit without in_progress bead'
-        )
+      assertValidPermissionDecision(result, 'beads-gate denies Edit without in_progress bead')
+      // beads-gate should deny (bd not found returns pass in fail-open,
+      // but if bd IS found and no beads in progress, it denies).
+      // Accept deny OR pass depending on whether bd is installed.
+      if (result.output?.hookSpecificOutput?.permissionDecision === 'deny') {
         assert.ok(
-          result.output.hookSpecificOutput.permissionDecisionReason.includes('No bead'),
-          'Should explain why blocked'
+          result.output.hookSpecificOutput.permissionDecisionReason,
+          'Should include an explanation message'
         )
       }
-      // If result.output is null, bd failed and it failed open - that's acceptable
     })
 
-    it('blocks Write when no in_progress bead', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Write',
-          tool_input: { file_path: '/some/file.js', content: 'hello' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
+    it('allows when not a beads repo', () => {
+      // No initBeads() — .beads directory does not exist.
+      // The when.fileExists condition causes beads-gate to be skipped entirely.
+      const result = invokeHook(HOOK_SPEC, {
+        session_id: 'test-session',
+        tool_name: 'Edit',
+        tool_input: {
+          file_path: path.join(tmpDir, 'src', 'app.js'),
+          old_string: 'foo',
+          new_string: 'bar'
+        }
+      }, { cwd: tmpDir, env })
 
-      assert.strictEqual(result.exitCode, 0)
-
+      assertValidPermissionDecision(result, 'beads-gate allows non-beads repo')
       if (result.output) {
-        assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
-      }
-    })
-
-    it('blocks NotebookEdit when no in_progress bead', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'NotebookEdit',
-          tool_input: { notebook_path: '/some/notebook.ipynb', new_source: 'print(1)' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-
-      if (result.output) {
-        assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
-      }
-    })
-
-    it('blocks Bash cat redirect when no in_progress bead', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Bash',
-          tool_input: { command: 'cat > file.txt' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-
-      if (result.output) {
-        assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
-      }
-    })
-  })
-
-  describe('non-write operations', () => {
-    beforeEach(() => {
-      initBeads(tmpDir)
-    })
-
-    it('allows Read tool', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Read',
-          tool_input: { file_path: '/some/file.js' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null, 'Should not block Read tool')
-    })
-
-    it('allows Glob tool', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Glob',
-          tool_input: { pattern: '**/*.js' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null)
-    })
-
-    it('allows Bash without write patterns', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Bash',
-          tool_input: { command: 'ls -la' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null, 'Should not block non-write Bash commands')
-    })
-
-    it('allows bd commands', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Bash',
-          tool_input: { command: 'bd list' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null, 'Should allow bd commands')
-    })
-  })
-
-  describe('source file filtering', () => {
-    beforeEach(() => {
-      initBeads(tmpDir)
-      // Configure sources so only .js files in lib/ and src/ are considered source
-      createFile(tmpDir, '.claude/prove_it.json', JSON.stringify({
-        sources: ['lib/**/*.js', 'src/**/*.js']
-      }))
-    })
-
-    it('allows Edit to non-source file (README.md) without bead', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Edit',
-          tool_input: { file_path: `${tmpDir}/README.md`, old_string: 'a', new_string: 'b' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null, 'Should allow editing non-source files without bead')
-    })
-
-    it('allows Write to non-source file (docs/guide.md) without bead', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Write',
-          tool_input: { file_path: `${tmpDir}/docs/guide.md`, content: 'hello' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null, 'Should allow writing non-source files without bead')
-    })
-
-    it('blocks Edit to source file (lib/foo.js) without bead', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Edit',
-          tool_input: { file_path: `${tmpDir}/lib/foo.js`, old_string: 'a', new_string: 'b' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      if (result.output) {
-        assert.strictEqual(
-          result.output.hookSpecificOutput.permissionDecision,
+        assert.notEqual(
+          result.output.hookSpecificOutput?.permissionDecision,
           'deny',
-          'Should deny Edit to source file without bead'
+          'Should not deny Edit when not a beads repo'
         )
       }
     })
 
-    it('still enforces Bash write ops regardless of sources', () => {
-      // Bash write ops can't reliably determine target file, so always enforce
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Bash',
-          tool_input: { command: 'cat > README.md' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
+    it('skips non-source files', () => {
+      initBeads(tmpDir)
 
-      assert.strictEqual(result.exitCode, 0)
-      // Bash write ops should still be enforced (can't determine target reliably)
+      // Override config with sources so only src/**/*.js files are gated
+      writeConfig(tmpDir, makeConfig(beadsHooks(), { sources: ['src/**/*.js'] }))
+
+      const result = invokeHook(HOOK_SPEC, {
+        session_id: 'test-session',
+        tool_name: 'Edit',
+        tool_input: {
+          file_path: path.join(tmpDir, 'docs', 'README.md'),
+          old_string: 'old',
+          new_string: 'new'
+        }
+      }, { cwd: tmpDir, env })
+
+      assertValidPermissionDecision(result, 'beads-gate skips non-source files')
       if (result.output) {
-        assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
+        assert.notEqual(
+          result.output.hookSpecificOutput?.permissionDecision,
+          'deny',
+          'Should not deny Edit to non-source files'
+        )
       }
     })
   })
 
-  describe('fail-closed behavior', () => {
-    it('blocks when input JSON is invalid', () => {
-      const { spawnSync } = require('child_process')
-      const path = require('path')
+  describe('error handling', () => {
+    beforeEach(() => {
+      writeConfig(tmpDir, makeConfig(beadsHooks()))
+    })
 
-      const hookPath = path.join(__dirname, '..', '..', 'lib', 'hooks', 'prove_it_edit.js')
-
-      const result = spawnSync('node', [hookPath], {
-        input: 'invalid json!@#$',
+    it('fail-closed on invalid stdin JSON', () => {
+      // The harness always JSON.stringifies input, so invoke the CLI directly
+      // with raw invalid JSON.
+      const result = spawnSync('node', [CLI_PATH, 'hook', HOOK_SPEC], {
+        input: 'not valid json{{{',
         encoding: 'utf8',
-        env: { ...process.env, CLAUDE_PROJECT_DIR: tmpDir }
+        env: {
+          ...process.env,
+          ...env,
+          CLAUDE_PROJECT_DIR: tmpDir
+        },
+        cwd: tmpDir
       })
 
-      assert.strictEqual(result.status, 0)
-      assert.ok(result.stdout, 'Should produce output')
+      assert.equal(result.status, 0, 'Hook should exit 0 even on error')
+      assert.ok(result.stdout.trim(), 'Should produce output on invalid JSON')
 
       const output = JSON.parse(result.stdout)
-      assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny', 'Should deny on invalid input')
-      assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('Failed to parse'), 'Should explain the parse failure')
-    })
-  })
-
-  describe('config file protection', () => {
-    it('blocks writes to prove_it.local.json via Bash', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Bash',
-          tool_input: { command: 'echo \'{"suiteGate":{"require":false}}\' > .claude/prove_it.local.json' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
+      assertValidPermissionDecision(
+        { output, exitCode: result.status },
+        'fail-closed invalid JSON'
       )
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.ok(result.output, 'Should produce output')
-      assert.ok(result.output.hookSpecificOutput, 'Should have hookSpecificOutput')
-      assert.strictEqual(
-        result.output.hookSpecificOutput.permissionDecision,
-        'deny',
-        'Should deny the command'
-      )
-      assert.ok(
-        result.output.hookSpecificOutput.permissionDecisionReason.includes('prove_it'),
-        'Should mention the protected file pattern'
-      )
-    })
-
-    it('blocks Write to prove_it.json', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Write',
-          tool_input: { file_path: '.claude/prove_it.json', content: '{"enabled":false}' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.ok(result.output, 'Should produce output')
-      assert.strictEqual(
-        result.output.hookSpecificOutput.permissionDecision,
-        'deny',
-        'Should deny Write to prove_it.json'
-      )
-    })
-
-    it('blocks Edit to prove_it.local.json', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Edit',
-          tool_input: { file_path: '.claude/prove_it.local.json', old_string: 'a', new_string: 'b' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.ok(result.output, 'Should produce output')
-      assert.strictEqual(
-        result.output.hookSpecificOutput.permissionDecision,
-        'deny',
-        'Should deny Edit to prove_it.local.json'
-      )
-    })
-
-    it('allows reading prove_it.local.json via Bash', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Bash',
-          tool_input: { command: 'cat .claude/prove_it.local.json' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null, 'Should not block read operations')
-    })
-  })
-
-  describe('ignores non-PreToolUse events', () => {
-    it('ignores Stop event', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'Stop',
-          session_id: 'test-123'
-        },
-        { projectDir: tmpDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null)
-    })
-
-    it('ignores SessionStart event', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'SessionStart',
-          session_id: 'test-123'
-        },
-        { projectDir: tmpDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null)
+      assert.equal(output.hookSpecificOutput.permissionDecision, 'deny')
     })
   })
 })

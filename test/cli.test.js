@@ -23,7 +23,7 @@ describe('CLI', () => {
   describe('help', () => {
     it('shows help with no arguments', () => {
       const result = runCli([])
-      assert.match(result.stdout, /prove_it.*Verifiability-first/s)
+      assert.match(result.stdout, /prove_it.*Config-driven/s)
       assert.match(result.stdout, /install/)
       assert.match(result.stdout, /uninstall/)
       assert.match(result.stdout, /init/)
@@ -32,12 +32,12 @@ describe('CLI', () => {
 
     it('shows help with help command', () => {
       const result = runCli(['help'])
-      assert.match(result.stdout, /prove_it.*Verifiability-first/s)
+      assert.match(result.stdout, /prove_it.*Config-driven/s)
     })
 
     it('shows help with --help flag', () => {
       const result = runCli(['--help'])
-      assert.match(result.stdout, /prove_it.*Verifiability-first/s)
+      assert.match(result.stdout, /prove_it.*Config-driven/s)
     })
   })
 
@@ -73,6 +73,11 @@ describe('init/deinit', () => {
     // Check script/test is executable
     const stat = fs.statSync(path.join(tmpDir, 'script', 'test'))
     assert.ok(stat.mode & fs.constants.S_IXUSR, 'script/test should be executable')
+
+    // Check config is v2 format
+    const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), 'utf8'))
+    assert.strictEqual(cfg.configVersion, 2)
+    assert.ok(Array.isArray(cfg.hooks), 'hooks should be an array')
   })
 
   it('init is non-destructive', () => {
@@ -146,34 +151,28 @@ describe('install/uninstall', () => {
     const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
     const serialized = JSON.stringify(settings.hooks)
 
-    assert.ok(serialized.includes('prove_it hook stop'),
-      'Should have stop hook')
-    assert.ok(serialized.includes('prove_it hook done'),
-      'Should have done hook')
-    assert.ok(serialized.includes('prove_it hook edit'),
-      'Should have edit hook')
-    assert.ok(serialized.includes('prove_it hook session-start'),
-      'Should have session-start hook')
+    assert.ok(serialized.includes('prove_it hook claude:Stop'),
+      'Should have Stop dispatcher')
+    assert.ok(serialized.includes('prove_it hook claude:PreToolUse'),
+      'Should have PreToolUse dispatcher')
+    assert.ok(serialized.includes('prove_it hook claude:SessionStart'),
+      'Should have SessionStart dispatcher')
   })
 
-  it('install copies rules file', () => {
+  it('install does not create rules file (v2 has no global rules)', () => {
     runCli(['install'], { env: { ...process.env, HOME: tmpDir } })
 
     const rulesPath = path.join(tmpDir, '.claude', 'rules', 'prove_it.md')
-    assert.ok(fs.existsSync(rulesPath),
-      'prove_it.md rules file should exist')
+    assert.ok(!fs.existsSync(rulesPath),
+      'prove_it.md rules file should not exist in v2')
   })
 
-  it('install creates global config', () => {
+  it('install does not create global config (v2 is project-only)', () => {
     runCli(['install'], { env: { ...process.env, HOME: tmpDir } })
 
     const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
-    assert.ok(fs.existsSync(configPath),
-      'Global config should exist')
-
-    // Should be valid JSON
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-    assert.ok(typeof config === 'object', 'Config should be a valid object')
+    assert.ok(!fs.existsSync(configPath),
+      'Global config should not exist in v2')
   })
 
   it('install is idempotent', () => {
@@ -184,17 +183,13 @@ describe('install/uninstall', () => {
     const settingsPath = path.join(tmpDir, '.claude', 'settings.json')
     const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
 
-    // Each hook event array should have exactly one prove_it entry
+    // Each hook event should have exactly 1 prove_it dispatcher
     for (const [event, groups] of Object.entries(settings.hooks)) {
-      const proveItGroups = groups.filter((g) =>
+      const proveItGroups = groups.filter(g =>
         JSON.stringify(g).includes('prove_it hook')
       )
-      // Stop has 1, PreToolUse has 2 (done + edit), SessionStart has 1
-      // Just verify no duplicates: each unique group appears once
-      const serialized = proveItGroups.map((g) => JSON.stringify(g))
-      const unique = new Set(serialized)
-      assert.strictEqual(serialized.length, unique.size,
-        `${event} should have no duplicate prove_it hook groups`)
+      assert.strictEqual(proveItGroups.length, 1,
+        `${event} should have exactly 1 prove_it dispatcher`)
     }
   })
 
@@ -203,7 +198,8 @@ describe('install/uninstall', () => {
     runCli(['install'], { env })
 
     // Verify install worked
-    assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json')))
+    const settingsCheck = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'settings.json'), 'utf8'))
+    assert.ok(JSON.stringify(settingsCheck).includes('prove_it hook'))
 
     runCli(['uninstall'], { env })
 

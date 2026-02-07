@@ -1,343 +1,277 @@
 const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
 const { spawnSync } = require('child_process')
+const fs = require('fs')
+const path = require('path')
 
 const {
   invokeHook,
   createTempDir,
   cleanupTempDir,
   initGitRepo,
-  createTestScript
+  createFile,
+  createTestScript,
+  writeConfig,
+  makeConfig,
+  isolatedEnv,
+  CLI_PATH
 } = require('./hook-harness')
 
-describe('prove_it_done.js integration', () => {
+/**
+ * Test enforcement integration tests for the v2 dispatcher.
+ *
+ * Verifies that PreToolUse commit-gate checks enforce test-before-commit:
+ * - Allows commit when tests pass
+ * - Denies commit when tests fail
+ * - Ignores non-matching commands
+ * - Handles missing test scripts
+ * - Handles special characters in paths
+ */
+
+function commitGateHooks (testCommand = './script/test') {
+  return [
+    {
+      type: 'claude',
+      event: 'PreToolUse',
+      matcher: 'Bash',
+      triggers: ['(^|\\s)git\\s+commit\\b'],
+      checks: [
+        { name: 'full-tests', type: 'script', command: testCommand }
+      ]
+    }
+  ]
+}
+
+describe('v2 dispatcher: test enforcement', () => {
   let tmpDir
 
   beforeEach(() => {
-    tmpDir = createTempDir('prove_it_test_')
+    tmpDir = createTempDir('prove_it_test_enforce_')
     initGitRepo(tmpDir)
+    createFile(tmpDir, '.gitkeep', '')
+    spawnSync('git', ['add', '.'], { cwd: tmpDir })
+    spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
   })
 
   afterEach(() => {
-    cleanupTempDir(tmpDir)
+    if (tmpDir) cleanupTempDir(tmpDir)
   })
 
-  describe('PreToolUse event', () => {
-    describe('commands that require tests', () => {
-      it('runs tests at hook time and allows commit when tests pass', () => {
-        createTestScript(tmpDir, true)
+  describe('commands that require tests', () => {
+    it('allows commit when tests pass', () => {
+      createTestScript(tmpDir, true)
+      writeConfig(tmpDir, makeConfig(commitGateHooks()))
 
-        const result = invokeHook(
-          'prove_it_done.js',
-          {
-            hook_event_name: 'PreToolUse',
-            tool_name: 'Bash',
-            tool_input: { command: 'git commit -m "test"' },
-            cwd: tmpDir
-          },
-          { projectDir: tmpDir }
-        )
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git commit -m "test"' },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
-        assert.strictEqual(result.exitCode, 0)
-        assert.ok(result.output, 'Should produce JSON output')
-        assert.ok(result.output.hookSpecificOutput, 'Should have hookSpecificOutput')
-        assert.ok(
-          result.output.hookSpecificOutput.permissionDecisionReason.includes('tests passed'),
-          'Should report tests passed'
-        )
-        assert.ok(
-          !result.output.hookSpecificOutput.updatedInput,
-          'Command should not be modified when tests pass'
-        )
-      })
-
-      it('does not require tests for git push by default', () => {
-        // git push is no longer blocked by default - commit already runs full tests
-        const result = invokeHook(
-          'prove_it_done.js',
-          {
-            hook_event_name: 'PreToolUse',
-            tool_name: 'Bash',
-            tool_input: { command: 'git push origin main' },
-            cwd: tmpDir
-          },
-          { projectDir: tmpDir }
-        )
-
-        assert.strictEqual(result.exitCode, 0)
-        assert.strictEqual(result.output, null, 'Should not require tests for git push')
-      })
-
-      it('does not wrap bd done by default', () => {
-        createTestScript(tmpDir, true)
-
-        const result = invokeHook(
-          'prove_it_done.js',
-          {
-            hook_event_name: 'PreToolUse',
-            tool_name: 'Bash',
-            tool_input: { command: 'bd done 123' },
-            cwd: tmpDir
-          },
-          { projectDir: tmpDir }
-        )
-
-        assert.strictEqual(result.exitCode, 0)
-        assert.strictEqual(result.output, null, 'bd done should not trigger tests by default')
-      })
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, 'Should produce JSON output')
+      assert.strictEqual(
+        result.output.hookSpecificOutput.permissionDecision,
+        'allow',
+        'Must allow when tests pass'
+      )
     })
 
-    describe("commands that don't require tests", () => {
-      it('ignores git status', () => {
-        const result = invokeHook(
-          'prove_it_done.js',
-          {
-            hook_event_name: 'PreToolUse',
-            tool_name: 'Bash',
-            tool_input: { command: 'git status' },
-            cwd: tmpDir
-          },
-          { projectDir: tmpDir }
-        )
+    it('denies commit when tests fail', () => {
+      createTestScript(tmpDir, false)
+      writeConfig(tmpDir, makeConfig(commitGateHooks()))
 
-        assert.strictEqual(result.exitCode, 0)
-        assert.strictEqual(result.output, null, "Should not produce output for commands that don't require tests")
-      })
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git commit -m "ship it"' },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
-      it('ignores npm test', () => {
-        const result = invokeHook(
-          'prove_it_done.js',
-          {
-            hook_event_name: 'PreToolUse',
-            tool_name: 'Bash',
-            tool_input: { command: 'npm test' },
-            cwd: tmpDir
-          },
-          { projectDir: tmpDir }
-        )
-
-        assert.strictEqual(result.exitCode, 0)
-        assert.strictEqual(result.output, null)
-      })
-
-      it('ignores non-Bash tools', () => {
-        const result = invokeHook(
-          'prove_it_done.js',
-          {
-            hook_event_name: 'PreToolUse',
-            tool_name: 'Edit',
-            tool_input: { file_path: '/some/file.js' },
-            cwd: tmpDir
-          },
-          { projectDir: tmpDir }
-        )
-
-        assert.strictEqual(result.exitCode, 0)
-        assert.strictEqual(result.output, null)
-      })
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, 'Should produce JSON output')
+      assert.strictEqual(
+        result.output.hookSpecificOutput.permissionDecision,
+        'deny',
+        'Must deny when tests fail'
+      )
+      assert.ok(
+        result.output.hookSpecificOutput.permissionDecisionReason.includes('full-tests failed'),
+        'Reason should mention test failure'
+      )
     })
 
-    describe('test script missing', () => {
-      it('blocks with helpful error when test script required but missing', () => {
-        // Don't create test script
+    it('does not require tests for git push (no trigger match)', () => {
+      writeConfig(tmpDir, makeConfig(commitGateHooks()))
 
-        const result = invokeHook(
-          'prove_it_done.js',
-          {
-            hook_event_name: 'PreToolUse',
-            tool_name: 'Bash',
-            tool_input: { command: 'git commit -m "test"' },
-            cwd: tmpDir
-          },
-          { projectDir: tmpDir }
-        )
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git push origin main' },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
-        assert.strictEqual(result.exitCode, 0)
-        assert.ok(result.output, 'Should produce output')
-        assert.ok(result.output.hookSpecificOutput, 'Should have hookSpecificOutput')
-        assert.strictEqual(
-          result.output.hookSpecificOutput.permissionDecision,
-          'deny',
-          'Should deny when test script is missing'
-        )
-        assert.ok(
-          result.output.hookSpecificOutput.permissionDecisionReason.includes('Test script not found'),
-          'Should explain test script is missing'
-        )
-      })
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(result.output, null, 'Should not trigger for git push')
+    })
+  })
+
+  describe("commands that don't require tests", () => {
+    beforeEach(() => {
+      writeConfig(tmpDir, makeConfig(commitGateHooks()))
+    })
+
+    it('ignores git status', () => {
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git status' },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(result.output, null, 'Should not produce output for non-matching commands')
+    })
+
+    it('ignores npm test', () => {
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'npm test' },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(result.output, null)
+    })
+
+    it('ignores non-Bash tools', () => {
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Edit',
+        tool_input: { file_path: '/some/file.js' },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(result.output, null)
+    })
+  })
+
+  describe('test script missing', () => {
+    it('denies with helpful error when test script required but missing', () => {
+      // No test script created
+      writeConfig(tmpDir, makeConfig(commitGateHooks()))
+
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git commit -m "test"' },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, 'Should produce output')
+      assert.strictEqual(
+        result.output.hookSpecificOutput.permissionDecision,
+        'deny',
+        'Should deny when test script is missing'
+      )
+      assert.ok(
+        result.output.hookSpecificOutput.permissionDecisionReason.includes('Script not found'),
+        'Should explain test script is missing'
+      )
     })
   })
 
   describe('fail-closed behavior', () => {
-    it('blocks when input JSON is invalid', () => {
-      // This tests the fail-closed behavior - invalid input should block, not silently pass
-      const { spawnSync } = require('child_process')
-      const path = require('path')
+    it('denies when input JSON is invalid', () => {
+      writeConfig(tmpDir, makeConfig(commitGateHooks()))
 
-      const hookPath = path.join(__dirname, '..', '..', 'lib', 'hooks', 'prove_it_done.js')
-
-      const result = spawnSync('node', [hookPath], {
+      const result = spawnSync('node', [CLI_PATH, 'hook', 'claude:PreToolUse'], {
         input: 'not valid json {{{',
         encoding: 'utf8',
-        env: { ...process.env, CLAUDE_PROJECT_DIR: tmpDir }
+        env: {
+          ...process.env,
+          ...isolatedEnv(tmpDir),
+          CLAUDE_PROJECT_DIR: tmpDir
+        }
       })
 
       assert.strictEqual(result.status, 0)
       assert.ok(result.stdout, 'Should produce output')
 
       const output = JSON.parse(result.stdout)
-      assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny', 'Should deny on invalid input')
-      assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('Failed to parse'), 'Should explain the parse failure')
+      assert.strictEqual(
+        output.hookSpecificOutput.permissionDecision,
+        'deny',
+        'Should deny on invalid input'
+      )
+      assert.ok(
+        output.hookSpecificOutput.permissionDecisionReason.includes('Failed to parse'),
+        'Should explain the parse failure'
+      )
     })
   })
 
   describe('shell escaping', () => {
     it('safely handles paths with special characters', () => {
-      // Create a directory with special characters
-      const fs = require('fs')
-      const path = require('path')
       const specialDir = path.join(tmpDir, "path with 'quotes' and spaces")
       fs.mkdirSync(specialDir, { recursive: true })
       initGitRepo(specialDir)
       createTestScript(specialDir, true)
+      writeConfig(specialDir, makeConfig(commitGateHooks()))
 
-      // Initial commit so git HEAD exists
-      fs.writeFileSync(path.join(specialDir, '.gitkeep'), '')
+      createFile(specialDir, '.gitkeep', '')
       spawnSync('git', ['add', '.'], { cwd: specialDir })
       spawnSync('git', ['commit', '-m', 'init'], { cwd: specialDir })
 
-      const result = invokeHook(
-        'prove_it_done.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Bash',
-          tool_input: { command: 'git commit -m "test"' },
-          cwd: specialDir
-        },
-        { projectDir: specialDir }
-      )
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git commit -m "test"' },
+        cwd: specialDir
+      }, { projectDir: specialDir, env: isolatedEnv(specialDir) })
 
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'Should produce output')
-      // Tests run at hook time — verify they passed without crashing on special paths
-      assert.ok(
-        result.output.hookSpecificOutput.permissionDecisionReason.includes('tests passed'),
+      assert.strictEqual(
+        result.output.hookSpecificOutput.permissionDecision,
+        'allow',
         'Should handle special-character paths without crashing'
       )
     })
   })
 
-  describe('test root resolution', () => {
-    const fs = require('fs')
-    const path = require('path')
-
-    it('finds script/test in cwd first', () => {
+  describe('configurable triggers', () => {
+    it('triggers on git push when configured', () => {
       createTestScript(tmpDir, true)
-      const subDir = path.join(tmpDir, 'subdir')
-      fs.mkdirSync(subDir, { recursive: true })
-      createTestScript(subDir, true) // subdir has its own script/test
-
-      const result = invokeHook(
-        'prove_it_done.js',
+      writeConfig(tmpDir, makeConfig([
         {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Bash',
-          tool_input: { command: 'git commit -m "test"' },
-          cwd: subDir
-        },
-        { projectDir: subDir }
-      )
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Bash',
+          triggers: ['(^|\\s)git\\s+commit\\b', '(^|\\s)git\\s+push\\b'],
+          checks: [
+            { name: 'full-tests', type: 'script', command: './script/test' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git push origin main' },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
-      assert.ok(result.output, 'Should produce output')
-      // Tests run at hook time — verify they passed (found script/test in subdir)
-      assert.ok(
-        result.output.hookSpecificOutput.permissionDecisionReason.includes('tests passed'),
-        'Should find and run script/test from cwd'
-      )
-    })
-
-    it('walks up to find script/test in parent', () => {
-      createTestScript(tmpDir, true) // only root has script/test
-      const subDir = path.join(tmpDir, 'subdir')
-      fs.mkdirSync(subDir, { recursive: true })
-      // subdir has no script/test
-
-      const result = invokeHook(
-        'prove_it_done.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Bash',
-          tool_input: { command: 'git commit -m "test"' },
-          cwd: subDir
-        },
-        { projectDir: subDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.ok(result.output, 'Should produce output')
-      // Tests run at hook time — verify they passed (walked up to find script/test)
-      assert.ok(
-        result.output.hookSpecificOutput.permissionDecisionReason.includes('tests passed'),
-        'Should walk up to find script/test in parent'
-      )
-    })
-
-    it('stops at .claude/prove_it.json marker even without script/test', () => {
-      createTestScript(tmpDir, true) // root has script/test
-      const subDir = path.join(tmpDir, 'subproject')
-      fs.mkdirSync(path.join(subDir, '.claude'), { recursive: true })
-      fs.writeFileSync(
-        path.join(subDir, '.claude', 'prove_it.json'),
-        JSON.stringify({ enabled: true })
-      )
-      // subDir has prove_it.json but no script/test
-
-      const result = invokeHook(
-        'prove_it_done.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Bash',
-          tool_input: { command: 'git commit -m "test"' },
-          cwd: subDir
-        },
-        { projectDir: subDir }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      // Should stop at subDir (has prove_it.json) and report missing script/test
+      assert.ok(result.output, 'Hook should produce output for git push trigger')
       assert.strictEqual(
         result.output.hookSpecificOutput.permissionDecision,
-        'deny',
-        'Should deny when test script missing in subproject'
-      )
-    })
-
-    it('does not walk above git root', () => {
-      // Create a nested git repo
-      const innerRepo = path.join(tmpDir, 'inner')
-      fs.mkdirSync(innerRepo, { recursive: true })
-      initGitRepo(innerRepo)
-      createTestScript(tmpDir, true) // outer has script/test
-      // inner repo has no script/test
-
-      const result = invokeHook(
-        'prove_it_done.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Bash',
-          tool_input: { command: 'git commit -m "test"' },
-          cwd: innerRepo
-        },
-        { projectDir: innerRepo }
-      )
-
-      assert.strictEqual(result.exitCode, 0)
-      // Should not find outer script/test - stops at inner git root
-      assert.strictEqual(
-        result.output.hookSpecificOutput.permissionDecision,
-        'deny',
-        'Should not inherit script/test from outside git root'
+        'allow',
+        'Should allow when tests pass for custom trigger'
       )
     })
   })

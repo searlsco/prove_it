@@ -1,8 +1,8 @@
 /**
- * Test harness for invoking hooks in integration tests.
+ * Test harness for invoking the v2 dispatchers in integration tests.
  *
  * Provides helpers to:
- * - Invoke hooks with simulated input
+ * - Invoke dispatchers with simulated input
  * - Create temporary directories with controlled state
  * - Parse and validate hook output
  */
@@ -12,31 +12,26 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 
-// Test source hooks directly (they export main() and work standalone)
-const HOOKS_DIR = path.join(__dirname, '..', '..', 'lib', 'hooks')
+const CLI_PATH = path.join(__dirname, '..', '..', 'cli.js')
 
 // Claude Code's valid permissionDecision values for PreToolUse hooks.
-// Source: https://docs.anthropic.com/en/docs/claude-code/hooks
-// Using any other value (e.g. "block", "approve") is silently ignored.
 const VALID_PERMISSION_DECISIONS = ['allow', 'deny', 'ask']
 
 /**
- * Invoke a hook with the given input.
+ * Invoke a dispatcher via the CLI.
  *
- * @param {string} hookName - Name of the hook file (e.g., "prove_it_done.js")
+ * @param {string} hookSpec - Hook spec (e.g., "claude:Stop", "claude:PreToolUse")
  * @param {object} input - The input object to pass via stdin
  * @param {object} options - Options including projectDir, env overrides
  * @returns {object} - { exitCode, stdout, stderr, output (parsed JSON if valid) }
  */
-function invokeHook (hookName, input, options = {}) {
-  const hookPath = path.join(HOOKS_DIR, hookName)
-
+function invokeHook (hookSpec, input, options = {}) {
   const env = { ...process.env, ...options.env }
   if (options.projectDir) {
     env.CLAUDE_PROJECT_DIR = options.projectDir
   }
 
-  const result = spawnSync('node', [hookPath], {
+  const result = spawnSync('node', [CLI_PATH, 'hook', hookSpec], {
     input: JSON.stringify(input),
     encoding: 'utf8',
     env,
@@ -49,7 +44,7 @@ function invokeHook (hookName, input, options = {}) {
       output = JSON.parse(result.stdout)
     }
   } catch {
-    // Output is not valid JSON
+    // Output is not valid JSON (e.g., SessionStart text)
   }
 
   return {
@@ -62,9 +57,6 @@ function invokeHook (hookName, input, options = {}) {
 
 /**
  * Create a temporary directory for testing.
- *
- * @param {string} prefix - Prefix for the temp directory name
- * @returns {string} - Path to the created directory
  */
 function createTempDir (prefix = 'prove_it_test_') {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix))
@@ -72,8 +64,6 @@ function createTempDir (prefix = 'prove_it_test_') {
 
 /**
  * Clean up a temporary directory.
- *
- * @param {string} dir - Path to the directory to remove
  */
 function cleanupTempDir (dir) {
   fs.rmSync(dir, { recursive: true, force: true })
@@ -81,8 +71,6 @@ function cleanupTempDir (dir) {
 
 /**
  * Initialize a git repo in the given directory.
- *
- * @param {string} dir - Path to the directory
  */
 function initGitRepo (dir) {
   spawnSync('git', ['init'], { cwd: dir, encoding: 'utf8' })
@@ -92,10 +80,6 @@ function initGitRepo (dir) {
 
 /**
  * Create a file in the given directory.
- *
- * @param {string} dir - Base directory
- * @param {string} relativePath - Path relative to dir
- * @param {string} content - File content
  */
 function createFile (dir, relativePath, content) {
   const fullPath = path.join(dir, relativePath)
@@ -105,8 +89,6 @@ function createFile (dir, relativePath, content) {
 
 /**
  * Make a file executable.
- *
- * @param {string} filePath - Path to the file
  */
 function makeExecutable (filePath) {
   fs.chmodSync(filePath, 0o755)
@@ -114,9 +96,6 @@ function makeExecutable (filePath) {
 
 /**
  * Create a basic test script (script/test).
- *
- * @param {string} dir - Base directory
- * @param {boolean} shouldPass - Whether the script should exit 0
  */
 function createTestScript (dir, shouldPass = true) {
   const scriptPath = path.join(dir, 'script', 'test')
@@ -126,24 +105,48 @@ function createTestScript (dir, shouldPass = true) {
 }
 
 /**
+ * Create a fast test script (script/test_fast).
+ */
+function createFastTestScript (dir, shouldPass = true) {
+  const scriptPath = path.join(dir, 'script', 'test_fast')
+  const content = shouldPass ? '#!/bin/bash\nexit 0\n' : "#!/bin/bash\necho 'Tests failed' >&2\nexit 1\n"
+  createFile(dir, 'script/test_fast', content)
+  makeExecutable(scriptPath)
+}
+
+/**
  * Initialize beads in the given directory.
- * Creates the minimal structure that proves it's a beads project.
- *
- * @param {string} dir - Path to the directory
  */
 function initBeads (dir) {
   const beadsDir = path.join(dir, '.beads')
   fs.mkdirSync(beadsDir, { recursive: true })
-  // Create config.yaml to indicate this is a beads project (not just global config)
   fs.writeFileSync(path.join(beadsDir, 'config.yaml'), '# beads config\n', 'utf8')
 }
 
 /**
+ * Write a v2 prove_it config to a project directory.
+ */
+function writeConfig (dir, config) {
+  const cfgPath = path.join(dir, '.claude', 'prove_it.json')
+  fs.mkdirSync(path.dirname(cfgPath), { recursive: true })
+  fs.writeFileSync(cfgPath, JSON.stringify(config, null, 2), 'utf8')
+}
+
+/**
+ * Create a minimal v2 config with specified hooks.
+ */
+function makeConfig (hooks, overrides = {}) {
+  return {
+    configVersion: 2,
+    enabled: true,
+    format: { maxOutputChars: 12000 },
+    hooks,
+    ...overrides
+  }
+}
+
+/**
  * Assert that a hook result's permissionDecision uses a valid Claude Code value.
- * This catches bugs like using "block" instead of "deny".
- *
- * @param {object} result - The result from invokeHook
- * @param {string} label - Test context for error messages
  */
 function assertValidPermissionDecision (result, label) {
   if (!result.output?.hookSpecificOutput?.permissionDecision) return
@@ -158,13 +161,6 @@ function assertValidPermissionDecision (result, label) {
 
 /**
  * Create fake session snapshot data so a reviewer hook can find diffs.
- *
- * Without this, generateDiffsSince returns [] and the reviewer is auto-PASS'd.
- * Override HOME so os.homedir() resolves inside tmpDir.
- *
- * @param {string} tmpDir - The temp directory (used as HOME)
- * @param {string} sessionId - Session ID for the snapshot
- * @param {string} projectDir - The project directory (usually same as tmpDir)
  */
 function setupSessionWithDiffs (tmpDir, sessionId, projectDir) {
   const encoded = projectDir.replace(/[^a-zA-Z0-9-]/g, '-')
@@ -188,7 +184,6 @@ function setupSessionWithDiffs (tmpDir, sessionId, projectDir) {
     JSON.stringify(snapshot) + '\n'
   )
 
-  // Backup file (old content)
   const histDir = path.join(tmpDir, '.claude', 'file-history', sessionId)
   fs.mkdirSync(histDir, { recursive: true })
   fs.writeFileSync(
@@ -196,10 +191,19 @@ function setupSessionWithDiffs (tmpDir, sessionId, projectDir) {
     'function feature() {}\n'
   )
 
-  // Current file (new content — produces a diff)
   createFile(projectDir, 'src/feature.js',
     'function feature() {}\nfunction untested() { return 42; }\n'
   )
+}
+
+/**
+ * Standard env overrides to isolate tests from real user config.
+ */
+function isolatedEnv (tmpDir) {
+  return {
+    HOME: tmpDir,
+    PROVE_IT_DIR: path.join(tmpDir, '.prove_it_test')
+  }
 }
 
 module.exports = {
@@ -210,9 +214,13 @@ module.exports = {
   createFile,
   makeExecutable,
   createTestScript,
+  createFastTestScript,
   initBeads,
+  writeConfig,
+  makeConfig,
   assertValidPermissionDecision,
   setupSessionWithDiffs,
+  isolatedEnv,
   VALID_PERMISSION_DECISIONS,
-  HOOKS_DIR
+  CLI_PATH
 }

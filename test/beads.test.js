@@ -1,7 +1,7 @@
 const { describe, it } = require('node:test')
 const assert = require('node:assert')
 
-const { isSourceFile } = require('../lib/hooks/prove_it_edit')
+const { isSourceFile } = require('../lib/globs')
 
 // Test the beads enforcement logic
 

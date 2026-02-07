@@ -1,25 +1,26 @@
 const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
-
-const fs = require('fs')
-const path = require('path')
 const { spawnSync } = require('child_process')
+const path = require('path')
 
 const {
   invokeHook,
   createTempDir,
   cleanupTempDir,
   initGitRepo,
-  initBeads,
-  createTestScript,
   createFile,
+  createTestScript,
+  createFastTestScript,
+  initBeads,
+  writeConfig,
+  makeConfig,
   assertValidPermissionDecision,
-  VALID_PERMISSION_DECISIONS,
-  HOOKS_DIR
+  isolatedEnv,
+  VALID_PERMISSION_DECISIONS
 } = require('./hook-harness')
 
 /**
- * Contract tests: verify that all hook outputs conform to Claude Code's
+ * Contract tests: verify that all dispatcher outputs conform to Claude Code's
  * expected schema. This prevents bugs like using "block" instead of "deny"
  * for permissionDecision — values Claude Code silently ignores.
  */
@@ -29,125 +30,118 @@ describe('Claude Code hook output contract', () => {
   beforeEach(() => {
     tmpDir = createTempDir('prove_it_contract_')
     initGitRepo(tmpDir)
+    createFile(tmpDir, '.gitkeep', '')
+    spawnSync('git', ['add', '.'], { cwd: tmpDir })
+    spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
   })
 
   afterEach(() => {
     cleanupTempDir(tmpDir)
   })
 
-  describe('prove_it_edit.js PreToolUse decisions', () => {
+  describe('PreToolUse config-protection decisions', () => {
     beforeEach(() => {
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Edit|Write|NotebookEdit|Bash',
+          checks: [
+            { name: 'config-protection', type: 'script', command: 'prove_it builtin:config-protection' },
+            { name: 'beads-gate', type: 'script', command: 'prove_it builtin:beads-gate', when: { fileExists: '.beads' } }
+          ]
+        }
+      ]))
       initBeads(tmpDir)
     })
 
-    const gatedTools = [
-      { tool: 'Edit', input: { file_path: '/f.js', old_string: 'a', new_string: 'b' } },
-      { tool: 'Write', input: { file_path: '/f.js', content: 'hello' } },
-      { tool: 'NotebookEdit', input: { notebook_path: '/n.ipynb', new_source: 'x' } },
-      { tool: 'Bash', input: { command: 'cat > file.txt' } }
-    ]
+    it('uses valid permissionDecision when denying config Edit', () => {
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Edit',
+        tool_input: { file_path: '.claude/prove_it.json', old_string: 'a', new_string: 'b' },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
-    for (const { tool, input } of gatedTools) {
-      it(`uses valid permissionDecision when denying ${tool}`, () => {
-        const result = invokeHook(
-          'prove_it_edit.js',
-          {
-            hook_event_name: 'PreToolUse',
-            tool_name: tool,
-            tool_input: input,
-            cwd: tmpDir
-          },
-          { projectDir: tmpDir }
-        )
-
-        assertValidPermissionDecision(result, `edit/${tool}`)
-
-        if (result.output?.hookSpecificOutput) {
-          assert.strictEqual(
-            result.output.hookSpecificOutput.permissionDecision,
-            'deny',
-            `Should deny ${tool} without in_progress bead`
-          )
-        }
-      })
-    }
-
-    it('uses valid permissionDecision when denying config file Edit', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Edit',
-          tool_input: { file_path: '.claude/prove_it.json', old_string: 'a', new_string: 'b' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
-
-      assertValidPermissionDecision(result, 'edit/config-edit')
-
+      assertValidPermissionDecision(result, 'config-edit')
       if (result.output?.hookSpecificOutput?.permissionDecision) {
-        assert.strictEqual(
-          result.output.hookSpecificOutput.permissionDecision,
-          'deny'
-        )
+        assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
       }
     })
 
-    it('uses valid permissionDecision when denying config file Write', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
-        {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Write',
-          tool_input: { file_path: '.claude/prove_it.local.json', content: '{}' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
+    it('uses valid permissionDecision when denying config Write', () => {
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Write',
+        tool_input: { file_path: '.claude/prove_it.local.json', content: '{}' },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
-      assertValidPermissionDecision(result, 'edit/config-write')
-
+      assertValidPermissionDecision(result, 'config-write')
       if (result.output?.hookSpecificOutput?.permissionDecision) {
-        assert.strictEqual(
-          result.output.hookSpecificOutput.permissionDecision,
-          'deny'
-        )
+        assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
+      }
+    })
+
+    it('uses valid permissionDecision when denying config Bash redirect', () => {
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: "echo '{}' > .claude/prove_it.local.json" },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assertValidPermissionDecision(result, 'config-bash-write')
+      if (result.output?.hookSpecificOutput?.permissionDecision) {
+        assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
       }
     })
   })
 
-  describe('prove_it_done.js PreToolUse decisions', () => {
+  describe('PreToolUse test-gate decisions', () => {
     it('uses valid permissionDecision when wrapping git commit', () => {
       createTestScript(tmpDir, true)
-
-      const result = invokeHook(
-        'prove_it_done.js',
+      writeConfig(tmpDir, makeConfig([
         {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Bash',
-          tool_input: { command: 'git commit -m "test"' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Bash',
+          triggers: ['(^|\\s)git\\s+commit\\b'],
+          checks: [
+            { name: 'full-tests', type: 'script', command: './script/test' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git commit -m "test"' },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assertValidPermissionDecision(result, 'done/git-commit')
     })
 
     it('uses deny when test script is missing', () => {
-      // No test script created
-
-      const result = invokeHook(
-        'prove_it_done.js',
+      writeConfig(tmpDir, makeConfig([
         {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Bash',
-          tool_input: { command: 'git commit -m "test"' },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Bash',
+          triggers: ['(^|\\s)git\\s+commit\\b'],
+          checks: [
+            { name: 'full-tests', type: 'script', command: './script/test' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git commit -m "test"' },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assertValidPermissionDecision(result, 'done/missing-script')
       assert.strictEqual(
@@ -158,38 +152,55 @@ describe('Claude Code hook output contract', () => {
     })
   })
 
-  describe('prove_it_edit.js config protection via Bash', () => {
-    it('uses valid permissionDecision when denying config write via Bash', () => {
-      const result = invokeHook(
-        'prove_it_edit.js',
+  describe('Stop decisions', () => {
+    it('uses block when tests fail', () => {
+      createFastTestScript(tmpDir, false)
+      writeConfig(tmpDir, makeConfig([
         {
-          hook_event_name: 'PreToolUse',
-          tool_name: 'Bash',
-          tool_input: { command: "echo '{}' > .claude/prove_it.local.json" },
-          cwd: tmpDir
-        },
-        { projectDir: tmpDir }
-      )
+          type: 'claude',
+          event: 'Stop',
+          checks: [
+            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+          ]
+        }
+      ]))
 
-      assertValidPermissionDecision(result, 'edit/config-bash-write')
+      const result = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: 'test-contract-stop',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
-      if (result.output?.hookSpecificOutput?.permissionDecision) {
-        assert.strictEqual(
-          result.output.hookSpecificOutput.permissionDecision,
-          'deny'
-        )
-      }
+      assert.strictEqual(result.output.decision, 'block')
+    })
+
+    it('uses approve when tests pass', () => {
+      createFastTestScript(tmpDir, true)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          checks: [
+            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: 'test-contract-stop-pass',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.output.decision, 'approve')
     })
   })
 
   describe('session_id passed as parameter via subprocess', () => {
-    // session_id comes from hook JSON input and is passed directly to
-    // session functions as a parameter. No env vars involved.
-
     it('session functions write to correct files when given session_id', () => {
       const probeScript = path.join(tmpDir, 'session_probe.js')
       const proveItDir = path.join(tmpDir, 'prove_it_state')
-      const sharedPath = path.join(HOOKS_DIR, '..', 'shared.js')
+      const sharedPath = path.join(__dirname, '..', '..', 'lib', 'shared.js')
 
       createFile(tmpDir, 'session_probe.js', [
         `const { saveSessionState, logReview } = require(${JSON.stringify(sharedPath)});`,
@@ -207,13 +218,12 @@ describe('Claude Code hook output contract', () => {
 
       assert.strictEqual(result.status, 0, `Probe script should exit 0: ${result.stderr}`)
 
-      // Verify saveSessionState wrote the JSON file
+      const fs = require('fs')
       const stateFile = path.join(proveItDir, 'sessions', 'test-session-xyz789.json')
       assert.ok(fs.existsSync(stateFile), `State file should exist at ${stateFile}`)
       const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'))
       assert.strictEqual(state.probe_key, 'probe_value')
 
-      // Verify logReview wrote the JSONL file
       const logFile = path.join(proveItDir, 'sessions', 'test-session-xyz789.jsonl')
       assert.ok(fs.existsSync(logFile), `Log file should exist at ${logFile}`)
       const entry = JSON.parse(fs.readFileSync(logFile, 'utf8').trim())
@@ -225,7 +235,7 @@ describe('Claude Code hook output contract', () => {
     it('without session_id, state functions gracefully degrade', () => {
       const probeScript = path.join(tmpDir, 'session_probe_no_id.js')
       const proveItDir = path.join(tmpDir, 'prove_it_no_id')
-      const sharedPath = path.join(HOOKS_DIR, '..', 'shared.js')
+      const sharedPath = path.join(__dirname, '..', '..', 'lib', 'shared.js')
 
       createFile(tmpDir, 'session_probe_no_id.js', [
         `const { saveSessionState, loadSessionState, logReview } = require(${JSON.stringify(sharedPath)});`,
@@ -238,18 +248,16 @@ describe('Claude Code hook output contract', () => {
       ].join('\n'))
 
       const result = spawnSync('node', [probeScript], {
-        input: JSON.stringify({}), // no session_id
+        input: JSON.stringify({}),
         encoding: 'utf8',
         env: { ...process.env, PROVE_IT_DIR: proveItDir }
       })
 
       assert.strictEqual(result.status, 0, `Probe script should exit 0: ${result.stderr}`)
-
-      // loadSessionState should have returned null
       const output = JSON.parse(result.stdout)
       assert.strictEqual(output.loadResult, null)
 
-      // logReview skips logging when no session ID
+      const fs = require('fs')
       const unknownLog = path.join(proveItDir, 'sessions', 'unknown.jsonl')
       assert.ok(!fs.existsSync(unknownLog), 'Should not create unknown.jsonl')
     })

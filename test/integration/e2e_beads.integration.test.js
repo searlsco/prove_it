@@ -9,7 +9,9 @@ const {
   cleanupTempDir,
   initGitRepo,
   createFile,
-  HOOKS_DIR
+  writeConfig,
+  makeConfig,
+  CLI_PATH
 } = require('./hook-harness')
 
 /**
@@ -44,6 +46,19 @@ describe('E2E: beads enforcement via claude CLI', { skip: !canRunE2E && 'require
     // Create a target file for claude to attempt editing
     createFile(tmpDir, 'target.txt', 'original content\n')
 
+    // Write v2 config with config-protection and beads-gate
+    writeConfig(tmpDir, makeConfig([
+      {
+        type: 'claude',
+        event: 'PreToolUse',
+        matcher: 'Edit|Write|NotebookEdit|Bash',
+        checks: [
+          { name: 'config-protection', type: 'script', command: 'prove_it builtin:config-protection' },
+          { name: 'beads-gate', type: 'script', command: 'prove_it builtin:beads-gate', when: { fileExists: '.beads' } }
+        ]
+      }
+    ]))
+
     // Initial commit so git is clean
     spawnSync('git', ['add', '.'], { cwd: tmpDir })
     spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
@@ -54,17 +69,16 @@ describe('E2E: beads enforcement via claude CLI', { skip: !canRunE2E && 'require
   })
 
   it('denies file edit when no bead is in_progress', () => {
-    const beadsHookPath = path.join(HOOKS_DIR, 'prove_it_edit.js')
     const hookLog = path.join(tmpDir, 'hook.log')
 
-    // Wrapper that logs invocation details and delegates to the real hook
+    // Wrapper that logs invocation details and delegates to the prove_it dispatcher
     const wrapperScript = path.join(tmpDir, '.claude', 'hooks', 'beads-wrapper.sh')
     createFile(tmpDir, '.claude/hooks/beads-wrapper.sh', [
       '#!/bin/bash',
       'INPUT=$(cat)',
       'TOOL=$(echo "$INPUT" | jq -r .tool_name 2>/dev/null)',
       `echo "HOOK_FIRED: tool=$TOOL" >> ${hookLog}`,
-      `OUTPUT=$(echo "$INPUT" | node ${beadsHookPath})`,
+      `OUTPUT=$(echo "$INPUT" | node ${CLI_PATH} hook claude:PreToolUse)`,
       'EXIT=$?',
       `echo "HOOK_OUTPUT: exit=$EXIT output=$OUTPUT" >> ${hookLog}`,
       'echo "$OUTPUT"',

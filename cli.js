@@ -8,11 +8,12 @@
  *   init      - Initialize prove_it in current repository
  *   deinit    - Remove prove_it files from current repository
  *   diagnose  - Check installation status and report issues
+ *   hook      - Run a hook dispatcher (claude:<Event> or git:<event>)
  */
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { loadJson, writeJson, ensureDir, loadEffectiveConfig, defaultTestConfig, defaultBeadsConfig, isBeadsRepo } = require('./lib/shared')
+const { loadJson, writeJson } = require('./lib/shared')
 
 function rmIfExists (p) {
   try {
@@ -23,12 +24,6 @@ function rmIfExists (p) {
   }
 }
 
-function chmodX (p) {
-  try {
-    fs.chmodSync(p, 0o755)
-  } catch {}
-}
-
 function log (...args) {
   console.log(...args)
 }
@@ -37,98 +32,79 @@ function getClaudeDir () {
   return path.join(os.homedir(), '.claude')
 }
 
-function getSrcRoot () {
-  return __dirname
-}
-
 // ============================================================================
 // Install command
 // ============================================================================
 
 function addHookGroup (hooksObj, eventName, group) {
   if (!hooksObj[eventName]) hooksObj[eventName] = []
-  // Check if this hook already exists (by command string)
   const groupStr = JSON.stringify(group)
-  const exists = hooksObj[eventName].some((g) => JSON.stringify(g) === groupStr)
+  const exists = hooksObj[eventName].some(g => JSON.stringify(g) === groupStr)
   if (!exists) {
     hooksObj[eventName].push(group)
   }
 }
 
+function removeProveItGroups (groups) {
+  if (!Array.isArray(groups)) return groups
+  return groups.filter(g => {
+    const hooks = g && g.hooks ? g.hooks : []
+    const serialized = JSON.stringify(hooks)
+    // Remove old v1 hook registrations
+    if (serialized.includes('prove_it_test.js')) return false
+    if (serialized.includes('prove_it_session_start.js')) return false
+    if (serialized.includes('prove_it_beads.js')) return false
+    if (serialized.includes('prove_it_stop.js')) return false
+    if (serialized.includes('prove_it_done.js')) return false
+    if (serialized.includes('prove_it_edit.js')) return false
+    // Remove v2 dispatcher registrations (for re-install / uninstall)
+    if (serialized.includes('prove_it hook claude:')) return false
+    return true
+  })
+}
+
 function cmdInstall () {
   const claudeDir = getClaudeDir()
-  const srcRoot = getSrcRoot()
-  const globalDir = path.join(srcRoot, 'global')
-
-  const dstRulesDir = path.join(claudeDir, 'rules')
-  const dstRulesFile = path.join(dstRulesDir, 'prove_it.md')
-  const srcRulesFile = path.join(globalDir, 'CLAUDE.md')
-
-  const dstKitDir = path.join(claudeDir, 'prove_it')
-  const srcCfg = path.join(globalDir, 'prove_it', 'config.json')
-  const dstCfg = path.join(dstKitDir, 'config.json')
-
-  // Copy rules file (always overwrite on upgrade - it's prove_it's file)
-  ensureDir(dstRulesDir)
-  fs.copyFileSync(srcRulesFile, dstRulesFile)
-
-  // Create config if missing
-  ensureDir(dstKitDir)
-  if (!fs.existsSync(dstCfg)) {
-    fs.copyFileSync(srcCfg, dstCfg)
-  }
-
-  // Merge settings.json hooks - call prove_it CLI directly
   const settingsPath = path.join(claudeDir, 'settings.json')
   const settings = loadJson(settingsPath) || {}
   if (!settings.hooks) settings.hooks = {}
 
+  // Clean up old-style hook registrations first
+  for (const k of Object.keys(settings.hooks)) {
+    settings.hooks[k] = removeProveItGroups(settings.hooks[k])
+    if (Array.isArray(settings.hooks[k]) && settings.hooks[k].length === 0) {
+      delete settings.hooks[k]
+    }
+  }
+
+  // Register 3 thin dispatchers
   addHookGroup(settings.hooks, 'SessionStart', {
     matcher: 'startup|resume|clear|compact',
-    hooks: [
-      {
-        type: 'command',
-        command: 'prove_it hook session-start'
-      }
-    ]
+    hooks: [{
+      type: 'command',
+      command: 'prove_it hook claude:SessionStart'
+    }]
   })
 
-  addHookGroup(settings.hooks, 'PreToolUse', {
-    matcher: 'Bash',
-    hooks: [
-      {
-        type: 'command',
-        command: 'prove_it hook done'
-      }
-    ]
-  })
-
-  // Edit gate: config protection + beads enforcement + source filtering
   addHookGroup(settings.hooks, 'PreToolUse', {
     matcher: 'Edit|Write|NotebookEdit|Bash',
-    hooks: [
-      {
-        type: 'command',
-        command: 'prove_it hook edit'
-      }
-    ]
+    hooks: [{
+      type: 'command',
+      command: 'prove_it hook claude:PreToolUse'
+    }]
   })
 
   addHookGroup(settings.hooks, 'Stop', {
-    hooks: [
-      {
-        type: 'command',
-        command: 'prove_it hook stop',
-        timeout: 3600
-      }
-    ]
+    hooks: [{
+      type: 'command',
+      command: 'prove_it hook claude:Stop',
+      timeout: 3600
+    }]
   })
 
   writeJson(settingsPath, settings)
 
   log('prove_it installed.')
-  log(`  Rules: ${dstRulesFile}`)
-  log(`  Config: ${dstCfg}`)
   log(`  Settings: ${settingsPath}`)
   log('')
   log('════════════════════════════════════════════════════════════════════')
@@ -137,30 +113,13 @@ function cmdInstall () {
   log('')
   log('Next steps:')
   log('  1. Restart Claude Code (required)')
-  log('  2. Run: prove_it init  in a repo to add local templates')
+  log('  2. Run: prove_it init  in a repo to add project config')
   log('  3. Run: prove_it diagnose  to verify installation')
 }
 
 // ============================================================================
 // Uninstall command
 // ============================================================================
-
-function removeProveItGroups (groups) {
-  if (!Array.isArray(groups)) return groups
-  return groups.filter((g) => {
-    const hooks = g && g.hooks ? g.hooks : []
-    const serialized = JSON.stringify(hooks)
-    return (
-      !serialized.includes('prove_it_test.js') &&
-      !serialized.includes('prove_it_session_start.js') &&
-      !serialized.includes('prove_it_beads.js') &&
-      !serialized.includes('prove_it_stop.js') &&
-      !serialized.includes('prove_it_done.js') &&
-      !serialized.includes('prove_it_edit.js') &&
-      !serialized.includes('prove_it hook')
-    )
-  })
-}
 
 function cmdUninstall () {
   const claudeDir = getClaudeDir()
@@ -191,121 +150,23 @@ function cmdUninstall () {
 // Init command
 // ============================================================================
 
-const { execSync } = require('child_process')
-
-function isIgnoredByGit (repoRoot, relativePath) {
-  try {
-    execSync(`git check-ignore -q "${relativePath}"`, { cwd: repoRoot, stdio: 'ignore' })
-    return true
-  } catch {
-    return false
-  }
-}
-
-function isTrackedByGit (repoRoot, relativePath) {
-  try {
-    execSync(`git ls-files --error-unmatch "${relativePath}"`, { cwd: repoRoot, stdio: 'ignore' })
-    return true
-  } catch {
-    return false
-  }
-}
-
-function addToGitignore (repoRoot, pattern) {
-  const gitignorePath = path.join(repoRoot, '.gitignore')
-  let content = ''
-
-  if (fs.existsSync(gitignorePath)) {
-    content = fs.readFileSync(gitignorePath, 'utf8')
-    // Check if pattern already exists
-    if (content.split('\n').some((line) => line.trim() === pattern)) {
-      return false // Already present
-    }
-  }
-
-  // Add pattern with a newline if needed
-  if (content && !content.endsWith('\n')) {
-    content += '\n'
-  }
-  content += pattern + '\n'
-  fs.writeFileSync(gitignorePath, content)
-  return true
-}
-
-function isScriptTestStub (scriptTestPath) {
-  if (!fs.existsSync(scriptTestPath)) return false
-  try {
-    const content = fs.readFileSync(scriptTestPath, 'utf8')
-    return content.includes('prove_it:')
-  } catch {
-    return false
-  }
-}
-
 function cmdInit () {
+  const { initProject } = require('./lib/init')
   const repoRoot = process.cwd()
-  const srcRoot = getSrcRoot()
-  const tpl = path.join(srcRoot, 'templates', 'project')
 
-  const results = {
-    teamConfig: { path: '.claude/prove_it.json', created: false, existed: false },
-    localConfig: { path: '.claude/prove_it.local.json', created: false, existed: false },
-    scriptTest: { path: 'script/test', created: false, existed: false, isStub: false }
+  // Parse flags
+  const args = process.argv.slice(3)
+  let tier = 3
+  for (const arg of args) {
+    if (arg === '--tier=1' || arg === '--claude-only') tier = 1
+    else if (arg === '--tier=2' || arg === '--claude-git') tier = 2
+    else if (arg === '--tier=3' || arg === '--all') tier = 3
   }
 
-  // Copy team config
-  const teamConfigSrc = path.join(tpl, '.claude', 'prove_it.json')
-  const teamConfigDst = path.join(repoRoot, '.claude', 'prove_it.json')
-  if (fs.existsSync(teamConfigDst)) {
-    results.teamConfig.existed = true
-  } else {
-    ensureDir(path.dirname(teamConfigDst))
-    fs.copyFileSync(teamConfigSrc, teamConfigDst)
-    results.teamConfig.created = true
-  }
+  const results = initProject(repoRoot, { tier })
 
-  // Copy local config
-  const localConfigSrc = path.join(tpl, '.claude', 'prove_it.local.json')
-  const localConfigDst = path.join(repoRoot, '.claude', 'prove_it.local.json')
-  if (fs.existsSync(localConfigDst)) {
-    results.localConfig.existed = true
-  } else {
-    ensureDir(path.dirname(localConfigDst))
-    fs.copyFileSync(localConfigSrc, localConfigDst)
-    results.localConfig.created = true
-  }
+  log(`prove_it initialized (tier ${tier}).\n`)
 
-  // Create stub script/test if missing
-  const scriptTest = path.join(repoRoot, 'script', 'test')
-  if (fs.existsSync(scriptTest)) {
-    results.scriptTest.existed = true
-    results.scriptTest.isStub = isScriptTestStub(scriptTest)
-  } else {
-    ensureDir(path.dirname(scriptTest))
-    fs.copyFileSync(path.join(srcRoot, 'templates', 'script', 'test'), scriptTest)
-    chmodX(scriptTest)
-    results.scriptTest.created = true
-    results.scriptTest.isStub = true
-  }
-
-  // Check script/test_fast
-  const scriptTestFast = path.join(repoRoot, 'script', 'test_fast')
-  const hasTestFast = fs.existsSync(scriptTestFast)
-
-  // Add prove_it.local.json to .gitignore only if not already covered
-  let addedToGitignore = false
-  if (!isIgnoredByGit(repoRoot, '.claude/prove_it.local.json')) {
-    addedToGitignore = addToGitignore(repoRoot, '.claude/prove_it.local.json')
-  }
-
-  // Check if team config needs to be committed
-  const teamConfigNeedsCommit =
-    fs.existsSync(teamConfigDst) && !isTrackedByGit(repoRoot, '.claude/prove_it.json')
-
-  // Output results
-  log('prove_it initialized.\n')
-
-  // What happened
   if (results.teamConfig.created) {
     log(`  Created: ${results.teamConfig.path}`)
   } else {
@@ -326,84 +187,60 @@ function cmdInit () {
     log(`  Exists:  ${results.scriptTest.path} (customized)`)
   }
 
-  if (addedToGitignore) {
+  if (results.addedToGitignore) {
     log('  Added to .gitignore: .claude/prove_it.local.json')
   }
 
   // Build TODO list
   const todos = []
 
-  // script/test TODO
   if (results.scriptTest.isStub) {
-    todos.push({
-      done: false,
-      text: 'Edit script/test to run your full test suite (unit + integration tests)'
-    })
+    todos.push({ done: false, text: 'Edit script/test to run your full test suite' })
   } else {
-    todos.push({
-      done: true,
-      text: 'script/test configured'
-    })
+    todos.push({ done: true, text: 'script/test configured' })
   }
 
-  // script/test_fast TODO
-  if (hasTestFast) {
-    todos.push({
-      done: true,
-      text: 'script/test_fast configured (runs on Stop)'
-    })
+  const scriptTestFast = path.join(repoRoot, 'script', 'test_fast')
+  if (fs.existsSync(scriptTestFast)) {
+    todos.push({ done: true, text: 'script/test_fast configured (runs on Stop)' })
   } else {
-    todos.push({
-      done: false,
-      text: 'Create script/test_fast (fast unit tests, runs on Stop)'
-    })
+    todos.push({ done: false, text: 'Create script/test_fast (fast tests, runs on Stop)' })
   }
 
-  // Customize team config TODO
   todos.push({
     done: false,
-    text: 'Customize .claude/prove_it.json (test commands, source globs)'
+    text: 'Customize .claude/prove_it.json (source globs, check commands)'
   })
 
-  // Commit team config TODO
-  if (teamConfigNeedsCommit) {
-    todos.push({
-      done: false,
-      text: 'Commit .claude/prove_it.json'
-    })
-  } else if (fs.existsSync(teamConfigDst)) {
-    todos.push({
-      done: true,
-      text: '.claude/prove_it.json committed'
-    })
+  if (results.teamConfigNeedsCommit) {
+    todos.push({ done: false, text: 'Commit .claude/prove_it.json' })
+  } else if (results.teamConfig.existed) {
+    todos.push({ done: true, text: '.claude/prove_it.json committed' })
   }
 
-  // Print TODOs
   log('\nTODO:')
   for (const todo of todos) {
     const checkbox = todo.done ? '[x]' : '[ ]'
     log(`  ${checkbox} ${todo.text}`)
   }
   log('')
-  log('See: https://github.com/searlsco/prove_it#configuration')
 }
 
 // ============================================================================
 // Deinit command
 // ============================================================================
 
-// Files/directories that prove_it owns and can safely remove
 const PROVE_IT_PROJECT_FILES = [
   '.claude/prove_it.json',
   '.claude/prove_it.local.json'
 ]
 
 function cmdDeinit () {
+  const { isScriptTestStub } = require('./lib/init')
   const repoRoot = process.cwd()
   const removed = []
   const skipped = []
 
-  // Remove files we created
   for (const relPath of PROVE_IT_PROJECT_FILES) {
     const absPath = path.join(repoRoot, relPath)
     if (fs.existsSync(absPath)) {
@@ -412,14 +249,12 @@ function cmdDeinit () {
     }
   }
 
-  // Check script/test - only remove if it's still the stub
   const scriptTest = path.join(repoRoot, 'script', 'test')
   if (fs.existsSync(scriptTest)) {
     try {
       if (isScriptTestStub(scriptTest)) {
         rmIfExists(scriptTest)
         removed.push('script/test')
-        // Remove script/ dir if empty
         const scriptDir = path.join(repoRoot, 'script')
         try {
           if (fs.readdirSync(scriptDir).length === 0) {
@@ -435,7 +270,6 @@ function cmdDeinit () {
     }
   }
 
-  // Try to remove .claude/ if empty
   const claudeDir = path.join(repoRoot, '.claude')
   if (fs.existsSync(claudeDir)) {
     try {
@@ -466,6 +300,7 @@ function cmdDeinit () {
 // ============================================================================
 
 function cmdDiagnose () {
+  const { loadEffectiveConfig } = require('./lib/config')
   const claudeDir = getClaudeDir()
   const repoRoot = process.cwd()
   const issues = []
@@ -473,33 +308,22 @@ function cmdDiagnose () {
   log('prove_it diagnose\n')
   log('Global installation:')
 
-  // Check global config
-  const configPath = path.join(claudeDir, 'prove_it', 'config.json')
-  if (fs.existsSync(configPath)) {
-    log(`  [x] Config exists: ${configPath}`)
-  } else {
-    log(`  [ ] Config missing: ${configPath}`)
-    issues.push("Run 'prove_it install' to create config")
-  }
-
   // Check settings.json for hook registration
   const settingsPath = path.join(claudeDir, 'settings.json')
   const settings = loadJson(settingsPath)
   if (settings && settings.hooks) {
     const serialized = JSON.stringify(settings.hooks)
-    const hasSessionStart = serialized.includes('prove_it hook session-start')
-    const hasStop = serialized.includes('prove_it hook stop')
-    const hasDone = serialized.includes('prove_it hook done')
-    const hasEdit = serialized.includes('prove_it hook edit')
+    const hasSessionStart = serialized.includes('prove_it hook claude:SessionStart')
+    const hasPreToolUse = serialized.includes('prove_it hook claude:PreToolUse')
+    const hasStop = serialized.includes('prove_it hook claude:Stop')
 
-    if (hasSessionStart && hasStop && hasDone && hasEdit) {
-      log('  [x] Hooks registered in settings.json')
+    if (hasSessionStart && hasPreToolUse && hasStop) {
+      log('  [x] Hooks registered in settings.json (3 dispatchers)')
     } else {
       log('  [ ] Hooks not fully registered in settings.json')
-      if (!hasSessionStart) issues.push('SessionStart hook not registered')
-      if (!hasStop) issues.push('Stop hook not registered')
-      if (!hasDone) issues.push('Done hook not registered')
-      if (!hasEdit) issues.push('Edit hook not registered')
+      if (!hasSessionStart) issues.push('SessionStart dispatcher not registered')
+      if (!hasPreToolUse) issues.push('PreToolUse dispatcher not registered')
+      if (!hasStop) issues.push('Stop dispatcher not registered')
     }
   } else {
     log('  [ ] settings.json missing or has no hooks')
@@ -529,8 +353,17 @@ function cmdDiagnose () {
   const teamConfigPath = path.join(repoRoot, '.claude', 'prove_it.json')
   if (fs.existsSync(teamConfigPath)) {
     log('  [x] Team config exists: .claude/prove_it.json')
+    const teamCfg = loadJson(teamConfigPath)
+    if (teamCfg?.configVersion === 2) {
+      const hookCount = (teamCfg.hooks || []).length
+      log(`      Config v2: ${hookCount} hook entries`)
+    } else {
+      log('      Warning: config missing configVersion: 2')
+      issues.push('Config may need migration to v2 format')
+    }
   } else {
-    log('  [ ] Team config missing (optional): .claude/prove_it.json')
+    log('  [ ] Team config missing: .claude/prove_it.json')
+    issues.push("Run 'prove_it init' to create project config")
   }
 
   // Check local config
@@ -539,22 +372,16 @@ function cmdDiagnose () {
     log('  [x] Local config exists: .claude/prove_it.local.json')
     const localConfig = loadJson(localConfigPath)
     if (localConfig?.runs) {
-      const fastRun = localConfig.runs.test_fast
-      const fullRun = localConfig.runs.test_full
-      if (fastRun) {
-        const status = fastRun.pass ? 'passed' : 'failed'
-        log(`      Last fast run: ${status} at ${new Date(fastRun.at).toISOString()}`)
-      }
-      if (fullRun) {
-        const status = fullRun.pass ? 'passed' : 'failed'
-        log(`      Last full run: ${status} at ${new Date(fullRun.at).toISOString()}`)
+      for (const [key, run] of Object.entries(localConfig.runs)) {
+        const status = run.pass ? 'passed' : 'failed'
+        log(`      Last ${key}: ${status} at ${new Date(run.at).toISOString()}`)
       }
     }
   } else {
     log('  [ ] Local config missing (optional): .claude/prove_it.local.json')
   }
 
-  // Check .gitignore for prove_it.local.json
+  // Check .gitignore
   const gitignorePath = path.join(repoRoot, '.gitignore')
   if (fs.existsSync(gitignorePath)) {
     const gitignoreContent = fs.readFileSync(gitignorePath, 'utf8')
@@ -567,9 +394,9 @@ function cmdDiagnose () {
   }
 
   // Check beads
-  if (isBeadsRepo(repoRoot)) {
+  const beadsDir = path.join(repoRoot, '.beads')
+  if (fs.existsSync(beadsDir)) {
     log('  [x] Beads directory exists: .beads/')
-    log('      (beads enforcement is active for this repo)')
   } else {
     log('  [ ] Beads not initialized (optional): .beads/')
   }
@@ -577,7 +404,13 @@ function cmdDiagnose () {
   // Effective merged config
   log('\nEffective config (merged):')
   try {
-    const { cfg } = loadEffectiveConfig(repoRoot, () => ({ ...defaultTestConfig(), ...defaultBeadsConfig() }))
+    const defaultFn = () => ({
+      enabled: true,
+      sources: null,
+      format: { maxOutputChars: 12000 },
+      hooks: []
+    })
+    const { cfg } = loadEffectiveConfig(repoRoot, defaultFn)
     log(JSON.stringify(cfg, null, 2).split('\n').map(l => '  ' + l).join('\n'))
   } catch (e) {
     log(`  (error loading config: ${e.message})`)
@@ -596,26 +429,30 @@ function cmdDiagnose () {
 }
 
 // ============================================================================
-// Hook command - runs hook logic directly
+// Hook command - dispatches to claude or git dispatcher
 // ============================================================================
 
-function cmdHook (hookType) {
-  const hookMap = {
-    stop: './lib/hooks/prove_it_stop.js',
-    done: './lib/hooks/prove_it_done.js',
-    edit: './lib/hooks/prove_it_edit.js',
-    'session-start': './lib/hooks/prove_it_session_start.js'
-  }
-
-  const hookPath = hookMap[hookType]
-  if (!hookPath) {
-    console.error(`Unknown hook type: ${hookType}`)
-    console.error('Available hooks: stop, done, edit, session-start')
+function cmdHook (hookSpec) {
+  if (!hookSpec || !hookSpec.includes(':')) {
+    console.error(`Invalid hook spec: ${hookSpec}`)
+    console.error('Usage: prove_it hook claude:<Event> or prove_it hook git:<event>')
+    console.error('Examples: prove_it hook claude:Stop, prove_it hook git:pre-commit')
     process.exit(1)
   }
 
-  const hook = require(hookPath)
-  hook.main()
+  const [type, event] = hookSpec.split(':', 2)
+
+  if (type === 'claude') {
+    const { dispatch } = require('./lib/dispatcher/claude')
+    dispatch(event)
+  } else if (type === 'git') {
+    const { dispatch } = require('./lib/dispatcher/git')
+    dispatch(event)
+  } else {
+    console.error(`Unknown hook type: ${type}`)
+    console.error('Supported types: claude, git')
+    process.exit(1)
+  }
 }
 
 // ============================================================================
@@ -623,7 +460,7 @@ function cmdHook (hookType) {
 // ============================================================================
 
 function showHelp () {
-  log(`prove_it - Verifiability-first hooks for Claude Code
+  log(`prove_it - Config-driven hook framework for Claude Code
 
 Usage: prove_it <command>
 
@@ -633,15 +470,22 @@ Commands:
   init        Initialize prove_it in current repository
   deinit      Remove prove_it files from current repository
   diagnose    Check installation status and report issues
+  hook        Run a hook dispatcher (claude:<Event> or git:<event>)
   help        Show this help message
   -v, --version  Show version number
 
+Init options:
+  --tier=1, --claude-only   Claude hooks only
+  --tier=2, --claude-git    Claude + Git hooks
+  --tier=3, --all           Claude + Git + Default checks (default)
+
 Examples:
-  prove_it install      # Set up global hooks
-  prove_it init         # Add templates to current repo
-  prove_it diagnose     # Check installation status
-  prove_it deinit       # Remove prove_it from current repo
-  prove_it uninstall    # Remove global hooks
+  prove_it install           # Set up global hooks
+  prove_it init              # Add project config (tier 3)
+  prove_it init --tier=1     # Minimal: claude hooks only
+  prove_it diagnose          # Check installation status
+  prove_it deinit            # Remove prove_it from current repo
+  prove_it uninstall         # Remove global hooks
 `)
 }
 

@@ -12,19 +12,21 @@ const {
   createFile,
   createTestScript,
   makeExecutable,
-  setupSessionWithDiffs
+  writeConfig,
+  makeConfig,
+  isolatedEnv
 } = require('./hook-harness')
 
 /**
- * GAPs 10, 12: Reviewer prompt passthrough.
+ * Reviewer prompt passthrough for the v2 dispatcher.
  *
- * Verifies that the reviewer receives the correct diff content in its prompt
+ * Verifies that agent checks receive the correct diff content in their prompt
  * and that custom reviewer prompts from config are passed through.
  *
- * Uses a mock reviewer script that captures its arguments to a file.
+ * Uses a mock reviewer script that captures its stdin to a file.
  */
 
-describe('Reviewer prompt passthrough', () => {
+describe('Reviewer prompt passthrough (v2)', () => {
   let tmpDir
   let captureFile
 
@@ -51,38 +53,36 @@ describe('Reviewer prompt passthrough', () => {
     if (tmpDir) cleanupTempDir(tmpDir)
   })
 
-  function isolatedEnv () {
-    return {
-      HOME: tmpDir,
-      PROVE_IT_DIR: path.join(tmpDir, '.prove_it_test')
-    }
-  }
-
-  // ──── GAP 10: Reviewer gets correct diff ────
-
   describe('Reviewer receives correct diff content', () => {
-    it('done reviewer receives staged diff in prompt', () => {
-      createFile(tmpDir, '.claude/prove_it.json', JSON.stringify({
-        hooks: {
-          done: {
-            reviewer: {
-              enabled: true,
-              command: `${path.join(tmpDir, 'capture_reviewer.sh')}`
+    it('commit reviewer receives staged diff in prompt', () => {
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Bash',
+          triggers: ['(^|\\s)git\\s+commit\\b'],
+          checks: [
+            { name: 'full-tests', type: 'script', command: './script/test' },
+            {
+              name: 'code-review',
+              type: 'agent',
+              command: path.join(tmpDir, 'capture_reviewer.sh'),
+              prompt: 'Review these staged changes:\n\n{{staged_diff}}'
             }
-          }
+          ]
         }
-      }))
+      ]))
 
       // Stage a file so git diff --cached has content
       createFile(tmpDir, 'src/app.js', 'function app() { return 1; }\n')
       spawnSync('git', ['add', 'src/app.js'], { cwd: tmpDir })
 
-      const result = invokeHook('prove_it_done.js', {
+      const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "add app"' },
         cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
       assert.ok(fs.existsSync(captureFile),
@@ -92,67 +92,37 @@ describe('Reviewer prompt passthrough', () => {
       assert.ok(captured.includes('src/app.js'),
         `Reviewer prompt should contain staged file name, got: ${captured.slice(0, 200)}`)
     })
-
-    it('stop reviewer receives session diffs in prompt', () => {
-      const sessionId = 'test-reviewer-diff'
-      setupSessionWithDiffs(tmpDir, sessionId, tmpDir)
-
-      createFile(tmpDir, '.claude/prove_it.json', JSON.stringify({
-        hooks: {
-          stop: {
-            reviewer: {
-              enabled: true,
-              command: `${path.join(tmpDir, 'capture_reviewer.sh')}`
-            }
-          }
-        }
-      }))
-
-      // Create test_fast so stop hook has something to run
-      createFile(tmpDir, 'script/test_fast', '#!/bin/bash\nexit 0\n')
-      makeExecutable(path.join(tmpDir, 'script', 'test_fast'))
-
-      const result = invokeHook('prove_it_stop.js', {
-        hook_event_name: 'Stop',
-        session_id: sessionId,
-        cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
-
-      assert.strictEqual(result.exitCode, 0)
-      assert.ok(fs.existsSync(captureFile),
-        'Capture file should exist (reviewer was called)')
-
-      const captured = fs.readFileSync(captureFile, 'utf8')
-      assert.ok(captured.includes('feature.js'),
-        `Reviewer prompt should contain diff file name, got: ${captured.slice(0, 200)}`)
-    })
   })
 
-  // ──── GAP 12: Custom reviewer prompt ────
-
   describe('Custom reviewer prompt from config', () => {
-    it('done reviewer uses custom prompt from config', () => {
-      createFile(tmpDir, '.claude/prove_it.json', JSON.stringify({
-        hooks: {
-          done: {
-            reviewer: {
-              enabled: true,
-              command: `${path.join(tmpDir, 'capture_reviewer.sh')}`,
-              prompt: 'Check for SQL injection only'
+    it('reviewer uses custom prompt template', () => {
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Bash',
+          triggers: ['(^|\\s)git\\s+commit\\b'],
+          checks: [
+            { name: 'full-tests', type: 'script', command: './script/test' },
+            {
+              name: 'sql-review',
+              type: 'agent',
+              command: path.join(tmpDir, 'capture_reviewer.sh'),
+              prompt: 'Check for SQL injection only\n\n{{staged_diff}}'
             }
-          }
+          ]
         }
-      }))
+      ]))
 
       createFile(tmpDir, 'src/db.js', 'function query(sql) { return sql; }\n')
       spawnSync('git', ['add', 'src/db.js'], { cwd: tmpDir })
 
-      const result = invokeHook('prove_it_done.js', {
+      const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "add db"' },
         cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
       assert.ok(fs.existsSync(captureFile),
@@ -162,39 +132,54 @@ describe('Reviewer prompt passthrough', () => {
       assert.ok(captured.includes('Check for SQL injection only'),
         `Reviewer prompt should contain custom prompt text, got: ${captured.slice(0, 200)}`)
     })
+  })
 
-    it('stop reviewer uses custom prompt from config', () => {
-      const sessionId = 'test-custom-prompt'
-      setupSessionWithDiffs(tmpDir, sessionId, tmpDir)
+  describe('Reviewer failure denies commit', () => {
+    it('denies commit when reviewer returns FAIL', () => {
+      // Create a failing reviewer
+      createFile(tmpDir, 'fail_reviewer.sh',
+        '#!/bin/bash\ncat > /dev/null\necho "FAIL: untested code"\n')
+      makeExecutable(path.join(tmpDir, 'fail_reviewer.sh'))
 
-      createFile(tmpDir, '.claude/prove_it.json', JSON.stringify({
-        hooks: {
-          stop: {
-            reviewer: {
-              enabled: true,
-              command: `${path.join(tmpDir, 'capture_reviewer.sh')}`,
-              prompt: 'Check for SQL injection only'
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Bash',
+          triggers: ['(^|\\s)git\\s+commit\\b'],
+          checks: [
+            { name: 'full-tests', type: 'script', command: './script/test' },
+            {
+              name: 'code-review',
+              type: 'agent',
+              command: path.join(tmpDir, 'fail_reviewer.sh'),
+              prompt: 'Review these changes:\n\n{{staged_diff}}'
             }
-          }
+          ]
         }
-      }))
+      ]))
 
-      createFile(tmpDir, 'script/test_fast', '#!/bin/bash\nexit 0\n')
-      makeExecutable(path.join(tmpDir, 'script', 'test_fast'))
+      createFile(tmpDir, 'src/new.js', 'function untested() {}\n')
+      spawnSync('git', ['add', 'src/new.js'], { cwd: tmpDir })
 
-      const result = invokeHook('prove_it_stop.js', {
-        hook_event_name: 'Stop',
-        session_id: sessionId,
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'git commit -m "add untested"' },
         cwd: tmpDir
-      }, { projectDir: tmpDir, env: isolatedEnv() })
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
-      assert.ok(fs.existsSync(captureFile),
-        'Capture file should exist (reviewer was called)')
-
-      const captured = fs.readFileSync(captureFile, 'utf8')
-      assert.ok(captured.includes('Check for SQL injection only'),
-        `Reviewer prompt should contain custom prompt text, got: ${captured.slice(0, 200)}`)
+      assert.ok(result.output, 'Hook should produce output when reviewer fails')
+      assert.strictEqual(
+        result.output.hookSpecificOutput.permissionDecision,
+        'deny',
+        'Should deny when reviewer returns FAIL'
+      )
+      assert.ok(
+        result.output.hookSpecificOutput.permissionDecisionReason.includes('untested code'),
+        'Denial reason should include reviewer feedback'
+      )
     })
   })
 })

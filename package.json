@@ -1,7 +1,7 @@
 {
   "name": "prove_it",
-  "version": "0.0.25",
-  "description": "Verifiability-first hooks for Claude Code - enforce verified workflows",
+  "version": "0.1.0",
+  "description": "Config-driven hook framework for Claude Code - enforce verified workflows",
   "author": "Justin Searls <justin@searls.co>",
   "license": "MIT",
   "repository": {
@@ -26,16 +26,15 @@
   },
   "files": [
     "cli.js",
-    "lib/",
-    "global/",
-    "templates/"
+    "lib/"
   ],
   "engines": {
     "node": ">=18.0.0"
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "test:integration": "node --test test/integration/beads.integration.test.js test/integration/test_enforcement.integration.test.js test/integration/hook_contract.integration.test.js test/integration/core_hooks.integration.test.js test/integration/mtime_skip.integration.test.js test/integration/config_behavior.integration.test.js test/integration/reviewer_prompt.integration.test.js test/integration/e2e_beads.integration.test.js",
+    "test:integration": "node --test test/integration/beads.integration.test.js test/integration/test_enforcement.integration.test.js test/integration/hook_contract.integration.test.js test/integration/core_hooks.integration.test.js test/integration/mtime_skip.integration.test.js test/integration/config_behavior.integration.test.js test/integration/reviewer_prompt.integration.test.js",
+    "test:e2e": "node --test test/integration/e2e_beads.integration.test.js",
     "test:reviewer": "node --test test/integration/reviewer.integration.test.js",
     "test:all": "node --test test/*.test.js test/integration/*.test.js"
   },

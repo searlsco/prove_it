@@ -135,7 +135,7 @@ describe('commands that require tests', () => {
 })
 
 describe('local config write protection', () => {
-  const { isConfigFileEdit, isLocalConfigWrite } = require('../lib/hooks/prove_it_edit')
+  const { isConfigFileEdit, isLocalConfigWrite } = require('../lib/globs')
 
   describe('blocks Write/Edit tools', () => {
     it('blocks Write to prove_it.json', () => {
@@ -306,7 +306,14 @@ describe('loadEffectiveConfig ancestor discovery', () => {
   const os = require('os')
   const fs = require('fs')
   const path = require('path')
-  const { loadEffectiveConfig, defaultTestConfig } = require('../lib/shared')
+  const { loadEffectiveConfig } = require('../lib/shared')
+  const defaultTestConfig = () => ({
+    enabled: true,
+    sources: null,
+    format: { maxOutputChars: 12000 },
+    hooks: [],
+    commands: { test: { full: null, fast: null } }
+  })
 
   const tmpBase = path.join(os.tmpdir(), 'prove_it_config_test_' + Date.now())
 
@@ -392,12 +399,17 @@ describe('loadEffectiveConfig ancestor discovery', () => {
   it('uses defaults when no config found', () => {
     const emptyDir = path.join(os.tmpdir(), 'prove_it_empty_' + Date.now())
     fs.mkdirSync(emptyDir, { recursive: true })
+    const origDir = process.env.PROVE_IT_DIR
+    process.env.PROVE_IT_DIR = path.join(emptyDir, 'no_global_config')
     try {
       const { cfg } = loadEffectiveConfig(emptyDir, defaultTestConfig)
       // Should have default values
-      assert.strictEqual(cfg.hooks.stop.enabled, true)
+      assert.strictEqual(cfg.enabled, true)
+      assert.ok(Array.isArray(cfg.hooks), 'hooks should be an array')
       assert.strictEqual(cfg.commands.test.full, null)
     } finally {
+      if (origDir !== undefined) process.env.PROVE_IT_DIR = origDir
+      else delete process.env.PROVE_IT_DIR
       fs.rmSync(emptyDir, { recursive: true, force: true })
     }
   })
