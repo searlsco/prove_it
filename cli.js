@@ -170,7 +170,7 @@ function askYesNo (rl, question, defaultYes = true) {
  * and hasExplicitFlags indicates whether any flags were explicitly provided.
  */
 function parseInitFlags (args) {
-  const flags = { gitHooks: true, defaultChecks: true, autoMergeGitHooks: true }
+  const flags = { gitHooks: true, defaultChecks: true, autoMergeGitHooks: false }
   let hasExplicitFlags = false
 
   for (const arg of args) {
@@ -239,15 +239,23 @@ async function cmdInit () {
   }
 
   // Report git hook results
+  const skippedHooks = []
   if (results.gitHookFiles.preCommit || results.gitHookFiles.prePush) {
     for (const [label, hookName] of [['pre-commit', 'preCommit'], ['pre-push', 'prePush']]) {
       const r = results.gitHookFiles[hookName]
       if (!r) continue
       if (r.installed) log(`  Installed: .git/hooks/${label}`)
       else if (r.merged) log(`  Merged: .git/hooks/${label} (appended prove_it)`)
-      else if (r.skipped) log(`  Skipped: .git/hooks/${label} (existing hook, use --automatic-git-hook-merge)`)
+      else if (r.skipped) skippedHooks.push(label)
       else if (r.existed) log(`  Exists: .git/hooks/${label} (already has prove_it)`)
     }
+  }
+
+  if (skippedHooks.length > 0) {
+    const hooks = skippedHooks.join(', ')
+    console.error(`\nError: existing git hooks found: ${hooks}`)
+    console.error('Either merge prove_it into your hooks manually, or re-run with --automatic-git-hook-merge')
+    process.exit(1)
   }
 
   // Build TODO list
