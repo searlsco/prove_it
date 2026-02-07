@@ -1,7 +1,7 @@
 # prove_it advanced example
 
 A project demonstrating custom prove_it configuration: custom lint scripts,
-domain-specific agent prompts, custom timeouts, and `when` conditions.
+domain-specific agent prompts, and `when` conditions.
 
 ## What's different from basic
 
@@ -37,19 +37,16 @@ cd example/advanced
 echo '{"hook_event_name":"Stop","session_id":"test","cwd":"."}' | prove_it hook claude:Stop
 ```
 
-## Local development
+## Running from the local repo
 
-To test against a local prove_it clone, create `.claude/settings.json`:
+To use the development version instead of the Homebrew install, prepend `test/bin` to your PATH:
 
-```json
-{
-  "hooks": {
-    "SessionStart": [{ "matcher": "startup|resume|clear|compact",
-      "hooks": [{ "type": "command", "command": "node ../../cli.js hook claude:SessionStart" }] }],
-    "PreToolUse": [{ "matcher": "Edit|Write|NotebookEdit|Bash",
-      "hooks": [{ "type": "command", "command": "node ../../cli.js hook claude:PreToolUse" }] }],
-    "Stop": [{
-      "hooks": [{ "type": "command", "command": "node ../../cli.js hook claude:Stop" }] }]
-  }
-}
+```bash
+# From this directory
+PATH="../../test/bin:$PATH" prove_it hook claude:Stop < input.json
+PATH="../../test/bin:$PATH" prove_it diagnose
+
+# Run Claude Code against this example with the local prove_it
+cd example/advanced
+PATH="../../test/bin:$PATH" claude
 ```

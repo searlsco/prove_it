@@ -1,0 +1,8 @@
+#!/bin/bash
+# Local development shim for prove_it.
+# Resolves to the repo's cli.js so you can test without a Homebrew release.
+#
+# Usage:
+#   PATH="/path/to/prove_it/test/bin:$PATH" prove_it diagnose
+#   PATH="../../test/bin:$PATH" prove_it hook claude:Stop < input.json
+exec node "$(dirname "$0")/../../cli.js" "$@"
