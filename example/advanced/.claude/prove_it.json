@@ -67,6 +67,12 @@
           "name": "code-review",
           "type": "agent",
           "prompt": "Review staged changes to the calculator module for:\n1. Division by zero handling\n2. Integer overflow edge cases\n3. Missing test coverage for error paths\n\nRespond with exactly one of:\n- PASS (on a line by itself)\n- FAIL: <reason> (on a line by itself)\n\n{{staged_diff}}"
+        },
+        {
+          "name": "adversarial-review",
+          "type": "agent",
+          "command": "codex exec -",
+          "prompt": "Review staged changes to the calculator module as a second opinion. Look for issues the primary reviewer might miss:\n1. Subtle logic errors or off-by-one mistakes\n2. Unsafe type coercion or NaN propagation\n3. Missing boundary conditions in tests\n\n{{staged_diff}}"
         }
       ]
     },
