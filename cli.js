@@ -50,15 +50,14 @@ function removeProveItGroups (groups) {
   return groups.filter(g => {
     const hooks = g && g.hooks ? g.hooks : []
     const serialized = JSON.stringify(hooks)
-    // Remove old v1 hook registrations
+    // Remove all prove_it hook registrations (old .js files, short-form, v2 dispatch)
     if (serialized.includes('prove_it_test.js')) return false
     if (serialized.includes('prove_it_session_start.js')) return false
     if (serialized.includes('prove_it_beads.js')) return false
     if (serialized.includes('prove_it_stop.js')) return false
     if (serialized.includes('prove_it_done.js')) return false
     if (serialized.includes('prove_it_edit.js')) return false
-    // Remove v2 dispatcher registrations (for re-install / uninstall)
-    if (serialized.includes('prove_it hook claude:')) return false
+    if (serialized.includes('prove_it hook ')) return false
     return true
   })
 }
@@ -97,8 +96,7 @@ function cmdInstall () {
   addHookGroup(settings.hooks, 'Stop', {
     hooks: [{
       type: 'command',
-      command: 'prove_it hook claude:Stop',
-      timeout: 3600
+      command: 'prove_it hook claude:Stop'
     }]
   })
 
