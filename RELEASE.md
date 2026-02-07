@@ -42,7 +42,8 @@ Wait for both to show `completed success`.
 ```bash
 brew update
 brew reinstall searlsco/tap/prove_it
-prove_it --version  # Should show new version
+prove_it install    # Re-register hooks (picks up any changes)
+prove_it diagnose   # Should show new version and all checks passed
 ```
 
 ## Troubleshooting
