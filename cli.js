@@ -13,6 +13,7 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const readline = require('readline')
 const { loadJson, writeJson } = require('./lib/shared')
 
 function rmIfExists (p) {
@@ -148,22 +149,70 @@ function cmdUninstall () {
 // Init command
 // ============================================================================
 
-function cmdInit () {
+/**
+ * Ask a yes/no question via readline.
+ * @returns {Promise<boolean>}
+ */
+function askYesNo (rl, question, defaultYes = true) {
+  const hint = defaultYes ? '(Y/n)' : '(y/N)'
+  return new Promise(resolve => {
+    rl.question(`${question} ${hint} `, answer => {
+      const trimmed = answer.trim().toLowerCase()
+      if (trimmed === '') return resolve(defaultYes)
+      resolve(trimmed === 'y' || trimmed === 'yes')
+    })
+  })
+}
+
+/**
+ * Parse init flags from argv.
+ * Returns { flags, hasExplicitFlags } where flags contains the parsed values
+ * and hasExplicitFlags indicates whether any flags were explicitly provided.
+ */
+function parseInitFlags (args) {
+  const flags = { gitHooks: true, defaultChecks: true, autoMergeGitHooks: true }
+  let hasExplicitFlags = false
+
+  for (const arg of args) {
+    if (arg === '--git-hooks') { flags.gitHooks = true; hasExplicitFlags = true } else if (arg === '--no-git-hooks') { flags.gitHooks = false; hasExplicitFlags = true } else if (arg === '--default-checks') { flags.defaultChecks = true; hasExplicitFlags = true } else if (arg === '--no-default-checks') { flags.defaultChecks = false; hasExplicitFlags = true } else if (arg === '--automatic-git-hook-merge') { flags.autoMergeGitHooks = true; hasExplicitFlags = true } else if (arg === '--no-automatic-git-hook-merge') { flags.autoMergeGitHooks = false; hasExplicitFlags = true }
+  }
+
+  return { flags, hasExplicitFlags }
+}
+
+async function cmdInit () {
   const { initProject } = require('./lib/init')
   const repoRoot = process.cwd()
 
-  // Parse flags
   const args = process.argv.slice(3)
-  let tier = 3
-  for (const arg of args) {
-    if (arg === '--tier=1' || arg === '--claude-only') tier = 1
-    else if (arg === '--tier=2' || arg === '--claude-git') tier = 2
-    else if (arg === '--tier=3' || arg === '--all') tier = 3
+  const { flags, hasExplicitFlags } = parseInitFlags(args)
+
+  const isTTY = process.stdin.isTTY && process.stdout.isTTY
+
+  // Interactive mode: TTY with no explicit flags
+  if (isTTY && !hasExplicitFlags) {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+    try {
+      flags.gitHooks = await askYesNo(rl, 'Install git hooks?')
+
+      if (flags.gitHooks) {
+        const hasExistingHooks =
+          fs.existsSync(path.join(repoRoot, '.git', 'hooks', 'pre-commit')) ||
+          fs.existsSync(path.join(repoRoot, '.git', 'hooks', 'pre-push'))
+        if (hasExistingHooks) {
+          flags.autoMergeGitHooks = await askYesNo(rl, 'Merge with existing git hooks automatically?')
+        }
+      }
+
+      flags.defaultChecks = await askYesNo(rl, 'Include default checks (beads gate, code review, coverage review)?')
+    } finally {
+      rl.close()
+    }
   }
 
-  const results = initProject(repoRoot, { tier })
+  const results = initProject(repoRoot, flags)
 
-  log(`prove_it initialized (tier ${tier}).\n`)
+  log('prove_it initialized.\n')
 
   if (results.teamConfig.created) {
     log(`  Created: ${results.teamConfig.path}`)
@@ -187,6 +236,18 @@ function cmdInit () {
 
   if (results.addedToGitignore) {
     log('  Added to .gitignore: .claude/prove_it.local.json')
+  }
+
+  // Report git hook results
+  if (results.gitHookFiles.preCommit || results.gitHookFiles.prePush) {
+    for (const [label, hookName] of [['pre-commit', 'preCommit'], ['pre-push', 'prePush']]) {
+      const r = results.gitHookFiles[hookName]
+      if (!r) continue
+      if (r.installed) log(`  Installed: .git/hooks/${label}`)
+      else if (r.merged) log(`  Merged: .git/hooks/${label} (appended prove_it)`)
+      else if (r.skipped) log(`  Skipped: .git/hooks/${label} (existing hook, use --automatic-git-hook-merge)`)
+      else if (r.existed) log(`  Exists: .git/hooks/${label} (already has prove_it)`)
+    }
   }
 
   // Build TODO list
@@ -234,7 +295,7 @@ const PROVE_IT_PROJECT_FILES = [
 ]
 
 function cmdDeinit () {
-  const { isScriptTestStub } = require('./lib/init')
+  const { isScriptTestStub, removeGitHookShim } = require('./lib/init')
   const repoRoot = process.cwd()
   const removed = []
   const skipped = []
@@ -265,6 +326,15 @@ function cmdDeinit () {
       }
     } catch {
       skipped.push('script/test (error reading)')
+    }
+  }
+
+  // Clean up git hook shims
+  if (fs.existsSync(path.join(repoRoot, '.git'))) {
+    for (const gitEvent of ['pre-commit', 'pre-push']) {
+      if (removeGitHookShim(repoRoot, gitEvent)) {
+        removed.push(`.git/hooks/${gitEvent}`)
+      }
     }
   }
 
@@ -473,17 +543,21 @@ Commands:
   -v, --version  Show version number
 
 Init options:
-  --tier=1, --claude-only   Claude hooks only
-  --tier=2, --claude-git    Claude + Git hooks
-  --tier=3, --all           Claude + Git + Default checks (default)
+  --[no-]git-hooks                Install git pre-commit/pre-push hooks (default: yes)
+  --[no-]default-checks           Include beads gate, code review, coverage review (default: yes)
+  --[no-]automatic-git-hook-merge Merge with existing git hooks (default: yes)
+
+  With no flags and a TTY, prove_it init asks interactively.
+  With no flags and no TTY, all defaults apply (equivalent to all features on).
 
 Examples:
-  prove_it install           # Set up global hooks
-  prove_it init              # Add project config (tier 3)
-  prove_it init --tier=1     # Minimal: claude hooks only
-  prove_it diagnose          # Check installation status
-  prove_it deinit            # Remove prove_it from current repo
-  prove_it uninstall         # Remove global hooks
+  prove_it install                         # Set up global hooks
+  prove_it init                            # Interactive setup
+  prove_it init --no-git-hooks             # Skip git hooks
+  prove_it init --no-default-checks        # Base config only (no agents)
+  prove_it diagnose                        # Check installation status
+  prove_it deinit                          # Remove prove_it from current repo
+  prove_it uninstall                       # Remove global hooks
 `)
 }
 
@@ -504,7 +578,10 @@ function main () {
       cmdUninstall()
       break
     case 'init':
-      cmdInit()
+      cmdInit().catch(err => {
+        console.error(`prove_it init failed: ${err.message}`)
+        process.exit(1)
+      })
       break
     case 'deinit':
       cmdDeinit()

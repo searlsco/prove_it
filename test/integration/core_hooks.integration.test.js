@@ -268,8 +268,9 @@ describe('v2 dispatcher: core hook behaviors', () => {
   })
 
   describe('non-git directory', () => {
-    it('exits silently for non-git directory', () => {
+    it('runs hooks in non-git directory when config exists', () => {
       const nonGitDir = createTempDir('prove_it_nongit_')
+      createFastTestScript(nonGitDir, true)
       writeConfig(nonGitDir, makeConfig([
         {
           type: 'claude',
@@ -287,7 +288,8 @@ describe('v2 dispatcher: core hook behaviors', () => {
       }, { projectDir: nonGitDir, env: isolatedEnv(nonGitDir) })
 
       assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null)
+      assert.ok(result.output, 'Should produce output when config exists in non-git dir')
+      assert.strictEqual(result.output.decision, 'approve')
       cleanupTempDir(nonGitDir)
     })
   })

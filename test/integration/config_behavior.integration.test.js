@@ -196,9 +196,9 @@ describe('Config-driven hook behavior (v2)', () => {
     })
   })
 
-  // ──── Non-git directory passthrough ────
+  // ──── Non-git directory with config ────
 
-  describe('Non-git directory passthrough', () => {
+  describe('Non-git directory with config', () => {
     let nonGitDir
 
     beforeEach(() => {
@@ -209,7 +209,8 @@ describe('Config-driven hook behavior (v2)', () => {
       if (nonGitDir) cleanupTempDir(nonGitDir)
     })
 
-    it('stop hook exits silently in non-git directory', () => {
+    it('stop hook runs checks in non-git directory', () => {
+      createFastTestScript(nonGitDir, true)
       writeConfig(nonGitDir, makeConfig([
         {
           type: 'claude',
@@ -227,11 +228,12 @@ describe('Config-driven hook behavior (v2)', () => {
       }, { projectDir: nonGitDir, env: isolatedEnv(nonGitDir) })
 
       assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null,
-        'Stop hook should exit silently in non-git directory')
+      assert.ok(result.output, 'Stop hook should produce output in non-git directory with config')
+      assert.strictEqual(result.output.decision, 'approve')
     })
 
-    it('PreToolUse exits silently in non-git directory', () => {
+    it('PreToolUse runs checks in non-git directory', () => {
+      createTestScript(nonGitDir, true)
       writeConfig(nonGitDir, makeConfig([
         {
           type: 'claude',
@@ -252,8 +254,7 @@ describe('Config-driven hook behavior (v2)', () => {
       }, { projectDir: nonGitDir, env: isolatedEnv(nonGitDir) })
 
       assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null,
-        'PreToolUse should exit silently in non-git directory')
+      assert.ok(result.output, 'PreToolUse should produce output in non-git directory with config')
     })
   })
 
