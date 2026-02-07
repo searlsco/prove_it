@@ -300,6 +300,23 @@ describe('config merging', () => {
     const result = mergeDeep(base, override)
     assert.deepStrictEqual(result, { name: '' })
   })
+
+  it('array override replaces object base (v1→v2 hooks migration)', () => {
+    const base = { hooks: { done: { enabled: true }, stop: { enabled: true } } }
+    const override = { hooks: [{ type: 'claude', event: 'Stop', checks: [] }] }
+    const result = mergeDeep(base, override)
+    assert.ok(Array.isArray(result.hooks), 'hooks should be an array')
+    assert.strictEqual(result.hooks.length, 1)
+    assert.strictEqual(result.hooks[0].event, 'Stop')
+  })
+
+  it('object override replaces array base', () => {
+    const base = { hooks: [{ type: 'claude' }] }
+    const override = { hooks: { done: { enabled: true } } }
+    const result = mergeDeep(base, override)
+    assert.ok(!Array.isArray(result.hooks), 'hooks should be an object')
+    assert.strictEqual(result.hooks.done.enabled, true)
+  })
 })
 
 describe('loadEffectiveConfig ancestor discovery', () => {
