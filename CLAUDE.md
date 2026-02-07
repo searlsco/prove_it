@@ -40,21 +40,16 @@ npm run test:e2e       # end-to-end beads integration
 
 ## Running from source (local development)
 
-There is a shim at `test/bin/prove_it` that resolves to the repo's `cli.js`. To use the development version instead of the Homebrew install, prepend it to your PATH:
+Use `./script/agent` to launch Claude Code with the local prove_it on PATH:
 
 ```bash
-# From the repo root
-PATH="$(pwd)/test/bin:$PATH" prove_it diagnose
-
-# Test an example project with local prove_it
-cd example/basic
-PATH="../../test/bin:$PATH" prove_it hook claude:Stop <<< '{"hook_event_name":"Stop","session_id":"test","cwd":"."}'
-
-# Run Claude Code with local prove_it hooks
-PATH="$(pwd)/test/bin:$PATH" claude
+./script/agent                    # interactive
+./script/agent -p "fix the bug"  # with prompt
 ```
 
-This ensures `prove_it` commands in configs (like `prove_it builtin:session-baseline`) resolve to the local source, not the Homebrew install. Changes track with the git ref — you can check out any commit and test that version.
+This prepends `test/bin/prove_it` (a shim to `cli.js`) to PATH so all hook dispatchers, builtins, and transitive `prove_it` calls use the working tree. A `local-shim-check` runs on SessionStart to confirm the shim is active.
+
+See [AGENTS.md](AGENTS.md) for the full agent testing workflow.
 
 ## Releasing
 

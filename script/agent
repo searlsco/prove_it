@@ -1,0 +1,13 @@
+#!/bin/bash
+# Launch Claude Code with prove_it resolving to the local repo's cli.js.
+#
+# This ensures all hooks, builtins, and transitive prove_it invocations
+# use the development version instead of the Homebrew install.
+#
+# Usage:
+#   ./script/agent                    # interactive
+#   ./script/agent -p "fix the bug"   # with prompt
+set -e
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PATH="$REPO_ROOT/test/bin:$PATH"
+exec claude --dangerously-skip-permissions "$@"

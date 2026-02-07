@@ -15,6 +15,12 @@
       "event": "SessionStart",
       "checks": [
         {
+          "name": "local-shim-check",
+          "type": "script",
+          "command": "./script/check_local_shim",
+          "mtime": false
+        },
+        {
           "name": "session-baseline",
           "type": "script",
           "command": "prove_it builtin:session-baseline"
