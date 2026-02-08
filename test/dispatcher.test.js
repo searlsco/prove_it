@@ -6,32 +6,32 @@ describe('claude dispatcher', () => {
   describe('matchesHookEntry', () => {
     it('matches type and event', () => {
       const entry = { type: 'claude', event: 'Stop', checks: [] }
-      assert.ok(matchesHookEntry(entry, 'Stop', {}))
+      assert.strictEqual(matchesHookEntry(entry, 'Stop', {}), true)
     })
 
     it('rejects wrong type', () => {
       const entry = { type: 'git', event: 'Stop', checks: [] }
-      assert.ok(!matchesHookEntry(entry, 'Stop', {}))
+      assert.strictEqual(matchesHookEntry(entry, 'Stop', {}), false)
     })
 
     it('rejects wrong event', () => {
       const entry = { type: 'claude', event: 'PreToolUse', checks: [] }
-      assert.ok(!matchesHookEntry(entry, 'Stop', {}))
+      assert.strictEqual(matchesHookEntry(entry, 'Stop', {}), false)
     })
 
     it('matches tool name via matcher', () => {
       const entry = { type: 'claude', event: 'PreToolUse', matcher: 'Edit|Write', checks: [] }
-      assert.ok(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Edit' }))
+      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Edit' }), true)
     })
 
     it('rejects non-matching tool name', () => {
       const entry = { type: 'claude', event: 'PreToolUse', matcher: 'Edit|Write', checks: [] }
-      assert.ok(!matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Read' }))
+      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Read' }), false)
     })
 
     it('matches when no matcher specified', () => {
       const entry = { type: 'claude', event: 'PreToolUse', checks: [] }
-      assert.ok(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Read' }))
+      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Read' }), true)
     })
 
     it('matches triggers for Bash commands', () => {
@@ -42,10 +42,10 @@ describe('claude dispatcher', () => {
         triggers: ['(^|\\s)git\\s+commit\\b'],
         checks: []
       }
-      assert.ok(matchesHookEntry(entry, 'PreToolUse', {
+      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', {
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "test"' }
-      }))
+      }), true)
     })
 
     it('rejects non-matching triggers', () => {
@@ -56,50 +56,49 @@ describe('claude dispatcher', () => {
         triggers: ['(^|\\s)git\\s+commit\\b'],
         checks: []
       }
-      assert.ok(!matchesHookEntry(entry, 'PreToolUse', {
+      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', {
         tool_name: 'Bash',
         tool_input: { command: 'git status' }
-      }))
+      }), false)
     })
 
     it('matches SessionStart source', () => {
       const entry = { type: 'claude', event: 'SessionStart', source: 'startup|resume', checks: [] }
-      assert.ok(matchesHookEntry(entry, 'SessionStart', { source: 'startup' }))
+      assert.strictEqual(matchesHookEntry(entry, 'SessionStart', { source: 'startup' }), true)
     })
 
     it('rejects non-matching SessionStart source', () => {
       const entry = { type: 'claude', event: 'SessionStart', source: 'startup|resume', checks: [] }
-      assert.ok(!matchesHookEntry(entry, 'SessionStart', { source: 'clear' }))
+      assert.strictEqual(matchesHookEntry(entry, 'SessionStart', { source: 'clear' }), false)
     })
 
     it('matches SessionStart with no source filter', () => {
       const entry = { type: 'claude', event: 'SessionStart', checks: [] }
-      assert.ok(matchesHookEntry(entry, 'SessionStart', { source: 'anything' }))
+      assert.strictEqual(matchesHookEntry(entry, 'SessionStart', { source: 'anything' }), true)
     })
   })
 
   describe('evaluateWhen', () => {
     it('returns true when no conditions', () => {
-      assert.ok(evaluateWhen(null, { rootDir: '.' }))
+      assert.strictEqual(evaluateWhen(null, { rootDir: '.' }), true)
     })
 
     it('returns true when undefined', () => {
-      assert.ok(evaluateWhen(undefined, { rootDir: '.' }))
+      assert.strictEqual(evaluateWhen(undefined, { rootDir: '.' }), true)
     })
 
     it('checks fileExists — passes when file exists', () => {
-      // package.json exists in the current directory
-      assert.ok(evaluateWhen({ fileExists: 'package.json' }, { rootDir: process.cwd() }))
+      assert.strictEqual(evaluateWhen({ fileExists: 'package.json' }, { rootDir: process.cwd() }), true)
     })
 
     it('checks fileExists — fails when file missing', () => {
-      assert.ok(!evaluateWhen({ fileExists: 'nonexistent-file-xyz.json' }, { rootDir: process.cwd() }))
+      assert.strictEqual(evaluateWhen({ fileExists: 'nonexistent-file-xyz.json' }, { rootDir: process.cwd() }), false)
     })
 
     it('checks envSet — passes when env var is set', () => {
       process.env.PROVE_IT_TEST_VAR = '1'
       try {
-        assert.ok(evaluateWhen({ envSet: 'PROVE_IT_TEST_VAR' }, { rootDir: '.' }))
+        assert.strictEqual(evaluateWhen({ envSet: 'PROVE_IT_TEST_VAR' }, { rootDir: '.' }), true)
       } finally {
         delete process.env.PROVE_IT_TEST_VAR
       }
@@ -107,18 +106,18 @@ describe('claude dispatcher', () => {
 
     it('checks envSet — fails when env var is unset', () => {
       delete process.env.PROVE_IT_FAKE_ENV_VAR
-      assert.ok(!evaluateWhen({ envSet: 'PROVE_IT_FAKE_ENV_VAR' }, { rootDir: '.' }))
+      assert.strictEqual(evaluateWhen({ envSet: 'PROVE_IT_FAKE_ENV_VAR' }, { rootDir: '.' }), false)
     })
 
     it('checks envNotSet — passes when env var is unset', () => {
       delete process.env.PROVE_IT_FAKE_ENV_VAR2
-      assert.ok(evaluateWhen({ envNotSet: 'PROVE_IT_FAKE_ENV_VAR2' }, { rootDir: '.' }))
+      assert.strictEqual(evaluateWhen({ envNotSet: 'PROVE_IT_FAKE_ENV_VAR2' }, { rootDir: '.' }), true)
     })
 
     it('checks envNotSet — fails when env var is set', () => {
       process.env.PROVE_IT_TEST_VAR2 = 'yes'
       try {
-        assert.ok(!evaluateWhen({ envNotSet: 'PROVE_IT_TEST_VAR2' }, { rootDir: '.' }))
+        assert.strictEqual(evaluateWhen({ envNotSet: 'PROVE_IT_TEST_VAR2' }, { rootDir: '.' }), false)
       } finally {
         delete process.env.PROVE_IT_TEST_VAR2
       }

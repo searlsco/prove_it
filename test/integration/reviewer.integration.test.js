@@ -1,41 +1,17 @@
 const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
-const fs = require('fs')
-const path = require('path')
 const { spawnSync } = require('child_process')
 
-/**
- * Integration tests for the reviewer.
- *
- * These tests create mock git repos with specific diffs and invoke the
- * reviewer to verify PASS/FAIL behavior.
- *
- * The tests are skipped if `claude` CLI is not available.
- */
+const {
+  createTempDir,
+  cleanupTempDir,
+  initGitRepo,
+  createFile
+} = require('./hook-harness')
 
 function claudeAvailable () {
   const result = spawnSync('which', ['claude'], { encoding: 'utf8' })
   return result.status === 0
-}
-
-function createTempDir (prefix) {
-  const tmpBase = process.env.TMPDIR || '/tmp'
-  const dir = fs.mkdtempSync(path.join(tmpBase, prefix))
-  return dir
-}
-
-function cleanupTempDir (dir) {
-  try {
-    fs.rmSync(dir, { recursive: true, force: true })
-  } catch {
-    // ignore
-  }
-}
-
-function initGitRepo (dir) {
-  spawnSync('git', ['init'], { cwd: dir })
-  spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir })
-  spawnSync('git', ['config', 'user.name', 'Test'], { cwd: dir })
 }
 
 function gitAdd (dir, file) {
@@ -44,12 +20,6 @@ function gitAdd (dir, file) {
 
 function gitCommit (dir, message) {
   spawnSync('git', ['commit', '-m', message], { cwd: dir })
-}
-
-function writeFile (dir, relPath, content) {
-  const fullPath = path.join(dir, relPath)
-  fs.mkdirSync(path.dirname(fullPath), { recursive: true })
-  fs.writeFileSync(fullPath, content)
 }
 
 function runReviewer (dir) {
@@ -139,7 +109,7 @@ describe('reviewer integration', { skip: !claudeAvailable() }, () => {
   describe('should PASS', () => {
     it('passes when no changes exist', () => {
       // Create initial commit
-      writeFile(tmpDir, 'README.md', '# Test')
+      createFile(tmpDir, 'README.md', '# Test')
       gitAdd(tmpDir, 'README.md')
       gitCommit(tmpDir, 'initial')
 
@@ -152,13 +122,13 @@ describe('reviewer integration', { skip: !claudeAvailable() }, () => {
 
     it('passes for documentation-only changes', () => {
       // Initial commit
-      writeFile(tmpDir, 'src/main.js', 'function main() {}')
-      writeFile(tmpDir, 'README.md', '# Test')
+      createFile(tmpDir, 'src/main.js', 'function main() {}')
+      createFile(tmpDir, 'README.md', '# Test')
       gitAdd(tmpDir, '.')
       gitCommit(tmpDir, 'initial')
 
       // Only change docs
-      writeFile(tmpDir, 'README.md', '# Test\n\nUpdated documentation.')
+      createFile(tmpDir, 'README.md', '# Test\n\nUpdated documentation.')
 
       const result = runReviewer(tmpDir)
       const parsed = parseReviewerResult(result.stdout)
@@ -168,14 +138,14 @@ describe('reviewer integration', { skip: !claudeAvailable() }, () => {
 
     it('passes when source and test files both change', () => {
       // Initial commit
-      writeFile(tmpDir, 'src/utils.js', 'function old() { return 1; }')
-      writeFile(tmpDir, 'test/utils.test.js', "test('old', () => {});")
+      createFile(tmpDir, 'src/utils.js', 'function old() { return 1; }')
+      createFile(tmpDir, 'test/utils.test.js', "test('old', () => {});")
       gitAdd(tmpDir, '.')
       gitCommit(tmpDir, 'initial')
 
       // Change both source and test
-      writeFile(tmpDir, 'src/utils.js', 'function old() { return 1; }\nfunction newFunc() { return 2; }')
-      writeFile(tmpDir, 'test/utils.test.js', "test('old', () => {});\ntest('newFunc', () => {});")
+      createFile(tmpDir, 'src/utils.js', 'function old() { return 1; }\nfunction newFunc() { return 2; }')
+      createFile(tmpDir, 'test/utils.test.js', "test('old', () => {});\ntest('newFunc', () => {});")
 
       const result = runReviewer(tmpDir)
       const parsed = parseReviewerResult(result.stdout)
@@ -185,13 +155,13 @@ describe('reviewer integration', { skip: !claudeAvailable() }, () => {
 
     it('passes for test-only changes', () => {
       // Initial commit
-      writeFile(tmpDir, 'src/main.js', 'function main() {}')
-      writeFile(tmpDir, 'test/main.test.js', "test('basic', () => {});")
+      createFile(tmpDir, 'src/main.js', 'function main() {}')
+      createFile(tmpDir, 'test/main.test.js', "test('basic', () => {});")
       gitAdd(tmpDir, '.')
       gitCommit(tmpDir, 'initial')
 
       // Only add more tests
-      writeFile(tmpDir, 'test/main.test.js', "test('basic', () => {});\ntest('edge case', () => {});")
+      createFile(tmpDir, 'test/main.test.js', "test('basic', () => {});\ntest('edge case', () => {});")
 
       const result = runReviewer(tmpDir)
       const parsed = parseReviewerResult(result.stdout)
@@ -203,13 +173,13 @@ describe('reviewer integration', { skip: !claudeAvailable() }, () => {
   describe('should FAIL', () => {
     it('fails when source changes but no tests change', () => {
       // Initial commit
-      writeFile(tmpDir, 'src/utils.js', 'function old() { return 1; }')
-      writeFile(tmpDir, 'test/utils.test.js', "test('old', () => {});")
+      createFile(tmpDir, 'src/utils.js', 'function old() { return 1; }')
+      createFile(tmpDir, 'test/utils.test.js', "test('old', () => {});")
       gitAdd(tmpDir, '.')
       gitCommit(tmpDir, 'initial')
 
       // Only change source, not tests
-      writeFile(tmpDir, 'src/utils.js', 'function old() { return 1; }\nfunction brandNew() { return 42; }')
+      createFile(tmpDir, 'src/utils.js', 'function old() { return 1; }\nfunction brandNew() { return 42; }')
 
       const result = runReviewer(tmpDir)
       const parsed = parseReviewerResult(result.stdout)
@@ -219,12 +189,12 @@ describe('reviewer integration', { skip: !claudeAvailable() }, () => {
 
     it('fails when new file added without tests', () => {
       // Initial commit
-      writeFile(tmpDir, 'src/main.js', 'function main() {}')
+      createFile(tmpDir, 'src/main.js', 'function main() {}')
       gitAdd(tmpDir, '.')
       gitCommit(tmpDir, 'initial')
 
       // Add new source file without tests
-      writeFile(tmpDir, 'src/newFeature.js', "function newFeature() { return 'new'; }")
+      createFile(tmpDir, 'src/newFeature.js', "function newFeature() { return 'new'; }")
 
       const result = runReviewer(tmpDir)
       const parsed = parseReviewerResult(result.stdout)
@@ -234,19 +204,19 @@ describe('reviewer integration', { skip: !claudeAvailable() }, () => {
 
     it('fails when multiple source files change but no tests', () => {
       // Initial commit with actual behavioral code
-      writeFile(tmpDir, 'src/auth.js', `
+      createFile(tmpDir, 'src/auth.js', `
 function authenticate(user, pass) {
   return user === 'admin' && pass === 'secret';
 }
 module.exports = { authenticate };
 `)
-      writeFile(tmpDir, 'src/api.js', `
+      createFile(tmpDir, 'src/api.js', `
 function fetchData(url) {
   return fetch(url).then(r => r.json());
 }
 module.exports = { fetchData };
 `)
-      writeFile(tmpDir, 'src/utils.js', `
+      createFile(tmpDir, 'src/utils.js', `
 function formatDate(d) {
   return d.toISOString();
 }
@@ -256,7 +226,7 @@ module.exports = { formatDate };
       gitCommit(tmpDir, 'initial')
 
       // Change multiple files with behavioral changes, no tests
-      writeFile(tmpDir, 'src/auth.js', `
+      createFile(tmpDir, 'src/auth.js', `
 function authenticate(user, pass) {
   return user === 'admin' && pass === 'secret';
 }
@@ -265,7 +235,7 @@ function validateToken(token) {
 }
 module.exports = { authenticate, validateToken };
 `)
-      writeFile(tmpDir, 'src/api.js', `
+      createFile(tmpDir, 'src/api.js', `
 function fetchData(url) {
   return fetch(url).then(r => r.json());
 }
@@ -274,7 +244,7 @@ function postData(url, data) {
 }
 module.exports = { fetchData, postData };
 `)
-      writeFile(tmpDir, 'src/utils.js', `
+      createFile(tmpDir, 'src/utils.js', `
 function formatDate(d) {
   return d.toISOString();
 }
