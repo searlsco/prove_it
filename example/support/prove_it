@@ -1,0 +1,8 @@
+#!/bin/bash
+# Local development shim for prove_it.
+# Resolves to the repo's cli.js so example projects can run hooks
+# without a global install.
+#
+# Usage from an example project:
+#   ../support/prove_it hook claude:SessionStart
+exec node "$(dirname "$0")/../../cli.js" "$@"

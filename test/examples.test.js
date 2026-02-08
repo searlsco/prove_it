@@ -77,6 +77,111 @@ describe('example projects', () => {
     })
   }
 
+  describe('support infrastructure', () => {
+    const supportDir = path.join(EXAMPLE_DIR, 'support')
+    const shimPath = path.join(supportDir, 'prove_it')
+
+    it('example/support/prove_it exists and is executable', () => {
+      assert.ok(fs.existsSync(shimPath), 'example/support/prove_it should exist')
+      const stat = fs.statSync(shimPath)
+      assert.ok(stat.mode & fs.constants.S_IXUSR, 'shim should be executable')
+    })
+
+    it('test/bin/prove_it exists and is executable', () => {
+      const devShim = path.join(__dirname, 'bin', 'prove_it')
+      assert.ok(fs.existsSync(devShim), 'test/bin/prove_it should exist')
+      const stat = fs.statSync(devShim)
+      assert.ok(stat.mode & fs.constants.S_IXUSR, 'shim should be executable')
+    })
+
+    it('settings.json matches what prove_it install would generate', () => {
+      // Source of truth: the hook groups that cmdInstall registers.
+      // If install adds/changes events or matchers, this test fails.
+      const expected = {
+        SessionStart: [{ matcher: 'startup|resume|clear|compact', hooks: [{ type: 'command', command: 'prove_it hook claude:SessionStart' }] }],
+        PreToolUse: [{ matcher: 'Edit|Write|NotebookEdit|Bash', hooks: [{ type: 'command', command: 'prove_it hook claude:PreToolUse' }] }],
+        Stop: [{ hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }] }]
+      }
+
+      const settingsPath = path.join(supportDir, 'settings.json')
+      const actual = JSON.parse(fs.readFileSync(settingsPath, 'utf8')).hooks
+
+      // Compare structure: same events, same matchers, same hook shape.
+      // Command prefix differs (../support/prove_it vs prove_it) — normalize it.
+      const normalize = (hooks) => JSON.parse(
+        JSON.stringify(hooks).replace(/\.\.\/support\/prove_it /g, 'prove_it ')
+      )
+      assert.deepStrictEqual(normalize(actual), expected,
+        'example settings.json structure must match prove_it install output.\n' +
+        'If you changed cmdInstall, update example/support/settings.json too.')
+    })
+
+    for (const name of EXAMPLES) {
+      it(`${name}/.claude/settings.json is a symlink to support/settings.json`, () => {
+        const settingsPath = path.join(EXAMPLE_DIR, name, '.claude', 'settings.json')
+        assert.ok(fs.existsSync(settingsPath), `${name} settings.json should exist`)
+        const stat = fs.lstatSync(settingsPath)
+        assert.ok(stat.isSymbolicLink(), `${name} settings.json should be a symlink`)
+        const target = fs.readlinkSync(settingsPath)
+        assert.strictEqual(target, '../../support/settings.json')
+      })
+    }
+
+    for (const name of EXAMPLES) {
+      describe(`${name}/ hook dispatch`, () => {
+        const dir = path.join(EXAMPLE_DIR, name)
+
+        it('SessionStart dispatches successfully', () => {
+          const result = spawnSync(shimPath, ['hook', 'claude:SessionStart'], {
+            cwd: dir,
+            encoding: 'utf8',
+            input: JSON.stringify({ session_id: 'test-session' }),
+            timeout: 10000
+          })
+          assert.strictEqual(result.status, 0,
+            `SessionStart failed in ${name}/:\n${result.stderr || result.stdout}`)
+          assert.ok(result.stdout.length > 0,
+            'SessionStart should produce output')
+        })
+
+        it('PreToolUse dispatches successfully', () => {
+          const result = spawnSync(shimPath, ['hook', 'claude:PreToolUse'], {
+            cwd: dir,
+            encoding: 'utf8',
+            input: JSON.stringify({
+              hook_event_name: 'PreToolUse',
+              tool_name: 'Edit',
+              tool_input: { file_path: 'README.md', old_string: 'a', new_string: 'b' }
+            }),
+            timeout: 10000
+          })
+          assert.strictEqual(result.status, 0,
+            `PreToolUse failed in ${name}/:\n${result.stderr || result.stdout}`)
+          // PreToolUse returns JSON with hookSpecificOutput
+          const output = JSON.parse(result.stdout)
+          assert.ok(output.hookSpecificOutput, 'should have hookSpecificOutput')
+        })
+
+        it('Stop dispatches successfully', () => {
+          const result = spawnSync(shimPath, ['hook', 'claude:Stop'], {
+            cwd: dir,
+            encoding: 'utf8',
+            input: JSON.stringify({
+              hook_event_name: 'Stop',
+              session_id: 'test-session'
+            }),
+            timeout: 30000
+          })
+          assert.strictEqual(result.status, 0,
+            `Stop failed in ${name}/:\n${result.stderr || result.stdout}`)
+          const output = JSON.parse(result.stdout)
+          assert.ok(['approve', 'block'].includes(output.decision),
+            `Stop decision should be approve or block, got: ${output.decision}`)
+        })
+      })
+    }
+  })
+
   describe('advanced-specific', () => {
     it('has executable lint script', () => {
       const lintPath = path.join(EXAMPLE_DIR, 'advanced', 'script', 'lint.sh')

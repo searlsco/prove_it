@@ -1,11 +1,11 @@
 #!/bin/bash
-# SessionStart check: verify prove_it resolves to the local test/bin shim.
+# SessionStart check: verify prove_it resolves to the local dev shim.
 # Exits 0 (pass) if local, exits 1 (fail) with warning if not.
 resolved="$(which prove_it 2>/dev/null || true)"
-if echo "$resolved" | grep -q 'test/bin/prove_it'; then
+if echo "$resolved" | grep -qE 'test/bin/prove_it|example/support/prove_it'; then
   echo "prove_it resolves to local shim: $resolved"
   exit 0
 fi
-echo "WARNING: prove_it resolves to $resolved, not test/bin/prove_it."
+echo "WARNING: prove_it resolves to $resolved, not the local dev shim."
 echo "Use ./script/agent to launch Claude with the local version."
 exit 1
