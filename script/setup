@@ -1,0 +1,58 @@
+#!/bin/bash
+# script/setup - Set up a Mac dev environment for prove_it development
+#
+# Usage: script/setup
+#
+# After running this, you should be able to run:
+#   ./script/test        # full test suite
+#   ./script/agent       # launch Claude Code with local prove_it on PATH
+set -e
+
+echo "==> Checking prerequisites..."
+
+# Node.js >= 18
+if ! command -v node >/dev/null 2>&1; then
+  echo "Error: Node.js is required but not installed."
+  echo "Install via: brew install node"
+  exit 1
+fi
+
+node_version=$(node -e 'console.log(process.versions.node.split(".")[0])')
+if [ "$node_version" -lt 18 ]; then
+  echo "Error: Node.js >= 18 required (found v$(node --version))"
+  echo "Upgrade via: brew upgrade node"
+  exit 1
+fi
+echo "  Node.js $(node --version)"
+
+# npm
+if ! command -v npm >/dev/null 2>&1; then
+  echo "Error: npm is required but not installed."
+  echo "It should come with Node.js. Try reinstalling: brew install node"
+  exit 1
+fi
+echo "  npm $(npm --version)"
+
+# git
+if ! command -v git >/dev/null 2>&1; then
+  echo "Error: git is required but not installed."
+  echo "Install via: xcode-select --install"
+  exit 1
+fi
+echo "  git $(git --version | awk '{print $3}')"
+
+echo ""
+echo "==> Installing npm dependencies..."
+npm install
+
+echo ""
+echo "==> Verifying setup..."
+./script/test_fast
+
+echo ""
+echo "==> Setup complete!"
+echo ""
+echo "Useful commands:"
+echo "  ./script/test        Run full test suite (unit + integration)"
+echo "  ./script/test_fast   Run lint + unit tests only"
+echo "  ./script/agent       Launch Claude Code with local prove_it"
