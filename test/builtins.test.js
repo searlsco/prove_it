@@ -219,7 +219,7 @@ describe('builtins', () => {
       it('denies Edit when no in_progress bead', () => {
         // Create a fake bd that outputs nothing (no in_progress beads)
         const bdScript = path.join(fakeBin, 'bd')
-        fs.writeFileSync(bdScript, '#!/bin/bash\necho "No issues found"\nexit 0\n')
+        fs.writeFileSync(bdScript, '#!/usr/bin/env bash\necho "No issues found"\nexit 0\n')
         fs.chmodSync(bdScript, 0o755)
         process.env.PATH = `${fakeBin}:${origPath}`
 
@@ -236,7 +236,7 @@ describe('builtins', () => {
       it('passes when in_progress bead exists', () => {
         // Create a fake bd that outputs an in_progress bead
         const bdScript = path.join(fakeBin, 'bd')
-        fs.writeFileSync(bdScript, '#!/bin/bash\necho "beads-abc  In Progress  Fix the bug"\nexit 0\n')
+        fs.writeFileSync(bdScript, '#!/usr/bin/env bash\necho "beads-abc  In Progress  Fix the bug"\nexit 0\n')
         fs.chmodSync(bdScript, 0o755)
         process.env.PATH = `${fakeBin}:${origPath}`
 

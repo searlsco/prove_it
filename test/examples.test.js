@@ -80,9 +80,10 @@ describe('example projects', () => {
   describe('support infrastructure', () => {
     const supportDir = path.join(EXAMPLE_DIR, 'support')
     const shimPath = path.join(supportDir, 'prove_it')
-    // Put test/bin/ first on PATH so agent checks use the mock claude
+    // Put test/bin/ on PATH for the prove_it shim and test/fixtures/ for the mock claude
     const testBinDir = path.join(__dirname, 'bin')
-    const dispatchEnv = { ...process.env, PATH: `${testBinDir}:${process.env.PATH}` }
+    const fixturesDir = path.join(__dirname, 'fixtures')
+    const dispatchEnv = { ...process.env, PATH: `${fixturesDir}:${testBinDir}:${process.env.PATH}` }
 
     it('example/support/prove_it exists and is executable', () => {
       assert.ok(fs.existsSync(shimPath), 'example/support/prove_it should exist')

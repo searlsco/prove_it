@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Local development shim for prove_it.
 # Resolves to the repo's cli.js so example projects can run hooks
 # without a global install.

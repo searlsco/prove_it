@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # faudex: fake codex for testing JSONL-mode reviewer output
 # Usage: faudex exec --sandbox read-only --json "prompt"
 # Set FAUDEX_RESPONSE env var to control the agent_message text.

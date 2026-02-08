@@ -59,7 +59,7 @@ describe('script check', () => {
     it('returns pass for exit 0 scripts', () => {
       const scriptPath = path.join(tmpDir, 'script', 'test')
       fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
-      fs.writeFileSync(scriptPath, '#!/bin/bash\nexit 0\n')
+      fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nexit 0\n')
       fs.chmodSync(scriptPath, 0o755)
 
       const result = runScriptCheck(
@@ -73,7 +73,7 @@ describe('script check', () => {
     it('returns fail for exit 1 scripts', () => {
       const scriptPath = path.join(tmpDir, 'script', 'test')
       fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
-      fs.writeFileSync(scriptPath, '#!/bin/bash\necho "failure" >&2\nexit 1\n')
+      fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\necho "failure" >&2\nexit 1\n')
       fs.chmodSync(scriptPath, 0o755)
 
       const result = runScriptCheck(
@@ -112,7 +112,7 @@ describe('script check', () => {
     it('uses mtime cache for cached pass', () => {
       const scriptPath = path.join(tmpDir, 'script', 'test')
       fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
-      fs.writeFileSync(scriptPath, '#!/bin/bash\nexit 0\n')
+      fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nexit 0\n')
       fs.chmodSync(scriptPath, 0o755)
       spawnSync('git', ['add', 'script/test'], { cwd: tmpDir })
       spawnSync('git', ['commit', '-m', 'add test'], { cwd: tmpDir })
@@ -140,7 +140,7 @@ describe('script check', () => {
     it('uses mtime cache for cached fail', () => {
       const scriptPath = path.join(tmpDir, 'script', 'test')
       fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
-      fs.writeFileSync(scriptPath, '#!/bin/bash\nexit 0\n')
+      fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nexit 0\n')
       fs.chmodSync(scriptPath, 0o755)
       spawnSync('git', ['add', 'script/test'], { cwd: tmpDir })
       spawnSync('git', ['commit', '-m', 'add test'], { cwd: tmpDir })
@@ -167,7 +167,7 @@ describe('script check', () => {
     it('skips mtime check when mtime: false', () => {
       const scriptPath = path.join(tmpDir, 'script', 'test')
       fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
-      fs.writeFileSync(scriptPath, '#!/bin/bash\nexit 0\n')
+      fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nexit 0\n')
       fs.chmodSync(scriptPath, 0o755)
       spawnSync('git', ['add', 'script/test'], { cwd: tmpDir })
       spawnSync('git', ['commit', '-m', 'add test'], { cwd: tmpDir })

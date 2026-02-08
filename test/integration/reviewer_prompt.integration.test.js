@@ -45,7 +45,7 @@ describe('Reviewer prompt passthrough (v2)', () => {
 
     // Create mock reviewer that captures stdin prompt and outputs PASS
     createFile(tmpDir, 'capture_reviewer.sh',
-      `#!/bin/bash\ncat > "${captureFile}"\necho "PASS"\n`)
+      `#!/usr/bin/env bash\ncat > "${captureFile}"\necho "PASS"\n`)
     makeExecutable(path.join(tmpDir, 'capture_reviewer.sh'))
   })
 
@@ -138,7 +138,7 @@ describe('Reviewer prompt passthrough (v2)', () => {
     it('denies commit when reviewer returns FAIL', () => {
       // Create a failing reviewer
       createFile(tmpDir, 'fail_reviewer.sh',
-        '#!/bin/bash\ncat > /dev/null\necho "FAIL: untested code"\n')
+        '#!/usr/bin/env bash\ncat > /dev/null\necho "FAIL: untested code"\n')
       makeExecutable(path.join(tmpDir, 'fail_reviewer.sh'))
 
       writeConfig(tmpDir, makeConfig([

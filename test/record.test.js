@@ -126,7 +126,7 @@ describe('record command', () => {
   describe('trap integration', () => {
     it('EXIT trap records fail and exits non-zero with set -e', () => {
       const script = [
-        '#!/bin/bash',
+        '#!/usr/bin/env bash',
         'set -e',
         `trap 'node ${CLI_PATH} record --name traptest --result $?' EXIT`,
         'false'

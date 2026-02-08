@@ -25,7 +25,7 @@ describe('agent check', () => {
 
   it('passes when reviewer returns PASS', () => {
     const reviewerPath = path.join(tmpDir, 'pass_reviewer.sh')
-    fs.writeFileSync(reviewerPath, '#!/bin/bash\ncat > /dev/null\necho "PASS"\n')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS"\n')
     fs.chmodSync(reviewerPath, 0o755)
 
     const result = runAgentCheck(
@@ -37,7 +37,7 @@ describe('agent check', () => {
 
   it('fails when reviewer returns FAIL', () => {
     const reviewerPath = path.join(tmpDir, 'fail_reviewer.sh')
-    fs.writeFileSync(reviewerPath, '#!/bin/bash\ncat > /dev/null\necho "FAIL: untested code"\n')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "FAIL: untested code"\n')
     fs.chmodSync(reviewerPath, 0o755)
 
     const result = runAgentCheck(
@@ -69,7 +69,7 @@ describe('agent check', () => {
   it('expands template variables in prompt', () => {
     const capturePath = path.join(tmpDir, 'captured.txt')
     const reviewerPath = path.join(tmpDir, 'capture_reviewer.sh')
-    fs.writeFileSync(reviewerPath, `#!/bin/bash\ncat > "${capturePath}"\necho "PASS"\n`)
+    fs.writeFileSync(reviewerPath, `#!/usr/bin/env bash\ncat > "${capturePath}"\necho "PASS"\n`)
     fs.chmodSync(reviewerPath, 0o755)
 
     runAgentCheck(

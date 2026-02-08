@@ -95,7 +95,7 @@ describe('git dispatcher', () => {
     }
 
     it('returns no failures when all checks pass', () => {
-      const scriptPath = makeScript('script/test', '#!/bin/bash\nexit 0\n')
+      const scriptPath = makeScript('script/test', '#!/usr/bin/env bash\nexit 0\n')
       const entries = [{
         type: 'git',
         event: 'pre-commit',
@@ -107,7 +107,7 @@ describe('git dispatcher', () => {
     })
 
     it('collects failures from failing checks', () => {
-      const scriptPath = makeScript('script/test', '#!/bin/bash\necho "broken" >&2\nexit 1\n')
+      const scriptPath = makeScript('script/test', '#!/usr/bin/env bash\necho "broken" >&2\nexit 1\n')
       const entries = [{
         type: 'git',
         event: 'pre-commit',
@@ -120,9 +120,9 @@ describe('git dispatcher', () => {
     })
 
     it('runs all checks in "all" mode (default)', () => {
-      const pass = makeScript('pass.sh', '#!/bin/bash\nexit 0\n')
-      const fail1 = makeScript('fail1.sh', '#!/bin/bash\nexit 1\n')
-      const fail2 = makeScript('fail2.sh', '#!/bin/bash\nexit 1\n')
+      const pass = makeScript('pass.sh', '#!/usr/bin/env bash\nexit 0\n')
+      const fail1 = makeScript('fail1.sh', '#!/usr/bin/env bash\nexit 1\n')
+      const fail2 = makeScript('fail2.sh', '#!/usr/bin/env bash\nexit 1\n')
       const entries = [{
         type: 'git',
         event: 'pre-commit',
@@ -138,8 +138,8 @@ describe('git dispatcher', () => {
     })
 
     it('stops on first failure in "first-fail" mode', () => {
-      const fail1 = makeScript('fail1.sh', '#!/bin/bash\nexit 1\n')
-      const fail2 = makeScript('fail2.sh', '#!/bin/bash\nexit 1\n')
+      const fail1 = makeScript('fail1.sh', '#!/usr/bin/env bash\nexit 1\n')
+      const fail2 = makeScript('fail2.sh', '#!/usr/bin/env bash\nexit 1\n')
       const entries = [{
         type: 'git',
         event: 'pre-commit',
@@ -156,7 +156,7 @@ describe('git dispatcher', () => {
     })
 
     it('skips checks with unsatisfied when condition', () => {
-      const fail = makeScript('fail.sh', '#!/bin/bash\nexit 1\n')
+      const fail = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
       const entries = [{
         type: 'git',
         event: 'pre-commit',
@@ -183,7 +183,7 @@ describe('git dispatcher', () => {
     })
 
     it('propagates test output between checks', () => {
-      const script = makeScript('output.sh', '#!/bin/bash\necho "test output here"\nexit 0\n')
+      const script = makeScript('output.sh', '#!/usr/bin/env bash\necho "test output here"\nexit 0\n')
       const entries = [{
         type: 'git',
         event: 'pre-commit',

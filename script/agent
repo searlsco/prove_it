@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Launch Claude Code with prove_it resolving to the local repo's cli.js.
 #
 # This ensures all hooks, builtins, and transitive prove_it invocations

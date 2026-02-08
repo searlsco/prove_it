@@ -74,7 +74,7 @@ describe('E2E: beads enforcement via claude CLI', { skip: !canRunE2E && 'require
     // Wrapper that logs invocation details and delegates to the prove_it dispatcher
     const wrapperScript = path.join(tmpDir, '.claude', 'hooks', 'beads-wrapper.sh')
     createFile(tmpDir, '.claude/hooks/beads-wrapper.sh', [
-      '#!/bin/bash',
+      '#!/usr/bin/env bash',
       'INPUT=$(cat)',
       'TOOL=$(echo "$INPUT" | jq -r .tool_name 2>/dev/null)',
       `echo "HOOK_FIRED: tool=$TOOL" >> ${hookLog}`,

@@ -96,8 +96,8 @@ describe('init/deinit', () => {
   it('init TODO nudges to add prove_it record when script lacks it', () => {
     // Create customized scripts without prove_it record
     fs.mkdirSync(path.join(tmpDir, 'script'), { recursive: true })
-    fs.writeFileSync(path.join(tmpDir, 'script', 'test'), '#!/bin/bash\nnpm test\n')
-    fs.writeFileSync(path.join(tmpDir, 'script', 'test_fast'), '#!/bin/bash\nnpm run test:unit\n')
+    fs.writeFileSync(path.join(tmpDir, 'script', 'test'), '#!/usr/bin/env bash\nnpm test\n')
+    fs.writeFileSync(path.join(tmpDir, 'script', 'test_fast'), '#!/usr/bin/env bash\nnpm run test:unit\n')
 
     const result = runCli(['init'], { cwd: tmpDir })
     assert.match(result.stdout, /Add `prove_it record` to script\/test/)
@@ -107,9 +107,9 @@ describe('init/deinit', () => {
   it('init TODO shows done when script has prove_it record', () => {
     fs.mkdirSync(path.join(tmpDir, 'script'), { recursive: true })
     fs.writeFileSync(path.join(tmpDir, 'script', 'test'),
-      "#!/bin/bash\ntrap 'prove_it record --name full-tests --result $?' EXIT\nnpm test\n")
+      "#!/usr/bin/env bash\ntrap 'prove_it record --name full-tests --result $?' EXIT\nnpm test\n")
     fs.writeFileSync(path.join(tmpDir, 'script', 'test_fast'),
-      "#!/bin/bash\ntrap 'prove_it record --name fast-tests --result $?' EXIT\nnpm run test:unit\n")
+      "#!/usr/bin/env bash\ntrap 'prove_it record --name fast-tests --result $?' EXIT\nnpm run test:unit\n")
 
     const result = runCli(['init'], { cwd: tmpDir })
     assert.match(result.stdout, /\[x\] script\/test records results/)
@@ -135,7 +135,7 @@ describe('init/deinit', () => {
     runCli(['init'], { cwd: tmpDir })
 
     // Customize script/test
-    fs.writeFileSync(path.join(tmpDir, 'script', 'test'), '#!/bin/bash\nnpm test\n')
+    fs.writeFileSync(path.join(tmpDir, 'script', 'test'), '#!/usr/bin/env bash\nnpm test\n')
 
     // Deinit
     runCli(['deinit'], { cwd: tmpDir })

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # script/setup - Set up a Mac dev environment for prove_it development
 #
 # Usage: script/setup

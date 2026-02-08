@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # SessionStart check: verify prove_it resolves to the local dev shim.
 # Exits 0 (pass) if local, exits 1 (fail) with warning if not.
 resolved="$(which prove_it 2>/dev/null || true)"

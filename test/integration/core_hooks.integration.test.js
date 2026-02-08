@@ -197,7 +197,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
     })
 
     it('does not block on failing check — collects output instead', () => {
-      createFile(tmpDir, 'fail_check.sh', '#!/bin/bash\necho "startup failure" >&2\nexit 1\n')
+      createFile(tmpDir, 'fail_check.sh', '#!/usr/bin/env bash\necho "startup failure" >&2\nexit 1\n')
       const fs = require('fs')
       const path = require('path')
       fs.chmodSync(path.join(tmpDir, 'fail_check.sh'), 0o755)

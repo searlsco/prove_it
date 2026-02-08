@@ -99,7 +99,7 @@ function makeExecutable (filePath) {
  */
 function createTestScript (dir, shouldPass = true) {
   const scriptPath = path.join(dir, 'script', 'test')
-  const content = shouldPass ? '#!/bin/bash\nexit 0\n' : "#!/bin/bash\necho 'Tests failed' >&2\nexit 1\n"
+  const content = shouldPass ? '#!/usr/bin/env bash\nexit 0\n' : "#!/usr/bin/env bash\necho 'Tests failed' >&2\nexit 1\n"
   createFile(dir, 'script/test', content)
   makeExecutable(scriptPath)
 }
@@ -109,7 +109,7 @@ function createTestScript (dir, shouldPass = true) {
  */
 function createFastTestScript (dir, shouldPass = true) {
   const scriptPath = path.join(dir, 'script', 'test_fast')
-  const content = shouldPass ? '#!/bin/bash\nexit 0\n' : "#!/bin/bash\necho 'Tests failed' >&2\nexit 1\n"
+  const content = shouldPass ? '#!/usr/bin/env bash\nexit 0\n' : "#!/usr/bin/env bash\necho 'Tests failed' >&2\nexit 1\n"
   createFile(dir, 'script/test_fast', content)
   makeExecutable(scriptPath)
 }

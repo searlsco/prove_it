@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # fraude: fake claude for testing text-mode reviewer output
 # Usage: fraude -p "prompt"
 # Set FRAUDE_RESPONSE env var to control the output text.

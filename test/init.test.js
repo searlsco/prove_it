@@ -34,14 +34,14 @@ describe('init', () => {
     it('returns true for stub script', () => {
       const scriptPath = path.join(tmpDir, 'script', 'test')
       fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
-      fs.writeFileSync(scriptPath, '#!/bin/bash\n# prove_it: Replace this\nexit 1\n')
+      fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\n# prove_it: Replace this\nexit 1\n')
       assert.ok(isScriptTestStub(scriptPath))
     })
 
     it('returns false for customized script', () => {
       const scriptPath = path.join(tmpDir, 'script', 'test')
       fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
-      fs.writeFileSync(scriptPath, '#!/bin/bash\nnpm test\n')
+      fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nnpm test\n')
       assert.ok(!isScriptTestStub(scriptPath))
     })
 
@@ -143,7 +143,7 @@ describe('init', () => {
     it('merges with existing hook when autoMerge is true', () => {
       const hookPath = path.join(tmpDir, '.git', 'hooks', 'pre-commit')
       fs.mkdirSync(path.dirname(hookPath), { recursive: true })
-      fs.writeFileSync(hookPath, '#!/bin/bash\nrun-lint\n')
+      fs.writeFileSync(hookPath, '#!/usr/bin/env bash\nrun-lint\n')
       fs.chmodSync(hookPath, 0o755)
 
       const result = installGitHookShim(tmpDir, 'pre-commit', true)
@@ -158,7 +158,7 @@ describe('init', () => {
     it('skips existing hook when autoMerge is false', () => {
       const hookPath = path.join(tmpDir, '.git', 'hooks', 'pre-commit')
       fs.mkdirSync(path.dirname(hookPath), { recursive: true })
-      fs.writeFileSync(hookPath, '#!/bin/bash\nrun-lint\n')
+      fs.writeFileSync(hookPath, '#!/usr/bin/env bash\nrun-lint\n')
 
       const result = installGitHookShim(tmpDir, 'pre-commit', false)
       assert.ok(result.existed)
@@ -190,7 +190,7 @@ describe('init', () => {
     it('removes merged section but keeps original content', () => {
       const hookPath = path.join(tmpDir, '.git', 'hooks', 'pre-commit')
       fs.mkdirSync(path.dirname(hookPath), { recursive: true })
-      fs.writeFileSync(hookPath, '#!/bin/bash\nrun-lint\n')
+      fs.writeFileSync(hookPath, '#!/usr/bin/env bash\nrun-lint\n')
       fs.chmodSync(hookPath, 0o755)
 
       installGitHookShim(tmpDir, 'pre-commit', true)
@@ -211,7 +211,7 @@ describe('init', () => {
     it('returns false for non-prove_it hook', () => {
       const hookPath = path.join(tmpDir, '.git', 'hooks', 'pre-commit')
       fs.mkdirSync(path.dirname(hookPath), { recursive: true })
-      fs.writeFileSync(hookPath, '#!/bin/bash\nrun-lint\n')
+      fs.writeFileSync(hookPath, '#!/usr/bin/env bash\nrun-lint\n')
 
       const removed = removeGitHookShim(tmpDir, 'pre-commit')
       assert.ok(!removed)
@@ -222,14 +222,14 @@ describe('init', () => {
     it('isProveItShim detects shim files', () => {
       const hookPath = path.join(tmpDir, '.git', 'hooks', 'pre-commit')
       fs.mkdirSync(path.dirname(hookPath), { recursive: true })
-      fs.writeFileSync(hookPath, '#!/bin/bash\nprove_it hook git:pre-commit\n')
+      fs.writeFileSync(hookPath, '#!/usr/bin/env bash\nprove_it hook git:pre-commit\n')
       assert.ok(isProveItShim(hookPath))
     })
 
     it('isProveItShim returns false for non-shim', () => {
       const hookPath = path.join(tmpDir, '.git', 'hooks', 'pre-commit')
       fs.mkdirSync(path.dirname(hookPath), { recursive: true })
-      fs.writeFileSync(hookPath, '#!/bin/bash\nnpm test\n')
+      fs.writeFileSync(hookPath, '#!/usr/bin/env bash\nnpm test\n')
       assert.ok(!isProveItShim(hookPath))
     })
 
@@ -237,7 +237,7 @@ describe('init', () => {
       const hookPath = path.join(tmpDir, '.git', 'hooks', 'pre-commit')
       fs.mkdirSync(path.dirname(hookPath), { recursive: true })
       fs.writeFileSync(hookPath,
-        `#!/bin/bash\nrun-lint\n\n${PROVE_IT_SHIM_MARKER}\nprove_it hook git:pre-commit\n${PROVE_IT_SHIM_MARKER}\n`)
+        `#!/usr/bin/env bash\nrun-lint\n\n${PROVE_IT_SHIM_MARKER}\nprove_it hook git:pre-commit\n${PROVE_IT_SHIM_MARKER}\n`)
       assert.ok(hasProveItSection(hookPath))
     })
   })
@@ -282,7 +282,7 @@ describe('init', () => {
     it('reports existing customized script', () => {
       const scriptPath = path.join(tmpDir, 'script', 'test')
       fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
-      fs.writeFileSync(scriptPath, '#!/bin/bash\nnpm test\n')
+      fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nnpm test\n')
       fs.chmodSync(scriptPath, 0o755)
 
       const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
@@ -304,7 +304,7 @@ describe('init', () => {
     it('preserves existing customized script/test_fast', () => {
       const scriptPath = path.join(tmpDir, 'script', 'test_fast')
       fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
-      fs.writeFileSync(scriptPath, '#!/bin/bash\nnpm run test:unit\n')
+      fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nnpm run test:unit\n')
       fs.chmodSync(scriptPath, 0o755)
 
       const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })

@@ -44,7 +44,7 @@ describe('Config-driven hook behavior (v2)', () => {
 
   describe('Custom test commands via config', () => {
     it('commit gate uses custom test command', () => {
-      createFile(tmpDir, 'script/custom_test', '#!/bin/bash\nexit 0\n')
+      createFile(tmpDir, 'script/custom_test', '#!/usr/bin/env bash\nexit 0\n')
       fs.chmodSync(path.join(tmpDir, 'script', 'custom_test'), 0o755)
       writeConfig(tmpDir, makeConfig([
         {
@@ -75,7 +75,7 @@ describe('Config-driven hook behavior (v2)', () => {
     })
 
     it('stop hook uses custom fast test command', () => {
-      createFile(tmpDir, 'script/custom_fast', '#!/bin/bash\nexit 0\n')
+      createFile(tmpDir, 'script/custom_fast', '#!/usr/bin/env bash\nexit 0\n')
       fs.chmodSync(path.join(tmpDir, 'script', 'custom_fast'), 0o755)
       writeConfig(tmpDir, makeConfig([
         {

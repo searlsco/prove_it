@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 "$(dirname "$0")/test_fast"
 npm run test:integration

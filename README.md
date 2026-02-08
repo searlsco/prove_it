@@ -69,7 +69,7 @@ By default, prove_it looks for two test scripts by convention:
 For example, your `script/test_fast` script might run:
 
 ```bash
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 trap 'prove_it record --name fast-tests --result $?' EXIT
 rake test
@@ -78,7 +78,7 @@ rake test
 And your full `script/test` command will probably run that and more:
 
 ```bash
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 trap 'prove_it record --name full-tests --result $?' EXIT
 rake test standard:fix test:system
