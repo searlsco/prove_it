@@ -243,14 +243,16 @@ describe('init', () => {
   })
 
   describe('initProject', () => {
-    it('creates team config, local config, and script/test', () => {
+    it('creates team config, local config, script/test, and script/test_fast', () => {
       const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
       assert.ok(results.teamConfig.created)
       assert.ok(results.localConfig.created)
       assert.ok(results.scriptTest.created)
+      assert.ok(results.scriptTestFast.created)
       assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.json')))
       assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.local.json')))
       assert.ok(fs.existsSync(path.join(tmpDir, 'script', 'test')))
+      assert.ok(fs.existsSync(path.join(tmpDir, 'script', 'test_fast')))
     })
 
     it('does not overwrite existing team config', () => {
@@ -286,6 +288,31 @@ describe('init', () => {
       const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
       assert.ok(results.scriptTest.existed)
       assert.ok(!results.scriptTest.isStub)
+    })
+
+    it('creates executable script/test_fast stub', () => {
+      initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      const stat = fs.statSync(path.join(tmpDir, 'script', 'test_fast'))
+      assert.ok(stat.mode & fs.constants.S_IXUSR, 'script/test_fast should be executable')
+    })
+
+    it('isScriptTestStub returns true for test_fast stub content', () => {
+      initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      assert.ok(isScriptTestStub(path.join(tmpDir, 'script', 'test_fast')))
+    })
+
+    it('preserves existing customized script/test_fast', () => {
+      const scriptPath = path.join(tmpDir, 'script', 'test_fast')
+      fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
+      fs.writeFileSync(scriptPath, '#!/bin/bash\nnpm run test:unit\n')
+      fs.chmodSync(scriptPath, 0o755)
+
+      const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      assert.ok(results.scriptTestFast.existed)
+      assert.ok(!results.scriptTestFast.isStub)
+
+      const content = fs.readFileSync(scriptPath, 'utf8')
+      assert.ok(content.includes('npm run test:unit'), 'custom content should be preserved')
     })
 
     it('installs git hook shims when gitHooks is true', () => {

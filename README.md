@@ -70,6 +70,8 @@ For example, your `script/test_fast` script might run:
 
 ```bash
 #!/bin/bash
+set -e
+trap 'prove_it record --name fast-tests --result $?' EXIT
 rake test
 ```
 
@@ -77,10 +79,23 @@ And your full `script/test` command will probably run that and more:
 
 ```bash
 #!/bin/bash
+set -e
+trap 'prove_it record --name full-tests --result $?' EXIT
 rake test standard:fix test:system
 ```
 
+The `trap ... EXIT` pattern ensures results are always recorded, even when `set -e` causes early exit. prove_it uses this to skip re-running tests when code hasn't changed.
+
 That's it. Now Claude must see your tests pass before claiming the job's done or committing your code.
+
+### Recording runs from test scripts
+
+The `trap ... EXIT` pattern shown above ensures prove_it's mtime cache stays current — when code hasn't changed since the last pass, hooks skip re-running your tests.
+
+`prove_it record` options:
+- `--result <N>` — record pass (N=0) or fail (N!=0), exit with code N (best for traps)
+- `--pass` / `--fail` — record explicitly (exit 0 / exit 1)
+- `--name <check>` — must match the check name in your `prove_it.json` config
 
 ## Configuration
 
@@ -224,6 +239,7 @@ prove_it init        Set up current project (interactive or with flags)
 prove_it deinit      Remove prove_it from current project
 prove_it diagnose    Check installation and show effective config
 prove_it hook <spec> Run a dispatcher directly (claude:Stop, git:pre-commit)
+prove_it record      Record a test run result (--name <check> --pass|--fail|--result <N>)
 ```
 
 ## Disabling prove_it

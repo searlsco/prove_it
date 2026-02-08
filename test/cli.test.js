@@ -69,6 +69,7 @@ describe('init/deinit', () => {
     assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.json')))
     assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.local.json')))
     assert.ok(fs.existsSync(path.join(tmpDir, 'script', 'test')))
+    assert.ok(fs.existsSync(path.join(tmpDir, 'script', 'test_fast')))
 
     // Check script/test is executable
     const stat = fs.statSync(path.join(tmpDir, 'script', 'test'))
@@ -90,6 +91,29 @@ describe('init/deinit', () => {
     // Custom content should be preserved
     const content = fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), 'utf8')
     assert.strictEqual(content, '{"custom": true}')
+  })
+
+  it('init TODO nudges to add prove_it record when script lacks it', () => {
+    // Create customized scripts without prove_it record
+    fs.mkdirSync(path.join(tmpDir, 'script'), { recursive: true })
+    fs.writeFileSync(path.join(tmpDir, 'script', 'test'), '#!/bin/bash\nnpm test\n')
+    fs.writeFileSync(path.join(tmpDir, 'script', 'test_fast'), '#!/bin/bash\nnpm run test:unit\n')
+
+    const result = runCli(['init'], { cwd: tmpDir })
+    assert.match(result.stdout, /Add `prove_it record` to script\/test/)
+    assert.match(result.stdout, /Add `prove_it record` to script\/test_fast/)
+  })
+
+  it('init TODO shows done when script has prove_it record', () => {
+    fs.mkdirSync(path.join(tmpDir, 'script'), { recursive: true })
+    fs.writeFileSync(path.join(tmpDir, 'script', 'test'),
+      "#!/bin/bash\ntrap 'prove_it record --name full-tests --result $?' EXIT\nnpm test\n")
+    fs.writeFileSync(path.join(tmpDir, 'script', 'test_fast'),
+      "#!/bin/bash\ntrap 'prove_it record --name fast-tests --result $?' EXIT\nnpm run test:unit\n")
+
+    const result = runCli(['init'], { cwd: tmpDir })
+    assert.match(result.stdout, /\[x\] script\/test records results/)
+    assert.match(result.stdout, /\[x\] script\/test_fast records results/)
   })
 
   it('deinit removes prove_it files', () => {
@@ -120,14 +144,15 @@ describe('init/deinit', () => {
     assert.ok(fs.existsSync(path.join(tmpDir, 'script', 'test')))
   })
 
-  it('deinit removes stub script/test', () => {
-    // Init creates stub
+  it('deinit removes stub script/test and script/test_fast', () => {
+    // Init creates stubs
     runCli(['init'], { cwd: tmpDir })
 
-    // Deinit should remove it since it's still the stub
+    // Deinit should remove them since they're still stubs
     runCli(['deinit'], { cwd: tmpDir })
 
     assert.ok(!fs.existsSync(path.join(tmpDir, 'script', 'test')))
+    assert.ok(!fs.existsSync(path.join(tmpDir, 'script', 'test_fast')))
   })
 })
 

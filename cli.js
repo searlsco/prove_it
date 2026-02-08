@@ -9,6 +9,7 @@
  *   deinit    - Remove prove_it files from current repository
  *   diagnose  - Check installation status and report issues
  *   hook      - Run a hook dispatcher (claude:<Event> or git:<event>)
+ *   record    - Record a test run result for mtime caching
  */
 const fs = require('fs')
 const os = require('os')
@@ -180,6 +181,15 @@ function parseInitFlags (args) {
   return { flags, hasExplicitFlags }
 }
 
+function scriptHasRecord (filePath) {
+  try {
+    const content = fs.readFileSync(filePath, 'utf8')
+    return content.includes('prove_it record')
+  } catch {
+    return false
+  }
+}
+
 async function cmdInit () {
   const { initProject } = require('./lib/init')
   const repoRoot = process.cwd()
@@ -231,7 +241,15 @@ async function cmdInit () {
   } else if (results.scriptTest.isStub) {
     log(`  Exists:  ${results.scriptTest.path} (stub - needs customization)`)
   } else {
-    log(`  Exists:  ${results.scriptTest.path} (customized)`)
+    log(`  Exists:  ${results.scriptTest.path}`)
+  }
+
+  if (results.scriptTestFast.created) {
+    log(`  Created: ${results.scriptTestFast.path} (stub)`)
+  } else if (results.scriptTestFast.isStub) {
+    log(`  Exists:  ${results.scriptTestFast.path} (stub - needs customization)`)
+  } else {
+    log(`  Exists:  ${results.scriptTestFast.path}`)
   }
 
   if (results.addedToGitignore) {
@@ -261,17 +279,19 @@ async function cmdInit () {
   // Build TODO list
   const todos = []
 
-  if (results.scriptTest.isStub) {
-    todos.push({ done: false, text: 'Edit script/test to run your full test suite' })
-  } else {
-    todos.push({ done: true, text: 'script/test configured' })
-  }
-
-  const scriptTestFast = path.join(repoRoot, 'script', 'test_fast')
-  if (fs.existsSync(scriptTestFast)) {
-    todos.push({ done: true, text: 'script/test_fast configured (runs on Stop)' })
-  } else {
-    todos.push({ done: false, text: 'Create script/test_fast (fast tests, runs on Stop)' })
+  for (const [scriptPath, label, editMsg] of [
+    ['script/test', 'script/test', 'Edit script/test to run your full test suite'],
+    ['script/test_fast', 'script/test_fast', 'Edit script/test_fast to run your fast (unit) tests']
+  ]) {
+    const resultKey = scriptPath === 'script/test' ? 'scriptTest' : 'scriptTestFast'
+    const scriptResult = results[resultKey]
+    if (scriptResult.isStub) {
+      todos.push({ done: false, text: editMsg })
+    } else if (!scriptHasRecord(path.join(repoRoot, scriptPath))) {
+      todos.push({ done: false, text: `Add \`prove_it record\` to ${label} (see stub for trap pattern)` })
+    } else {
+      todos.push({ done: true, text: `${label} records results` })
+    }
   }
 
   todos.push({
@@ -280,7 +300,7 @@ async function cmdInit () {
   })
 
   if (results.teamConfigNeedsCommit) {
-    todos.push({ done: false, text: 'Commit .claude/prove_it.json' })
+    todos.push({ done: false, text: 'Commit changes' })
   } else if (results.teamConfig.existed) {
     todos.push({ done: true, text: '.claude/prove_it.json committed' })
   }
@@ -316,26 +336,30 @@ function cmdDeinit () {
     }
   }
 
-  const scriptTest = path.join(repoRoot, 'script', 'test')
-  if (fs.existsSync(scriptTest)) {
-    try {
-      if (isScriptTestStub(scriptTest)) {
-        rmIfExists(scriptTest)
-        removed.push('script/test')
-        const scriptDir = path.join(repoRoot, 'script')
-        try {
-          if (fs.readdirSync(scriptDir).length === 0) {
-            fs.rmdirSync(scriptDir)
-            removed.push('script/')
-          }
-        } catch {}
-      } else {
-        skipped.push('script/test (customized)')
+  for (const scriptRel of ['script/test', 'script/test_fast']) {
+    const scriptAbs = path.join(repoRoot, scriptRel)
+    if (fs.existsSync(scriptAbs)) {
+      try {
+        if (isScriptTestStub(scriptAbs)) {
+          rmIfExists(scriptAbs)
+          removed.push(scriptRel)
+        } else {
+          skipped.push(`${scriptRel} (customized)`)
+        }
+      } catch {
+        skipped.push(`${scriptRel} (error reading)`)
       }
-    } catch {
-      skipped.push('script/test (error reading)')
     }
   }
+
+  // Remove script/ directory if empty
+  const scriptDir = path.join(repoRoot, 'script')
+  try {
+    if (fs.existsSync(scriptDir) && fs.readdirSync(scriptDir).length === 0) {
+      fs.rmdirSync(scriptDir)
+      removed.push('script/')
+    }
+  } catch {}
 
   // Clean up git hook shims
   if (fs.existsSync(path.join(repoRoot, '.git'))) {
@@ -532,6 +556,53 @@ function cmdHook (hookSpec) {
 }
 
 // ============================================================================
+// Record command - record a test run result for mtime caching
+// ============================================================================
+
+function cmdRecord () {
+  const { saveRunData } = require('./lib/testing')
+
+  const args = process.argv.slice(3)
+  let name = null
+  let hasPass = false
+  let hasFail = false
+  let hasResult = false
+  let resultCode = null
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--name' && i + 1 < args.length) {
+      name = args[++i]
+    } else if (args[i] === '--pass') {
+      hasPass = true
+    } else if (args[i] === '--fail') {
+      hasFail = true
+    } else if (args[i] === '--result') {
+      hasResult = true
+      if (i + 1 < args.length && /^\d+$/.test(args[i + 1])) {
+        resultCode = parseInt(args[++i], 10)
+      }
+    }
+  }
+
+  // Exactly one mode must be provided
+  const modeCount = (hasPass ? 1 : 0) + (hasFail ? 1 : 0) + (hasResult ? 1 : 0)
+  if (!name || modeCount !== 1 || (hasResult && resultCode === null)) {
+    console.error('Usage: prove_it record --name <checkName> --pass|--fail|--result <N>')
+    process.exit(1)
+  }
+
+  const pass = hasResult ? resultCode === 0 : hasPass
+  const exitCode = hasResult ? resultCode : (pass ? 0 : 1)
+
+  const localCfgPath = path.join(process.cwd(), '.claude', 'prove_it.local.json')
+  const runKey = name.replace(/[^a-zA-Z0-9_-]/g, '_')
+  saveRunData(localCfgPath, runKey, { at: Date.now(), pass })
+
+  console.error(`prove_it: recorded ${runKey} ${pass ? 'pass' : 'fail'}`)
+  process.exit(exitCode)
+}
+
+// ============================================================================
 // Main CLI
 // ============================================================================
 
@@ -547,8 +618,15 @@ Commands:
   deinit      Remove prove_it files from current repository
   diagnose    Check installation status and report issues
   hook        Run a hook dispatcher (claude:<Event> or git:<event>)
+  record      Record a test run result for mtime caching
   help        Show this help message
   -v, --version  Show version number
+
+Record options:
+  --name <name>    Check name to record (must match hook config)
+  --pass           Record a successful run (exits 0)
+  --fail           Record a failed run (exits 1)
+  --result <N>     Record pass (N=0) or fail (N!=0), exit with code N
 
 Init options:
   --[no-]git-hooks                Install git pre-commit/pre-push hooks (default: yes)
@@ -599,6 +677,9 @@ function main () {
       break
     case 'hook':
       cmdHook(args[1])
+      break
+    case 'record':
+      cmdRecord()
       break
     case '-v':
     case '--version':

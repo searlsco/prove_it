@@ -80,6 +80,9 @@ describe('example projects', () => {
   describe('support infrastructure', () => {
     const supportDir = path.join(EXAMPLE_DIR, 'support')
     const shimPath = path.join(supportDir, 'prove_it')
+    // Put test/bin/ first on PATH so agent checks use the mock claude
+    const testBinDir = path.join(__dirname, 'bin')
+    const dispatchEnv = { ...process.env, PATH: `${testBinDir}:${process.env.PATH}` }
 
     it('example/support/prove_it exists and is executable', () => {
       assert.ok(fs.existsSync(shimPath), 'example/support/prove_it should exist')
@@ -135,8 +138,8 @@ describe('example projects', () => {
           const result = spawnSync(shimPath, ['hook', 'claude:SessionStart'], {
             cwd: dir,
             encoding: 'utf8',
-            input: JSON.stringify({ session_id: 'test-session' }),
-            timeout: 10000
+            env: dispatchEnv,
+            input: JSON.stringify({ session_id: 'test-session' })
           })
           assert.strictEqual(result.status, 0,
             `SessionStart failed in ${name}/:\n${result.stderr || result.stdout}`)
@@ -148,12 +151,12 @@ describe('example projects', () => {
           const result = spawnSync(shimPath, ['hook', 'claude:PreToolUse'], {
             cwd: dir,
             encoding: 'utf8',
+            env: dispatchEnv,
             input: JSON.stringify({
               hook_event_name: 'PreToolUse',
               tool_name: 'Edit',
               tool_input: { file_path: 'README.md', old_string: 'a', new_string: 'b' }
-            }),
-            timeout: 10000
+            })
           })
           assert.strictEqual(result.status, 0,
             `PreToolUse failed in ${name}/:\n${result.stderr || result.stdout}`)
@@ -166,11 +169,11 @@ describe('example projects', () => {
           const result = spawnSync(shimPath, ['hook', 'claude:Stop'], {
             cwd: dir,
             encoding: 'utf8',
+            env: dispatchEnv,
             input: JSON.stringify({
               hook_event_name: 'Stop',
               session_id: 'test-session'
-            }),
-            timeout: 30000
+            })
           })
           assert.strictEqual(result.status, 0,
             `Stop failed in ${name}/:\n${result.stderr || result.stdout}`)
