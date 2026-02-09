@@ -2,9 +2,8 @@
   "configVersion": 2,
   "enabled": true,
   "sources": [
-    "src/**/*.js",
-    "lib/**/*.js",
-    "test/**/*.js"
+    "**/*.*",
+    "replace/these/with/globs/of/your/source/and/test/files.*"
   ],
   "format": {
     "maxOutputChars": 12000
@@ -12,57 +11,21 @@
   "hooks": [
     {
       "type": "claude",
-      "event": "SessionStart",
-      "checks": [
-        {
-          "name": "session-baseline",
-          "type": "script",
-          "command": "prove_it builtin:session-baseline"
-        },
-        {
-          "name": "beads-reminder",
-          "type": "script",
-          "command": "prove_it builtin:beads-reminder"
-        }
-      ]
-    },
-    {
-      "type": "claude",
       "event": "PreToolUse",
       "matcher": "Edit|Write|NotebookEdit|Bash",
       "checks": [
         {
-          "name": "config-protection",
+          "name": "lock-config",
           "type": "script",
-          "command": "prove_it builtin:config-protection"
+          "command": "prove_it run_builtin config:lock"
         },
         {
-          "name": "beads-gate",
+          "name": "require-wip",
           "type": "script",
-          "command": "prove_it builtin:beads-gate",
+          "command": "prove_it run_builtin beads:require_wip",
           "when": {
             "fileExists": ".beads"
           }
-        }
-      ]
-    },
-    {
-      "type": "claude",
-      "event": "PreToolUse",
-      "matcher": "Bash",
-      "triggers": [
-        "(^|\\s)git\\s+commit\\b"
-      ],
-      "checks": [
-        {
-          "name": "full-tests",
-          "type": "script",
-          "command": "./script/test"
-        },
-        {
-          "name": "code-review",
-          "type": "agent",
-          "prompt": "Review staged changes for:\n1. Test coverage gaps\n2. Logic errors or edge cases\n3. Dead code\n\nRespond with exactly one of:\n- PASS (on a line by itself)\n- FAIL: <reason> (on a line by itself)\n\n{{staged_diff}}"
         }
       ]
     },
@@ -77,13 +40,8 @@
         },
         {
           "name": "coverage-review",
-          "type": "agent",
-          "prompt": "Check that code changes have corresponding test coverage.\n\nRespond with exactly one of:\n- PASS (on a line by itself)\n- FAIL: <reason> (on a line by itself)\n\n{{session_diffs}}"
-        },
-        {
-          "name": "soft-stop",
           "type": "script",
-          "command": "prove_it builtin:soft-stop-reminder"
+          "command": "prove_it run_builtin review:test_coverage"
         }
       ]
     },
@@ -95,17 +53,11 @@
           "name": "full-tests",
           "type": "script",
           "command": "./script/test"
-        }
-      ]
-    },
-    {
-      "type": "git",
-      "event": "pre-push",
-      "checks": [
+        },
         {
-          "name": "full-tests",
+          "name": "commit-review",
           "type": "script",
-          "command": "./script/test"
+          "command": "prove_it run_builtin review:commit_quality"
         }
       ]
     }

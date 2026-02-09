@@ -26,7 +26,8 @@ const VALID_PERMISSION_DECISIONS = ['allow', 'deny', 'ask']
  * @returns {object} - { exitCode, stdout, stderr, output (parsed JSON if valid) }
  */
 function invokeHook (hookSpec, input, options = {}) {
-  const env = { ...process.env, ...options.env }
+  const base = options.cleanEnv ? {} : process.env
+  const env = { ...base, ...options.env }
   if (options.projectDir) {
     env.CLAUDE_PROJECT_DIR = options.projectDir
   }

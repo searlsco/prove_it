@@ -175,12 +175,17 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
   describe('SessionStart hook', () => {
     it('emits text output', () => {
+      createFile(tmpDir, 'hello_check.sh', '#!/usr/bin/env bash\necho "hello from session start"\nexit 0\n')
+      const fs = require('fs')
+      const path = require('path')
+      fs.chmodSync(path.join(tmpDir, 'hello_check.sh'), 0o755)
+
       writeConfig(tmpDir, makeConfig([
         {
           type: 'claude',
           event: 'SessionStart',
           checks: [
-            { name: 'beads-reminder', type: 'script', command: 'prove_it builtin:beads-reminder' }
+            { name: 'hello-check', type: 'script', command: './hello_check.sh' }
           ]
         }
       ]))
@@ -192,15 +197,17 @@ describe('v2 dispatcher: core hook behaviors', () => {
       }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
-      assert.ok(result.stdout.includes('prove_it active'),
-        'Should include reminder text in stdout')
+      assert.ok(result.stdout.includes('hello_check.sh passed'),
+        'Should include check result text in stdout')
     })
 
     it('does not block on failing check — collects output instead', () => {
       createFile(tmpDir, 'fail_check.sh', '#!/usr/bin/env bash\necho "startup failure" >&2\nexit 1\n')
+      createFile(tmpDir, 'pass_check.sh', '#!/usr/bin/env bash\necho "session started ok"\nexit 0\n')
       const fs = require('fs')
       const path = require('path')
       fs.chmodSync(path.join(tmpDir, 'fail_check.sh'), 0o755)
+      fs.chmodSync(path.join(tmpDir, 'pass_check.sh'), 0o755)
 
       writeConfig(tmpDir, makeConfig([
         {
@@ -208,7 +215,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
           event: 'SessionStart',
           checks: [
             { name: 'fail-check', type: 'script', command: './fail_check.sh' },
-            { name: 'beads-reminder', type: 'script', command: 'prove_it builtin:beads-reminder' }
+            { name: 'pass-check', type: 'script', command: './pass_check.sh' }
           ]
         }
       ]))
@@ -223,11 +230,84 @@ describe('v2 dispatcher: core hook behaviors', () => {
       assert.strictEqual(result.exitCode, 0)
       assert.strictEqual(result.output, null, 'SessionStart should not emit JSON')
       // Should still include the passing check's output
-      assert.ok(result.stdout.includes('prove_it active'),
+      assert.ok(result.stdout.includes('pass_check.sh passed'),
         'Should still emit passing checks output')
       // Should include failing check's reason too
       assert.ok(result.stdout.includes('failed'),
         `Should include failure reason, got: ${result.stdout}`)
+    })
+  })
+
+  describe('git hook CLAUDECODE guard', () => {
+    it('exits 0 immediately when CLAUDECODE is absent', () => {
+      createTestScript(tmpDir, false) // would fail if checks ran
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'git',
+          event: 'pre-commit',
+          checks: [
+            { name: 'full-tests', type: 'script', command: './script/test' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('git:pre-commit', {}, {
+        projectDir: tmpDir,
+        cwd: tmpDir,
+        cleanEnv: true,
+        env: { PATH: process.env.PATH, ...isolatedEnv(tmpDir) }
+      })
+
+      assert.strictEqual(result.exitCode, 0,
+        'Git hook should exit 0 when CLAUDECODE is absent')
+    })
+
+    it('runs checks when CLAUDECODE is set', () => {
+      createTestScript(tmpDir, false)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'git',
+          event: 'pre-commit',
+          checks: [
+            { name: 'full-tests', type: 'script', command: './script/test' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('git:pre-commit', {}, {
+        projectDir: tmpDir,
+        cwd: tmpDir,
+        cleanEnv: true,
+        env: { PATH: process.env.PATH, ...isolatedEnv(tmpDir), CLAUDECODE: '1' }
+      })
+
+      assert.strictEqual(result.exitCode, 1,
+        'Git hook should exit 1 when CLAUDECODE is set and checks fail')
+      assert.ok(result.stderr.includes('full-tests'),
+        `Stderr should mention failing check, got: ${result.stderr}`)
+    })
+
+    it('exits 0 when CLAUDECODE is set and checks pass', () => {
+      createTestScript(tmpDir, true)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'git',
+          event: 'pre-commit',
+          checks: [
+            { name: 'full-tests', type: 'script', command: './script/test' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('git:pre-commit', {}, {
+        projectDir: tmpDir,
+        cwd: tmpDir,
+        cleanEnv: true,
+        env: { PATH: process.env.PATH, ...isolatedEnv(tmpDir), CLAUDECODE: '1' }
+      })
+
+      assert.strictEqual(result.exitCode, 0,
+        'Git hook should exit 0 when CLAUDECODE is set and checks pass')
     })
   })
 

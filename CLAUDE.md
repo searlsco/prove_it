@@ -6,13 +6,13 @@ prove_it is a config-driven hook framework for Claude Code. It reads `.claude/pr
 
 ### Key modules
 
-- `cli.js` — CLI entry point, commands: install, uninstall, init, deinit, diagnose, hook
+- `cli.js` — CLI entry point, commands: install, uninstall, init, deinit, diagnose, hook, run_builtin
 - `lib/dispatcher/claude.js` — Main dispatcher for Claude Code events
 - `lib/dispatcher/git.js` — Dispatcher for git hooks
 - `lib/dispatcher/protocol.js` — Output formatting for Claude Code hook API
 - `lib/checks/script.js` — Runs shell commands as checks
 - `lib/checks/agent.js` — Runs AI agent reviewer checks
-- `lib/checks/builtins.js` — Built-in checks (session-baseline, config-protection, etc.)
+- `lib/checks/builtins.js` — Built-in checks (config:lock, beads:require_wip, review:commit_quality, review:test_coverage)
 - `lib/config.js` — Config loading, merging, and `buildConfig()` for init
 - `lib/init.js` — Project initialization, git hook shim management
 - `lib/template.js` — Template variable expansion for agent prompts
@@ -60,4 +60,4 @@ Use the `/release` skill. It reads `RELEASE.md` for the full process.
 - No dependencies beyond Node.js stdlib (devDependencies: standard for linting only)
 - Linter: `npx standard --fix` (run automatically by `./script/test_fast`)
 - Config format: v2 schema with `configVersion: 2` and `hooks` array
-- All builtins are invoked via `prove_it builtin:<name>` — they're part of the CLI
+- Builtins are invoked via `prove_it run_builtin <namespace>:<name>`

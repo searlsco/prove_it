@@ -6,11 +6,11 @@ const os = require('os')
 const builtins = require('../lib/checks/builtins')
 
 describe('builtins', () => {
-  describe('config-protection', () => {
-    const configProtection = builtins['config-protection']
+  describe('config:lock', () => {
+    const configLock = builtins['config:lock']
 
     it('blocks Edit to prove_it.json', () => {
-      const result = configProtection({}, {
+      const result = configLock({}, {
         toolName: 'Edit',
         toolInput: { file_path: '.claude/prove_it.json', old_string: 'a', new_string: 'b' }
       })
@@ -19,7 +19,7 @@ describe('builtins', () => {
     })
 
     it('blocks Write to prove_it.local.json', () => {
-      const result = configProtection({}, {
+      const result = configLock({}, {
         toolName: 'Write',
         toolInput: { file_path: '/some/path/.claude/prove_it.local.json', content: '{}' }
       })
@@ -27,7 +27,7 @@ describe('builtins', () => {
     })
 
     it('blocks Bash redirect to prove_it.json', () => {
-      const result = configProtection({}, {
+      const result = configLock({}, {
         toolName: 'Bash',
         toolInput: { command: "echo '{}' > .claude/prove_it.json" }
       })
@@ -35,7 +35,7 @@ describe('builtins', () => {
     })
 
     it('blocks Bash tee to prove_it config', () => {
-      const result = configProtection({}, {
+      const result = configLock({}, {
         toolName: 'Bash',
         toolInput: { command: 'echo stuff | tee .claude/prove_it.local.json' }
       })
@@ -43,7 +43,7 @@ describe('builtins', () => {
     })
 
     it('allows Edit to other files', () => {
-      const result = configProtection({}, {
+      const result = configLock({}, {
         toolName: 'Edit',
         toolInput: { file_path: 'src/app.js', old_string: 'a', new_string: 'b' }
       })
@@ -51,7 +51,7 @@ describe('builtins', () => {
     })
 
     it('allows Write to other files', () => {
-      const result = configProtection({}, {
+      const result = configLock({}, {
         toolName: 'Write',
         toolInput: { file_path: 'src/app.js', content: 'code' }
       })
@@ -59,7 +59,7 @@ describe('builtins', () => {
     })
 
     it('allows Bash without redirect', () => {
-      const result = configProtection({}, {
+      const result = configLock({}, {
         toolName: 'Bash',
         toolInput: { command: 'git status' }
       })
@@ -67,7 +67,7 @@ describe('builtins', () => {
     })
 
     it('allows non-gated tools', () => {
-      const result = configProtection({}, {
+      const result = configLock({}, {
         toolName: 'Read',
         toolInput: { file_path: '.claude/prove_it.json' }
       })
@@ -75,41 +75,11 @@ describe('builtins', () => {
     })
   })
 
-  describe('beads-reminder', () => {
-    const beadsReminder = builtins['beads-reminder']
-
-    it('always passes', () => {
-      const result = beadsReminder({}, {})
-      assert.strictEqual(result.pass, true)
-    })
-
-    it('outputs reminder text', () => {
-      const result = beadsReminder({}, {})
-      assert.ok(result.reason.includes('prove_it active'))
-      assert.ok(result.output.includes('verify'))
-    })
-  })
-
-  describe('soft-stop-reminder', () => {
-    const softStopReminder = builtins['soft-stop-reminder']
-
-    it('always passes', () => {
-      const result = softStopReminder({}, {})
-      assert.strictEqual(result.pass, true)
-    })
-
-    it('outputs reminder text', () => {
-      const result = softStopReminder({}, {})
-      assert.ok(result.reason.includes('prove_it'))
-      assert.ok(result.output.includes('UNVERIFIED'))
-    })
-  })
-
-  describe('beads-gate', () => {
-    const beadsGate = builtins['beads-gate']
+  describe('beads:require_wip', () => {
+    const beadsRequireWip = builtins['beads:require_wip']
 
     it('skips non-gated tools', () => {
-      const result = beadsGate({}, {
+      const result = beadsRequireWip({}, {
         toolName: 'Read',
         toolInput: { file_path: 'src/app.js' },
         rootDir: '/tmp/fake',
@@ -120,7 +90,7 @@ describe('builtins', () => {
     })
 
     it('skips Bash without write patterns', () => {
-      const result = beadsGate({}, {
+      const result = beadsRequireWip({}, {
         toolName: 'Bash',
         toolInput: { command: 'git status' },
         rootDir: '/tmp/fake',
@@ -131,7 +101,7 @@ describe('builtins', () => {
     })
 
     it('recognizes Edit as gated tool', () => {
-      const result = beadsGate({}, {
+      const result = beadsRequireWip({}, {
         toolName: 'Edit',
         toolInput: { file_path: 'src/app.js' },
         rootDir: '/tmp/nonexistent-beads-repo',
@@ -143,7 +113,7 @@ describe('builtins', () => {
     })
 
     it('recognizes Write as gated tool', () => {
-      const result = beadsGate({}, {
+      const result = beadsRequireWip({}, {
         toolName: 'Write',
         toolInput: { file_path: 'src/app.js' },
         rootDir: '/tmp/nonexistent-beads-repo',
@@ -154,7 +124,7 @@ describe('builtins', () => {
     })
 
     it('recognizes Bash write patterns (sed -i)', () => {
-      const result = beadsGate({}, {
+      const result = beadsRequireWip({}, {
         toolName: 'Bash',
         toolInput: { command: "sed -i '' 's/foo/bar/' file.js" },
         rootDir: '/tmp/nonexistent-beads-repo',
@@ -165,7 +135,7 @@ describe('builtins', () => {
     })
 
     it('recognizes Bash write patterns (echo >)', () => {
-      const result = beadsGate({}, {
+      const result = beadsRequireWip({}, {
         toolName: 'Bash',
         toolInput: { command: 'echo hello > file.txt' },
         rootDir: '/tmp/nonexistent-beads-repo',
@@ -176,7 +146,7 @@ describe('builtins', () => {
     })
 
     it('skips files outside repo', () => {
-      const result = beadsGate({}, {
+      const result = beadsRequireWip({}, {
         toolName: 'Edit',
         toolInput: { file_path: '/outside/src/app.js' },
         rootDir: '/some/repo',
@@ -187,7 +157,7 @@ describe('builtins', () => {
     })
 
     it('skips non-source files when sources configured', () => {
-      const result = beadsGate({}, {
+      const result = beadsRequireWip({}, {
         toolName: 'Edit',
         toolInput: { file_path: 'docs/README.md' },
         rootDir: '/some/repo',
@@ -223,7 +193,7 @@ describe('builtins', () => {
         fs.chmodSync(bdScript, 0o755)
         process.env.PATH = `${fakeBin}:${origPath}`
 
-        const result = beadsGate({}, {
+        const result = beadsRequireWip({}, {
           toolName: 'Edit',
           toolInput: { file_path: 'src/app.js' },
           rootDir: tmpDir,
@@ -240,7 +210,7 @@ describe('builtins', () => {
         fs.chmodSync(bdScript, 0o755)
         process.env.PATH = `${fakeBin}:${origPath}`
 
-        const result = beadsGate({}, {
+        const result = beadsRequireWip({}, {
           toolName: 'Edit',
           toolInput: { file_path: 'src/app.js' },
           rootDir: tmpDir,
@@ -253,7 +223,7 @@ describe('builtins', () => {
       it('passes (fail-open) when bd command not found', () => {
         // PATH with no bd
         process.env.PATH = fakeBin
-        const result = beadsGate({}, {
+        const result = beadsRequireWip({}, {
           toolName: 'Edit',
           toolInput: { file_path: 'src/app.js' },
           rootDir: tmpDir,
@@ -264,23 +234,55 @@ describe('builtins', () => {
     })
   })
 
-  describe('session-baseline', () => {
-    const sessionBaseline = builtins['session-baseline']
+  describe('review:commit_quality', () => {
+    const reviewCommitQuality = builtins['review:commit_quality']
 
-    it('passes with no session', () => {
-      const result = sessionBaseline({}, { projectDir: '.', sessionId: null })
-      assert.strictEqual(result.pass, true)
-      assert.strictEqual(result.skipped, true)
+    it('is a function', () => {
+      assert.strictEqual(typeof reviewCommitQuality, 'function')
+    })
+
+    it('does not fail-fast on missing sessionId (unlike test_coverage)', () => {
+      // Use a nonexistent reviewer command so it fails for a normal reason
+      // (binary not found) rather than a session guard
+      const result = reviewCommitQuality({ command: '__no_such_reviewer__' }, {
+        sessionId: null,
+        rootDir: '/tmp/nonexistent',
+        projectDir: '/tmp/nonexistent'
+      })
+      // Should attempt the review (not fail-fast like test_coverage),
+      // then fail because the reviewer binary doesn't exist
+      assert.strictEqual(result.pass, false)
+      assert.ok(result.reason.includes('not found'),
+        `Should fail due to missing binary, not session guard. Got: ${result.reason}`)
+    })
+  })
+
+  describe('review:test_coverage', () => {
+    const reviewCoverage = builtins['review:test_coverage']
+
+    it('is a function', () => {
+      assert.strictEqual(typeof reviewCoverage, 'function')
+    })
+
+    it('fails fast when sessionId is null', () => {
+      const result = reviewCoverage({}, {
+        sessionId: null,
+        rootDir: '/tmp/fake',
+        projectDir: '/tmp/fake'
+      })
+      assert.strictEqual(result.pass, false)
+      assert.strictEqual(result.skipped, false)
+      assert.ok(result.reason.includes('session_id is missing'),
+        `Reason should mention missing session_id, got: ${result.reason}`)
     })
   })
 
   describe('exports all expected builtins', () => {
     const expectedNames = [
-      'session-baseline',
-      'beads-reminder',
-      'config-protection',
-      'beads-gate',
-      'soft-stop-reminder'
+      'config:lock',
+      'beads:require_wip',
+      'review:commit_quality',
+      'review:test_coverage'
     ]
 
     for (const name of expectedNames) {

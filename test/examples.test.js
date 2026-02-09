@@ -144,8 +144,6 @@ describe('example projects', () => {
           })
           assert.strictEqual(result.status, 0,
             `SessionStart failed in ${name}/:\n${result.stderr || result.stdout}`)
-          assert.ok(result.stdout.length > 0,
-            'SessionStart should produce output')
         })
 
         it('PreToolUse dispatches successfully', () => {

@@ -25,8 +25,8 @@ function beadsHooks () {
       event: 'PreToolUse',
       matcher: 'Edit|Write|NotebookEdit|Bash',
       checks: [
-        { name: 'config-protection', type: 'script', command: 'prove_it builtin:config-protection' },
-        { name: 'beads-gate', type: 'script', command: 'prove_it builtin:beads-gate', when: { fileExists: '.beads' } }
+        { name: 'lock-config', type: 'script', command: 'prove_it run_builtin config:lock' },
+        { name: 'require-wip', type: 'script', command: 'prove_it run_builtin beads:require_wip', when: { fileExists: '.beads' } }
       ]
     }
   ]
@@ -46,7 +46,7 @@ describe('beads integration (v2 dispatcher)', () => {
     cleanupTempDir(tmpDir)
   })
 
-  describe('config-protection', () => {
+  describe('config:lock', () => {
     beforeEach(() => {
       writeConfig(tmpDir, makeConfig(beadsHooks()))
     })
@@ -62,7 +62,7 @@ describe('beads integration (v2 dispatcher)', () => {
         }
       }, { cwd: tmpDir, env })
 
-      assertValidPermissionDecision(result, 'config-protection blocks Edit prove_it.json')
+      assertValidPermissionDecision(result, 'config:lock blocks Edit prove_it.json')
       assert.equal(result.output.hookSpecificOutput.permissionDecision, 'deny')
     })
 
@@ -76,7 +76,7 @@ describe('beads integration (v2 dispatcher)', () => {
         }
       }, { cwd: tmpDir, env })
 
-      assertValidPermissionDecision(result, 'config-protection blocks Write prove_it.local.json')
+      assertValidPermissionDecision(result, 'config:lock blocks Write prove_it.local.json')
       assert.equal(result.output.hookSpecificOutput.permissionDecision, 'deny')
     })
 
@@ -89,7 +89,7 @@ describe('beads integration (v2 dispatcher)', () => {
         }
       }, { cwd: tmpDir, env })
 
-      assertValidPermissionDecision(result, 'config-protection blocks Bash redirect')
+      assertValidPermissionDecision(result, 'config:lock blocks Bash redirect')
       assert.equal(result.output.hookSpecificOutput.permissionDecision, 'deny')
     })
 
@@ -103,8 +103,8 @@ describe('beads integration (v2 dispatcher)', () => {
         }
       }, { cwd: tmpDir, env })
 
-      assertValidPermissionDecision(result, 'config-protection allows non-config Write')
-      // Config-protection passes and beads-gate is skipped (no .beads dir),
+      assertValidPermissionDecision(result, 'config:lock allows non-config Write')
+      // config:lock passes and beads:require_wip is skipped (no .beads dir),
       // so the dispatcher emits an allow decision or exits silently.
       if (result.output) {
         assert.notEqual(
@@ -116,7 +116,7 @@ describe('beads integration (v2 dispatcher)', () => {
     })
   })
 
-  describe('beads-gate', () => {
+  describe('beads:require_wip', () => {
     beforeEach(() => {
       writeConfig(tmpDir, makeConfig(beadsHooks()))
     })
@@ -134,8 +134,8 @@ describe('beads integration (v2 dispatcher)', () => {
         }
       }, { cwd: tmpDir, env })
 
-      assertValidPermissionDecision(result, 'beads-gate denies Edit without in_progress bead')
-      // beads-gate should deny (bd not found returns pass in fail-open,
+      assertValidPermissionDecision(result, 'beads:require_wip denies Edit without in_progress bead')
+      // beads:require_wip should deny (bd not found returns pass in fail-open,
       // but if bd IS found and no beads in progress, it denies).
       // Accept deny OR pass depending on whether bd is installed.
       if (result.output?.hookSpecificOutput?.permissionDecision === 'deny') {
@@ -148,7 +148,7 @@ describe('beads integration (v2 dispatcher)', () => {
 
     it('allows when not a beads repo', () => {
       // No initBeads() — .beads directory does not exist.
-      // The when.fileExists condition causes beads-gate to be skipped entirely.
+      // The when.fileExists condition causes beads:require_wip to be skipped entirely.
       const result = invokeHook(HOOK_SPEC, {
         session_id: 'test-session',
         tool_name: 'Edit',
@@ -159,7 +159,7 @@ describe('beads integration (v2 dispatcher)', () => {
         }
       }, { cwd: tmpDir, env })
 
-      assertValidPermissionDecision(result, 'beads-gate allows non-beads repo')
+      assertValidPermissionDecision(result, 'beads:require_wip allows non-beads repo')
       if (result.output) {
         assert.notEqual(
           result.output.hookSpecificOutput?.permissionDecision,
@@ -185,7 +185,7 @@ describe('beads integration (v2 dispatcher)', () => {
         }
       }, { cwd: tmpDir, env })
 
-      assertValidPermissionDecision(result, 'beads-gate skips non-source files')
+      assertValidPermissionDecision(result, 'beads:require_wip skips non-source files')
       if (result.output) {
         assert.notEqual(
           result.output.hookSpecificOutput?.permissionDecision,

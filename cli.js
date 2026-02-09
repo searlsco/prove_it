@@ -9,6 +9,7 @@
  *   deinit    - Remove prove_it files from current repository
  *   diagnose  - Check installation status and report issues
  *   hook      - Run a hook dispatcher (claude:<Event> or git:<event>)
+ *   run_builtin - Run a builtin check directly
  *   record    - Record a test run result for mtime caching
  */
 const fs = require('fs')
@@ -603,6 +604,46 @@ function cmdRecord () {
 }
 
 // ============================================================================
+// Run check command - run a builtin check directly
+// ============================================================================
+
+function cmdRunCheck () {
+  const builtinName = process.argv[3]
+  if (!builtinName) {
+    console.error('Usage: prove_it run_builtin <namespace>:<name>')
+    console.error('Example: prove_it run_builtin config:lock')
+    process.exit(1)
+  }
+
+  const builtins = require('./lib/checks/builtins')
+  const fn = builtins[builtinName]
+  if (!fn) {
+    console.error(`Unknown builtin: ${builtinName}`)
+    console.error(`Available: ${Object.keys(builtins).filter(k => typeof builtins[k] === 'function').join(', ')}`)
+    process.exit(1)
+  }
+
+  const { resolveTestRoot } = require('./lib/testing')
+  const projectDir = process.cwd()
+  const rootDir = resolveTestRoot(projectDir)
+
+  const context = {
+    rootDir,
+    projectDir,
+    sessionId: null,
+    toolName: null,
+    toolInput: null,
+    sources: null,
+    maxChars: 12000
+  }
+
+  const check = { name: builtinName, type: 'script', command: `prove_it run_builtin ${builtinName}` }
+  const result = fn(check, context)
+  if (result.output) console.log(result.output)
+  process.exit(result.pass ? 0 : 1)
+}
+
+// ============================================================================
 // Main CLI
 // ============================================================================
 
@@ -618,6 +659,7 @@ Commands:
   deinit      Remove prove_it files from current repository
   diagnose    Check installation status and report issues
   hook        Run a hook dispatcher (claude:<Event> or git:<event>)
+  run_builtin   Run a builtin check directly (e.g. prove_it run_builtin config:lock)
   record      Record a test run result for mtime caching
   help        Show this help message
   -v, --version  Show version number
@@ -629,7 +671,7 @@ Record options:
   --result <N>     Record pass (N=0) or fail (N!=0), exit with code N
 
 Init options:
-  --[no-]git-hooks                Install git pre-commit/pre-push hooks (default: yes)
+  --[no-]git-hooks                Install git hooks (pre-commit, pre-push) (default: yes)
   --[no-]default-checks           Include beads gate, code review, coverage review (default: yes)
   --[no-]automatic-git-hook-merge Merge with existing git hooks (default: yes)
 
@@ -680,6 +722,9 @@ function main () {
       break
     case 'record':
       cmdRecord()
+      break
+    case 'run_builtin':
+      cmdRunCheck()
       break
     case '-v':
     case '--version':

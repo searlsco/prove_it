@@ -17,7 +17,7 @@ The two most important things prove_it does:
 
 Other stuff prove_it does:
 
-* **Blocks human commits too** — prove_it installs git pre-commit and pre-push hooks so the same test checks run whether Claude or a human is committing
+* **Git hooks for Claude commits** — prove_it installs git pre-commit hooks that run your test suite when Claude commits. Human commits pass through instantly (the hooks only activate when the `CLAUDECODE` environment variable is set)
 * **[Beads](https://github.com/steveyegge/beads) integration** — if your project uses beads to track work, prove_it will stop Claude from editing code unless a current task is in progress, essentially forcing it to know _what_ it's working on before it starts working
 * **Tracks runs** — if code hasn't changed since the last successful test run, prove_it skips re-running your tests (configurable per-check)
 * **Config protection** — blocks Claude from editing your prove_it config files directly
@@ -161,7 +161,7 @@ PreToolUse hooks can filter by tool name and command patterns:
 ### Conditional checks
 
 ```json
-{ "name": "beads-gate", "type": "script", "command": "prove_it builtin:beads-gate",
+{ "name": "require-wip", "type": "script", "command": "prove_it run_builtin beads:require_wip",
   "when": { "fileExists": ".beads" } }
 ```
 
@@ -175,7 +175,7 @@ By default, agent checks use `claude -p` (Claude Code in pipe mode). The reviewe
 
 ```json
 {
-  "name": "code-review",
+  "name": "commit-review",
   "type": "agent",
   "prompt": "Review staged changes for:\n1. Test coverage gaps\n2. Logic errors or edge cases\n3. Dead code\n\n{{staged_diff}}"
 }
@@ -204,7 +204,7 @@ You can use a different AI for each reviewer, so the agent doing the work is che
 
 ```json
 {
-  "name": "code-review",
+  "name": "commit-review",
   "type": "agent",
   "prompt": "Review staged changes for bugs and missing tests.\n\n{{staged_diff}}"
 },
@@ -220,26 +220,26 @@ The `command` field accepts any CLI that reads a prompt from stdin and writes it
 
 ## Builtins
 
-prove_it ships with built-in checks invoked via `prove_it builtin:<name>`:
+prove_it ships with built-in checks invoked via `prove_it run_builtin <name>`:
 
 | Builtin | Event | What it does |
 |---------|-------|-------------|
-| `session-baseline` | SessionStart | Records git state for session diff tracking |
-| `beads-reminder` | SessionStart | Reminds Claude about issue tracker workflow |
-| `config-protection` | PreToolUse | Blocks direct edits to prove_it config files |
-| `beads-gate` | PreToolUse | Requires an in-progress issue before code changes |
-| `soft-stop-reminder` | Stop | Reminds Claude to push and clean up |
+| `config:lock` | PreToolUse | Blocks direct edits to prove_it config files |
+| `beads:require_wip` | PreToolUse | Requires an in-progress issue before code changes |
+| `review:commit_quality` | pre-commit | Agent reviews staged diff for bugs and dead code |
+| `review:test_coverage` | Stop | Agent reviews session diffs for test coverage |
 
 ## Commands
 
 ```
-prove_it install     Register global hooks (~/.claude/settings.json)
-prove_it uninstall   Remove global hooks
-prove_it init        Set up current project (interactive or with flags)
-prove_it deinit      Remove prove_it from current project
-prove_it diagnose    Check installation and show effective config
-prove_it hook <spec> Run a dispatcher directly (claude:Stop, git:pre-commit)
-prove_it record      Record a test run result (--name <check> --pass|--fail|--result <N>)
+prove_it install       Register global hooks (~/.claude/settings.json)
+prove_it uninstall     Remove global hooks
+prove_it init          Set up current project (interactive or with flags)
+prove_it deinit        Remove prove_it from current project
+prove_it diagnose      Check installation and show effective config
+prove_it hook <spec>   Run a dispatcher directly (claude:Stop, git:pre-commit)
+prove_it run_builtin <namespace:name> Run a builtin check directly
+prove_it record        Record a test run result (--name <check> --pass|--fail|--result <N>)
 ```
 
 ## Disabling prove_it

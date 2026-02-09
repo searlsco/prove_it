@@ -19,16 +19,6 @@
           "type": "script",
           "command": "./script/check_local_shim",
           "mtime": false
-        },
-        {
-          "name": "session-baseline",
-          "type": "script",
-          "command": "prove_it builtin:session-baseline"
-        },
-        {
-          "name": "beads-reminder",
-          "type": "script",
-          "command": "prove_it builtin:beads-reminder"
         }
       ]
     },
@@ -38,32 +28,17 @@
       "matcher": "Edit|Write|NotebookEdit|Bash",
       "checks": [
         {
-          "name": "config-protection",
+          "name": "lock-config",
           "type": "script",
-          "command": "prove_it builtin:config-protection"
+          "command": "prove_it run_builtin config:lock"
         },
         {
-          "name": "beads-gate",
+          "name": "require-wip",
           "type": "script",
-          "command": "prove_it builtin:beads-gate",
+          "command": "prove_it run_builtin beads:require_wip",
           "when": {
             "fileExists": ".beads"
           }
-        }
-      ]
-    },
-    {
-      "type": "claude",
-      "event": "PreToolUse",
-      "matcher": "Bash",
-      "triggers": [
-        "(^|\\s)git\\s+commit\\b"
-      ],
-      "checks": [
-        {
-          "name": "full-tests",
-          "type": "script",
-          "command": "./script/test"
         }
       ]
     },
@@ -75,11 +50,17 @@
           "name": "fast-tests",
           "type": "script",
           "command": "./script/test_fast"
-        },
+        }
+      ]
+    },
+    {
+      "type": "git",
+      "event": "pre-commit",
+      "checks": [
         {
-          "name": "soft-stop",
+          "name": "full-tests",
           "type": "script",
-          "command": "prove_it builtin:soft-stop-reminder"
+          "command": "./script/test"
         }
       ]
     }

@@ -8,12 +8,12 @@ const { isBuiltin, getBuiltinName, runScriptCheck } = require('../lib/checks/scr
 
 describe('script check', () => {
   describe('isBuiltin', () => {
-    it('returns true for prove_it builtin: prefix', () => {
-      assert.ok(isBuiltin('prove_it builtin:config-protection'))
+    it('returns true for prove_it run_builtin prefix', () => {
+      assert.ok(isBuiltin('prove_it run_builtin config:lock'))
     })
 
-    it('returns true for other builtins', () => {
-      assert.ok(isBuiltin('prove_it builtin:beads-gate'))
+    it('returns true for other run_builtin builtins', () => {
+      assert.ok(isBuiltin('prove_it run_builtin beads:require_wip'))
     })
 
     it('returns false for regular commands', () => {
@@ -30,12 +30,12 @@ describe('script check', () => {
   })
 
   describe('getBuiltinName', () => {
-    it('extracts name from builtin command', () => {
-      assert.strictEqual(getBuiltinName('prove_it builtin:config-protection'), 'config-protection')
+    it('extracts name from run_builtin command', () => {
+      assert.strictEqual(getBuiltinName('prove_it run_builtin config:lock'), 'config:lock')
     })
 
-    it('extracts beads-gate name', () => {
-      assert.strictEqual(getBuiltinName('prove_it builtin:beads-gate'), 'beads-gate')
+    it('extracts beads:require_wip name', () => {
+      assert.strictEqual(getBuiltinName('prove_it run_builtin beads:require_wip'), 'beads:require_wip')
     })
   })
 
@@ -95,7 +95,7 @@ describe('script check', () => {
 
     it('returns fail for unknown builtin', () => {
       const result = runScriptCheck(
-        { name: 'test', command: 'prove_it builtin:nonexistent' },
+        { name: 'test', command: 'prove_it run_builtin nonexistent' },
         { rootDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000 }
       )
       assert.strictEqual(result.pass, false)

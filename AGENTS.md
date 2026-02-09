@@ -2,7 +2,7 @@
 
 ## The problem
 
-prove_it's hooks reference `prove_it` by name (e.g., `prove_it builtin:session-baseline`). When Claude Code fires hooks, the `prove_it` on PATH determines which version runs. During development, that's usually the Homebrew install — not your working tree.
+prove_it's hooks reference `prove_it` by name (e.g., `prove_it run_builtin config:lock`). When Claude Code fires hooks, the `prove_it` on PATH determines which version runs. During development, that's usually the Homebrew install — not your working tree.
 
 ## The solution
 
@@ -22,7 +22,7 @@ script/agent
             └─ prove_it hook claude:SessionStart
                  └─ resolves to test/bin/prove_it → cli.js
                       └─ runs local-shim-check → confirms test/bin/prove_it is active
-                      └─ runs session-baseline, beads-reminder
+                      └─ records session baseline (lazy, internal)
 ```
 
 All child processes inherit the modified PATH: hook dispatchers, builtin checks, test scripts, agent reviewers.

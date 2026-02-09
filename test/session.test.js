@@ -6,11 +6,13 @@ const os = require('os')
 
 const {
   logReview,
+  projectLogName,
   loadSessionState,
   saveSessionState,
   getLatestSnapshot,
   generateDiffsSince
 } = require('../lib/session')
+const { recordSessionBaseline } = require('../lib/dispatcher/claude')
 
 describe('session state functions', () => {
   let tmpDir
@@ -156,10 +158,28 @@ describe('session state functions', () => {
       assert.strictEqual(entries[2].status, 'fail')
     })
 
-    it('skips logging when sessionId is null', () => {
+    it('writes to project-level file when sessionId is null', () => {
       logReview(null, '/project', 'done', 'pass', 'OK')
-      const logFile = path.join(tmpDir, 'prove_it', 'sessions', 'unknown.jsonl')
-      assert.strictEqual(fs.existsSync(logFile), false, 'Should not create unknown.jsonl')
+      const expectedFile = path.join(tmpDir, 'prove_it', 'sessions', projectLogName('/project'))
+      assert.strictEqual(fs.existsSync(expectedFile), true,
+        `Project-level log file should exist at ${expectedFile}`)
+      const entry = JSON.parse(fs.readFileSync(expectedFile, 'utf8').trim())
+      assert.strictEqual(entry.sessionId, null)
+      assert.strictEqual(entry.projectDir, '/project')
+      assert.strictEqual(entry.status, 'pass')
+    })
+
+    it('uses _ prefix for project-level log files', () => {
+      const name = projectLogName('/some/project')
+      assert.ok(name.startsWith('_project_'),
+        `Project log name should start with _project_, got: ${name}`)
+      assert.ok(name.endsWith('.jsonl'),
+        `Project log name should end with .jsonl, got: ${name}`)
+    })
+
+    it('produces deterministic project log names', () => {
+      assert.strictEqual(projectLogName('/project'), projectLogName('/project'))
+      assert.notStrictEqual(projectLogName('/project-a'), projectLogName('/project-b'))
     })
 
     it('logs FAIL with reason', () => {
@@ -380,19 +400,19 @@ describe('session state functions', () => {
       assert.strictEqual(entry.sessionId, 'test-session-xyz789')
     })
 
-    it('without session_id, state functions gracefully degrade', () => {
+    it('without session_id, logReview writes to project-level file', () => {
       const probeScript = path.join(tmpDir, 'session_probe_no_id.js')
       const proveItDir = path.join(tmpDir, 'prove_it_no_id')
       const sharedPath = path.join(__dirname, '..', 'lib', 'shared.js')
 
       fs.writeFileSync(probeScript, [
-        `const { saveSessionState, loadSessionState, logReview } = require(${JSON.stringify(sharedPath)});`,
+        `const { saveSessionState, loadSessionState, logReview, projectLogName } = require(${JSON.stringify(sharedPath)});`,
         'const input = JSON.parse(require("fs").readFileSync(0, "utf8"));',
         'const sessionId = input.session_id || null;',
         'saveSessionState(sessionId, "key", "value");',
         'const result = loadSessionState(sessionId, "key");',
         'logReview(sessionId, "/test", "probe", "pass", "no session");',
-        'process.stdout.write(JSON.stringify({ loadResult: result }));'
+        'process.stdout.write(JSON.stringify({ loadResult: result, logName: projectLogName("/test") }));'
       ].join('\n'))
 
       const result = spawnSync('node', [probeScript], {
@@ -405,8 +425,62 @@ describe('session state functions', () => {
       const output = JSON.parse(result.stdout)
       assert.strictEqual(output.loadResult, null)
 
-      const unknownLog = path.join(proveItDir, 'sessions', 'unknown.jsonl')
-      assert.strictEqual(fs.existsSync(unknownLog), false, 'Should not create unknown.jsonl')
+      // logReview now writes to a project-level file instead of skipping
+      const projectLog = path.join(proveItDir, 'sessions', output.logName)
+      assert.strictEqual(fs.existsSync(projectLog), true,
+        `Project-level log should exist at ${projectLog}`)
+      const entry = JSON.parse(fs.readFileSync(projectLog, 'utf8').trim())
+      assert.strictEqual(entry.sessionId, null)
+      assert.strictEqual(entry.projectDir, '/test')
+    })
+  })
+
+  describe('recordSessionBaseline', () => {
+    it('writes session file with git info', () => {
+      // Create a git repo in tmpDir
+      const { spawnSync: spawn } = require('child_process')
+      const projectDir = path.join(tmpDir, 'project')
+      fs.mkdirSync(projectDir, { recursive: true })
+      spawn('git', ['init'], { cwd: projectDir })
+      spawn('git', ['config', 'user.email', 'test@test.com'], { cwd: projectDir })
+      spawn('git', ['config', 'user.name', 'Test'], { cwd: projectDir })
+      fs.writeFileSync(path.join(projectDir, 'file.js'), 'hello\n')
+      spawn('git', ['add', '.'], { cwd: projectDir })
+      spawn('git', ['commit', '-m', 'init'], { cwd: projectDir })
+
+      recordSessionBaseline('test-baseline-123', projectDir)
+
+      const sessionFile = path.join(tmpDir, 'prove_it', 'sessions', 'test-baseline-123.json')
+      assert.strictEqual(fs.existsSync(sessionFile), true,
+        `Session file should exist at ${sessionFile}`)
+      const data = JSON.parse(fs.readFileSync(sessionFile, 'utf8'))
+      assert.strictEqual(data.session_id, 'test-baseline-123')
+      assert.strictEqual(data.project_dir, projectDir)
+      assert.ok(data.git.head, 'Should have git HEAD')
+      assert.ok(data.started_at, 'Should have started_at timestamp')
+    })
+
+    it('skips when sessionId is null', () => {
+      recordSessionBaseline(null, '/tmp/whatever')
+      const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
+      // Directory shouldn't even be created
+      if (fs.existsSync(sessionsDir)) {
+        const files = fs.readdirSync(sessionsDir)
+        assert.strictEqual(files.length, 0, 'No session files should be created')
+      }
+    })
+
+    it('is idempotent (skips if session file already exists)', () => {
+      const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
+      fs.mkdirSync(sessionsDir, { recursive: true })
+      const sessionFile = path.join(sessionsDir, 'test-idem.json')
+      fs.writeFileSync(sessionFile, '{"existing": true}', 'utf8')
+
+      recordSessionBaseline('test-idem', '/tmp/whatever')
+
+      const data = JSON.parse(fs.readFileSync(sessionFile, 'utf8'))
+      assert.strictEqual(data.existing, true,
+        'Should not overwrite existing session file')
     })
   })
 })

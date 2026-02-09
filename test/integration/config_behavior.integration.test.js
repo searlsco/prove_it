@@ -327,7 +327,7 @@ describe('Config-driven hook behavior (v2)', () => {
 
   describe('when conditions', () => {
     it('skips check when fileExists condition is not met', () => {
-      // beads-gate has when: { fileExists: '.beads' } — no .beads dir exists
+      // beads:require_wip has when: { fileExists: '.beads' } — no .beads dir exists
       writeConfig(tmpDir, makeConfig([
         {
           type: 'claude',
@@ -335,9 +335,9 @@ describe('Config-driven hook behavior (v2)', () => {
           matcher: 'Edit|Write',
           checks: [
             {
-              name: 'beads-gate',
+              name: 'require-wip',
               type: 'script',
-              command: 'prove_it builtin:beads-gate',
+              command: 'prove_it run_builtin beads:require_wip',
               when: { fileExists: '.beads' }
             }
           ]

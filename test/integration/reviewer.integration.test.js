@@ -144,8 +144,8 @@ describe('reviewer integration', { skip: !claudeAvailable() }, () => {
       gitCommit(tmpDir, 'initial')
 
       // Change both source and test
-      createFile(tmpDir, 'src/utils.js', 'function old() { return 1; }\nfunction newFunc() { return 2; }')
-      createFile(tmpDir, 'test/utils.test.js', "test('old', () => {});\ntest('newFunc', () => {});")
+      createFile(tmpDir, 'src/utils.js', 'function old() { return 1; }\nfunction newFunc() { return 2; }\nmodule.exports = { old, newFunc };')
+      createFile(tmpDir, 'test/utils.test.js', "const assert = require('assert');\nconst { old, newFunc } = require('../src/utils');\ntest('old', () => { assert.strictEqual(old(), 1); });\ntest('newFunc returns 2', () => { assert.strictEqual(newFunc(), 2); });")
 
       const result = runReviewer(tmpDir)
       const parsed = parseReviewerResult(result.stdout)

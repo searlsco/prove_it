@@ -48,6 +48,31 @@ describe('CLI', () => {
       assert.match(result.stderr, /Unknown command: foobar/)
     })
   })
+
+  describe('run_builtin', () => {
+    it('shows usage with no arguments', () => {
+      const result = runCli(['run_builtin'])
+      assert.strictEqual(result.exitCode, 1)
+      assert.match(result.stderr, /Usage/)
+    })
+
+    it('exits with error for unknown builtin', () => {
+      const result = runCli(['run_builtin', 'nonexistent'])
+      assert.strictEqual(result.exitCode, 1)
+      assert.match(result.stderr, /Unknown builtin/)
+    })
+
+    it('help text mentions run_builtin', () => {
+      const result = runCli(['help'])
+      assert.match(result.stdout, /run_builtin/)
+    })
+
+    it('successfully invokes config:lock (passes with no tool context)', () => {
+      const result = runCli(['run_builtin', 'config:lock'])
+      assert.strictEqual(result.exitCode, 0,
+        `config:lock should pass when no tool context, stderr: ${result.stderr}`)
+    })
+  })
 })
 
 describe('init/deinit', () => {

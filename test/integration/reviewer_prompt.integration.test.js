@@ -64,7 +64,7 @@ describe('Reviewer prompt passthrough (v2)', () => {
           checks: [
             { name: 'full-tests', type: 'script', command: './script/test' },
             {
-              name: 'code-review',
+              name: 'commit-review',
               type: 'agent',
               command: path.join(tmpDir, 'capture_reviewer.sh'),
               prompt: 'Review these staged changes:\n\n{{staged_diff}}'
@@ -150,7 +150,7 @@ describe('Reviewer prompt passthrough (v2)', () => {
           checks: [
             { name: 'full-tests', type: 'script', command: './script/test' },
             {
-              name: 'code-review',
+              name: 'commit-review',
               type: 'agent',
               command: path.join(tmpDir, 'fail_reviewer.sh'),
               prompt: 'Review these changes:\n\n{{staged_diff}}'

@@ -11,68 +11,21 @@
   "hooks": [
     {
       "type": "claude",
-      "event": "SessionStart",
-      "checks": [
-        {
-          "name": "session-baseline",
-          "type": "script",
-          "command": "prove_it builtin:session-baseline"
-        },
-        {
-          "name": "beads-reminder",
-          "type": "script",
-          "command": "prove_it builtin:beads-reminder"
-        }
-      ]
-    },
-    {
-      "type": "claude",
       "event": "PreToolUse",
       "matcher": "Edit|Write|NotebookEdit|Bash",
       "checks": [
         {
-          "name": "config-protection",
+          "name": "lock-config",
           "type": "script",
-          "command": "prove_it builtin:config-protection"
+          "command": "prove_it run_builtin config:lock"
         },
         {
-          "name": "beads-gate",
+          "name": "require-wip",
           "type": "script",
-          "command": "prove_it builtin:beads-gate",
+          "command": "prove_it run_builtin beads:require_wip",
           "when": {
             "fileExists": ".beads"
           }
-        }
-      ]
-    },
-    {
-      "type": "claude",
-      "event": "PreToolUse",
-      "matcher": "Bash",
-      "triggers": [
-        "(^|\\s)git\\s+commit\\b"
-      ],
-      "checks": [
-        {
-          "name": "lint",
-          "type": "script",
-          "command": "./script/lint.sh"
-        },
-        {
-          "name": "full-tests",
-          "type": "script",
-          "command": "./script/test"
-        },
-        {
-          "name": "code-review",
-          "type": "agent",
-          "prompt": "Review staged changes to the calculator module for:\n1. Division by zero handling\n2. Integer overflow edge cases\n3. Missing test coverage for error paths\n\nRespond with exactly one of:\n- PASS (on a line by itself)\n- FAIL: <reason> (on a line by itself)\n\n{{staged_diff}}"
-        },
-        {
-          "name": "adversarial-review",
-          "type": "agent",
-          "command": "codex exec -",
-          "prompt": "Review staged changes to the calculator module as a second opinion. Look for issues the primary reviewer might miss:\n1. Subtle logic errors or off-by-one mistakes\n2. Unsafe type coercion or NaN propagation\n3. Missing boundary conditions in tests\n\n{{staged_diff}}"
         }
       ]
     },
@@ -89,11 +42,6 @@
           "name": "coverage-review",
           "type": "agent",
           "prompt": "Check that calculator code changes have corresponding test coverage, especially edge cases (zero, negative numbers, large values).\n\nRespond with exactly one of:\n- PASS (on a line by itself)\n- FAIL: <reason> (on a line by itself)\n\n{{session_diffs}}"
-        },
-        {
-          "name": "soft-stop",
-          "type": "script",
-          "command": "prove_it builtin:soft-stop-reminder"
         }
       ]
     },
@@ -110,17 +58,17 @@
           "name": "full-tests",
           "type": "script",
           "command": "./script/test"
-        }
-      ]
-    },
-    {
-      "type": "git",
-      "event": "pre-push",
-      "checks": [
+        },
         {
-          "name": "full-tests",
-          "type": "script",
-          "command": "./script/test"
+          "name": "commit-review",
+          "type": "agent",
+          "prompt": "Review staged changes to the calculator module for:\n1. Division by zero handling\n2. Integer overflow edge cases\n3. Missing test coverage for error paths\n\nRespond with exactly one of:\n- PASS (on a line by itself)\n- FAIL: <reason> (on a line by itself)\n\n{{staged_diff}}"
+        },
+        {
+          "name": "adversarial-review",
+          "type": "agent",
+          "command": "codex exec -",
+          "prompt": "Review staged changes to the calculator module as a second opinion. Look for issues the primary reviewer might miss:\n1. Subtle logic errors or off-by-one mistakes\n2. Unsafe type coercion or NaN propagation\n3. Missing boundary conditions in tests\n\n{{staged_diff}}"
         }
       ]
     }

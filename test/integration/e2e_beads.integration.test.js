@@ -46,15 +46,15 @@ describe('E2E: beads enforcement via claude CLI', { skip: !canRunE2E && 'require
     // Create a target file for claude to attempt editing
     createFile(tmpDir, 'target.txt', 'original content\n')
 
-    // Write v2 config with config-protection and beads-gate
+    // Write v2 config with config:lock and beads:require_wip
     writeConfig(tmpDir, makeConfig([
       {
         type: 'claude',
         event: 'PreToolUse',
         matcher: 'Edit|Write|NotebookEdit|Bash',
         checks: [
-          { name: 'config-protection', type: 'script', command: 'prove_it builtin:config-protection' },
-          { name: 'beads-gate', type: 'script', command: 'prove_it builtin:beads-gate', when: { fileExists: '.beads' } }
+          { name: 'lock-config', type: 'script', command: 'prove_it run_builtin config:lock' },
+          { name: 'require-wip', type: 'script', command: 'prove_it run_builtin beads:require_wip', when: { fileExists: '.beads' } }
         ]
       }
     ]))

@@ -57,11 +57,11 @@ describe('init', () => {
       assert.ok(Array.isArray(cfg.hooks))
       // Should have git hooks
       assert.ok(cfg.hooks.some(h => h.type === 'git' && h.event === 'pre-commit'))
-      assert.ok(cfg.hooks.some(h => h.type === 'git' && h.event === 'pre-push'))
-      // Should have default checks (beads-gate, code-review, coverage-review)
+      assert.ok(!cfg.hooks.some(h => h.type === 'git' && h.event === 'pre-push'))
+      // Should have default checks
       const allChecks = cfg.hooks.flatMap(h => h.checks || [])
-      assert.ok(allChecks.some(c => c.name === 'beads-gate'))
-      assert.ok(allChecks.some(c => c.name === 'code-review'))
+      assert.ok(allChecks.some(c => c.name === 'require-wip'))
+      assert.ok(allChecks.some(c => c.name === 'commit-review'))
       assert.ok(allChecks.some(c => c.name === 'coverage-review'))
     })
 
@@ -75,8 +75,8 @@ describe('init', () => {
       const cfg = buildConfig({ defaultChecks: false })
       assert.strictEqual(cfg.configVersion, 2)
       const allChecks = cfg.hooks.flatMap(h => h.checks || [])
-      assert.ok(!allChecks.some(c => c.name === 'beads-gate'))
-      assert.ok(!allChecks.some(c => c.name === 'code-review'))
+      assert.ok(!allChecks.some(c => c.name === 'require-wip'))
+      assert.ok(!allChecks.some(c => c.name === 'commit-review'))
       assert.ok(!allChecks.some(c => c.name === 'coverage-review'))
     })
 
@@ -85,13 +85,11 @@ describe('init', () => {
       assert.strictEqual(cfg.configVersion, 2)
       assert.ok(!cfg.hooks.some(h => h.type === 'git'))
       const allChecks = cfg.hooks.flatMap(h => h.checks || [])
-      assert.ok(!allChecks.some(c => c.name === 'beads-gate'))
-      assert.ok(!allChecks.some(c => c.name === 'code-review'))
+      assert.ok(!allChecks.some(c => c.name === 'require-wip'))
+      assert.ok(!allChecks.some(c => c.name === 'commit-review'))
       // Should still have base checks
-      assert.ok(allChecks.some(c => c.name === 'session-baseline'))
-      assert.ok(allChecks.some(c => c.name === 'config-protection'))
+      assert.ok(allChecks.some(c => c.name === 'lock-config'))
       assert.ok(allChecks.some(c => c.name === 'fast-tests'))
-      assert.ok(allChecks.some(c => c.name === 'soft-stop'))
     })
 
     it('full config has at least as many hooks as base-only', () => {
