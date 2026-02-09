@@ -44,7 +44,7 @@ describe('Claude Code hook output contract', () => {
           type: 'claude',
           event: 'PreToolUse',
           matcher: 'Edit|Write|NotebookEdit|Bash',
-          checks: [
+          tasks: [
             { name: 'lock-config', type: 'script', command: 'prove_it run_builtin config:lock' },
             { name: 'require-wip', type: 'script', command: 'prove_it run_builtin beads:require_wip', when: { fileExists: '.beads' } }
           ]
@@ -105,7 +105,7 @@ describe('Claude Code hook output contract', () => {
           event: 'PreToolUse',
           matcher: 'Bash',
           triggers: ['(^|\\s)git\\s+commit\\b'],
-          checks: [
+          tasks: [
             { name: 'full-tests', type: 'script', command: './script/test' }
           ]
         }
@@ -128,7 +128,7 @@ describe('Claude Code hook output contract', () => {
           event: 'PreToolUse',
           matcher: 'Bash',
           triggers: ['(^|\\s)git\\s+commit\\b'],
-          checks: [
+          tasks: [
             { name: 'full-tests', type: 'script', command: './script/test' }
           ]
         }
@@ -157,7 +157,7 @@ describe('Claude Code hook output contract', () => {
         {
           type: 'claude',
           event: 'Stop',
-          checks: [
+          tasks: [
             { name: 'fast-tests', type: 'script', command: './script/test_fast' }
           ]
         }
@@ -178,7 +178,7 @@ describe('Claude Code hook output contract', () => {
         {
           type: 'claude',
           event: 'Stop',
-          checks: [
+          tasks: [
             { name: 'fast-tests', type: 'script', command: './script/test_fast' }
           ]
         }

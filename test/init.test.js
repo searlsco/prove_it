@@ -59,7 +59,7 @@ describe('init', () => {
       assert.ok(cfg.hooks.some(h => h.type === 'git' && h.event === 'pre-commit'))
       assert.ok(!cfg.hooks.some(h => h.type === 'git' && h.event === 'pre-push'))
       // Should have default checks
-      const allChecks = cfg.hooks.flatMap(h => h.checks || [])
+      const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
       assert.ok(allChecks.some(c => c.name === 'require-wip'))
       assert.ok(allChecks.some(c => c.name === 'commit-review'))
       assert.ok(allChecks.some(c => c.name === 'coverage-review'))
@@ -74,7 +74,7 @@ describe('init', () => {
     it('omits default checks when defaultChecks is false', () => {
       const cfg = buildConfig({ defaultChecks: false })
       assert.strictEqual(cfg.configVersion, 2)
-      const allChecks = cfg.hooks.flatMap(h => h.checks || [])
+      const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
       assert.ok(!allChecks.some(c => c.name === 'require-wip'))
       assert.ok(!allChecks.some(c => c.name === 'commit-review'))
       assert.ok(!allChecks.some(c => c.name === 'coverage-review'))
@@ -84,7 +84,7 @@ describe('init', () => {
       const cfg = buildConfig({ gitHooks: false, defaultChecks: false })
       assert.strictEqual(cfg.configVersion, 2)
       assert.ok(!cfg.hooks.some(h => h.type === 'git'))
-      const allChecks = cfg.hooks.flatMap(h => h.checks || [])
+      const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
       assert.ok(!allChecks.some(c => c.name === 'require-wip'))
       assert.ok(!allChecks.some(c => c.name === 'commit-review'))
       // Should still have base checks

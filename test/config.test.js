@@ -65,7 +65,7 @@ describe('config merging', () => {
 
   it('array override replaces object base (v1→v2 hooks migration)', () => {
     const base = { hooks: { done: { enabled: true }, stop: { enabled: true } } }
-    const override = { hooks: [{ type: 'claude', event: 'Stop', checks: [] }] }
+    const override = { hooks: [{ type: 'claude', event: 'Stop', tasks: [] }] }
     const result = mergeDeep(base, override)
 
     assert.strictEqual(Array.isArray(result.hooks), true, 'hooks should be an array')

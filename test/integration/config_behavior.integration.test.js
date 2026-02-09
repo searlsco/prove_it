@@ -52,7 +52,7 @@ describe('Config-driven hook behavior (v2)', () => {
           event: 'PreToolUse',
           matcher: 'Bash',
           triggers: ['(^|\\s)git\\s+commit\\b'],
-          checks: [
+          tasks: [
             { name: 'custom-tests', type: 'script', command: './script/custom_test' }
           ]
         }
@@ -81,7 +81,7 @@ describe('Config-driven hook behavior (v2)', () => {
         {
           type: 'claude',
           event: 'Stop',
-          checks: [
+          tasks: [
             { name: 'custom-fast', type: 'script', command: './script/custom_fast' }
           ]
         }
@@ -124,7 +124,7 @@ describe('Config-driven hook behavior (v2)', () => {
         {
           type: 'claude',
           event: 'Stop',
-          checks: [
+          tasks: [
             { name: 'fast-tests', type: 'script', command: './script/test_fast' }
           ]
         }
@@ -152,7 +152,7 @@ describe('Config-driven hook behavior (v2)', () => {
         {
           type: 'claude',
           event: 'Stop',
-          checks: [
+          tasks: [
             { name: 'fast-tests', type: 'script', command: './script/test_fast' }
           ]
         }
@@ -177,7 +177,7 @@ describe('Config-driven hook behavior (v2)', () => {
           event: 'PreToolUse',
           matcher: 'Bash',
           triggers: ['(^|\\s)git\\s+commit\\b'],
-          checks: [
+          tasks: [
             { name: 'full-tests', type: 'script', command: './script/test' }
           ]
         }
@@ -215,7 +215,7 @@ describe('Config-driven hook behavior (v2)', () => {
         {
           type: 'claude',
           event: 'Stop',
-          checks: [
+          tasks: [
             { name: 'fast-tests', type: 'script', command: './script/test_fast' }
           ]
         }
@@ -240,7 +240,7 @@ describe('Config-driven hook behavior (v2)', () => {
           event: 'PreToolUse',
           matcher: 'Bash',
           triggers: ['(^|\\s)git\\s+commit\\b'],
-          checks: [
+          tasks: [
             { name: 'full-tests', type: 'script', command: './script/test' }
           ]
         }
@@ -267,7 +267,7 @@ describe('Config-driven hook behavior (v2)', () => {
         {
           type: 'claude',
           event: 'Stop',
-          checks: [
+          tasks: [
             { name: 'fast-tests', type: 'script', command: './script/test_fast' }
           ]
         }
@@ -300,7 +300,7 @@ describe('Config-driven hook behavior (v2)', () => {
         {
           type: 'claude',
           event: 'Stop',
-          checks: [
+          tasks: [
             { name: 'fast-tests', type: 'script', command: './script/test_fast' }
           ]
         }
@@ -333,7 +333,7 @@ describe('Config-driven hook behavior (v2)', () => {
           type: 'claude',
           event: 'PreToolUse',
           matcher: 'Edit|Write',
-          checks: [
+          tasks: [
             {
               name: 'require-wip',
               type: 'script',

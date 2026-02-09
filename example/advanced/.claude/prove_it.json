@@ -13,7 +13,7 @@
       "type": "claude",
       "event": "PreToolUse",
       "matcher": "Edit|Write|NotebookEdit|Bash",
-      "checks": [
+      "tasks": [
         {
           "name": "lock-config",
           "type": "script",
@@ -32,7 +32,7 @@
     {
       "type": "claude",
       "event": "Stop",
-      "checks": [
+      "tasks": [
         {
           "name": "fast-tests",
           "type": "script",
@@ -48,7 +48,7 @@
     {
       "type": "git",
       "event": "pre-commit",
-      "checks": [
+      "tasks": [
         {
           "name": "lint",
           "type": "script",

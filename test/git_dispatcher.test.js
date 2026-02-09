@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
-const { defaultConfig, matchGitEntries, runGitChecks } = require('../lib/dispatcher/git')
+const { defaultConfig, matchGitEntries, runGitTasks } = require('../lib/dispatcher/git')
 
 describe('git dispatcher', () => {
   describe('defaultConfig', () => {
@@ -28,25 +28,25 @@ describe('git dispatcher', () => {
   describe('matchGitEntries', () => {
     it('matches git entries for the given event', () => {
       const hooks = [
-        { type: 'git', event: 'pre-commit', checks: [{ name: 'a' }] },
-        { type: 'git', event: 'pre-push', checks: [{ name: 'b' }] },
-        { type: 'claude', event: 'Stop', checks: [{ name: 'c' }] }
+        { type: 'git', event: 'pre-commit', tasks: [{ name: 'a' }] },
+        { type: 'git', event: 'pre-push', tasks: [{ name: 'b' }] },
+        { type: 'claude', event: 'Stop', tasks: [{ name: 'c' }] }
       ]
       const matched = matchGitEntries(hooks, 'pre-commit')
       assert.strictEqual(matched.length, 1)
-      assert.strictEqual(matched[0].checks[0].name, 'a')
+      assert.strictEqual(matched[0].tasks[0].name, 'a')
     })
 
     it('returns empty for no matches', () => {
       const hooks = [
-        { type: 'git', event: 'pre-push', checks: [] }
+        { type: 'git', event: 'pre-push', tasks: [] }
       ]
       assert.deepStrictEqual(matchGitEntries(hooks, 'pre-commit'), [])
     })
 
     it('ignores claude-type entries', () => {
       const hooks = [
-        { type: 'claude', event: 'pre-commit', checks: [{ name: 'x' }] }
+        { type: 'claude', event: 'pre-commit', tasks: [{ name: 'x' }] }
       ]
       assert.deepStrictEqual(matchGitEntries(hooks, 'pre-commit'), [])
     })
@@ -61,15 +61,15 @@ describe('git dispatcher', () => {
 
     it('matches multiple entries for same event', () => {
       const hooks = [
-        { type: 'git', event: 'pre-commit', checks: [{ name: 'a' }] },
-        { type: 'git', event: 'pre-commit', checks: [{ name: 'b' }] }
+        { type: 'git', event: 'pre-commit', tasks: [{ name: 'a' }] },
+        { type: 'git', event: 'pre-commit', tasks: [{ name: 'b' }] }
       ]
       const matched = matchGitEntries(hooks, 'pre-commit')
       assert.strictEqual(matched.length, 2)
     })
   })
 
-  describe('runGitChecks', () => {
+  describe('runGitTasks', () => {
     let tmpDir
 
     beforeEach(() => {
@@ -94,105 +94,105 @@ describe('git dispatcher', () => {
       return scriptPath
     }
 
-    it('returns no failures when all checks pass', () => {
+    it('returns no failure when all tasks pass', () => {
       const scriptPath = makeScript('script/test', '#!/usr/bin/env bash\nexit 0\n')
       const entries = [{
         type: 'git',
         event: 'pre-commit',
-        checks: [{ name: 'tests', type: 'script', command: scriptPath }]
+        tasks: [{ name: 'tests', type: 'script', command: scriptPath }]
       }]
       const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      const { failures } = runGitChecks(entries, context)
-      assert.strictEqual(failures.length, 0)
+      const { failure } = runGitTasks(entries, context)
+      assert.strictEqual(failure, null)
     })
 
-    it('collects failures from failing checks', () => {
+    it('returns failure from failing task', () => {
       const scriptPath = makeScript('script/test', '#!/usr/bin/env bash\necho "broken" >&2\nexit 1\n')
       const entries = [{
         type: 'git',
         event: 'pre-commit',
-        checks: [{ name: 'tests', type: 'script', command: scriptPath }]
+        tasks: [{ name: 'tests', type: 'script', command: scriptPath }]
       }]
       const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      const { failures } = runGitChecks(entries, context)
-      assert.strictEqual(failures.length, 1)
-      assert.ok(failures[0].includes('tests:'))
+      const { failure } = runGitTasks(entries, context)
+      assert.ok(failure)
+      assert.ok(failure.includes('tests:'))
     })
 
-    it('runs all checks in "all" mode (default)', () => {
+    it('stops on first failure by default (first-fail)', () => {
+      const fail1 = makeScript('fail1.sh', '#!/usr/bin/env bash\nexit 1\n')
+      const fail2 = makeScript('fail2.sh', '#!/usr/bin/env bash\nexit 1\n')
+      const entries = [{
+        type: 'git',
+        event: 'pre-commit',
+        tasks: [
+          { name: 'a', type: 'script', command: fail1 },
+          { name: 'b', type: 'script', command: fail2 }
+        ]
+      }]
+      const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
+      const { failure } = runGitTasks(entries, context)
+      assert.ok(failure, 'default mode should stop after first failure')
+      assert.ok(failure.startsWith('a:'), 'should report first failing task')
+    })
+
+    it('always stops on first failure (fail-fast)', () => {
       const pass = makeScript('pass.sh', '#!/usr/bin/env bash\nexit 0\n')
       const fail1 = makeScript('fail1.sh', '#!/usr/bin/env bash\nexit 1\n')
       const fail2 = makeScript('fail2.sh', '#!/usr/bin/env bash\nexit 1\n')
       const entries = [{
         type: 'git',
         event: 'pre-commit',
-        checks: [
+        tasks: [
           { name: 'a', type: 'script', command: fail1 },
           { name: 'b', type: 'script', command: pass },
           { name: 'c', type: 'script', command: fail2 }
         ]
       }]
       const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      const { failures } = runGitChecks(entries, context)
-      assert.strictEqual(failures.length, 2)
+      const { failure } = runGitTasks(entries, context)
+      assert.ok(failure, 'should report failure')
+      assert.ok(failure.startsWith('a:'), 'should report first failing task')
     })
 
-    it('stops on first failure in "first-fail" mode', () => {
-      const fail1 = makeScript('fail1.sh', '#!/usr/bin/env bash\nexit 1\n')
-      const fail2 = makeScript('fail2.sh', '#!/usr/bin/env bash\nexit 1\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        mode: 'first-fail',
-        checks: [
-          { name: 'a', type: 'script', command: fail1 },
-          { name: 'b', type: 'script', command: fail2 }
-        ]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      const { failures } = runGitChecks(entries, context)
-      assert.strictEqual(failures.length, 1)
-      assert.ok(failures[0].startsWith('a:'))
-    })
-
-    it('skips checks with unsatisfied when condition', () => {
+    it('skips tasks with unsatisfied when condition', () => {
       const fail = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
       const entries = [{
         type: 'git',
         event: 'pre-commit',
-        checks: [
+        tasks: [
           { name: 'a', type: 'script', command: fail, when: { fileExists: 'nonexistent-xyz' } }
         ]
       }]
       const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      const { failures } = runGitChecks(entries, context)
-      assert.strictEqual(failures.length, 0)
+      const { failure } = runGitTasks(entries, context)
+      assert.strictEqual(failure, null)
     })
 
-    it('skips unknown check types', () => {
+    it('skips unknown task types', () => {
       const entries = [{
         type: 'git',
         event: 'pre-commit',
-        checks: [
+        tasks: [
           { name: 'a', type: 'unknown', command: 'whatever' }
         ]
       }]
       const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      const { failures } = runGitChecks(entries, context)
-      assert.strictEqual(failures.length, 0)
+      const { failure } = runGitTasks(entries, context)
+      assert.strictEqual(failure, null)
     })
 
-    it('propagates test output between checks', () => {
+    it('propagates test output between tasks', () => {
       const script = makeScript('output.sh', '#!/usr/bin/env bash\necho "test output here"\nexit 0\n')
       const entries = [{
         type: 'git',
         event: 'pre-commit',
-        checks: [
+        tasks: [
           { name: 'a', type: 'script', command: script }
         ]
       }]
       const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      runGitChecks(entries, context)
+      runGitTasks(entries, context)
       assert.ok(context.testOutput.includes('test output'))
     })
   })

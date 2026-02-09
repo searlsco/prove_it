@@ -82,11 +82,14 @@ describe('agent check', () => {
     assert.ok(captured.includes(tmpDir), `Prompt should contain expanded project_dir, got: ${captured}`)
   })
 
-  it('fails when reviewer binary not found', () => {
+  it('passes with warning when reviewer binary not found', () => {
     const result = runAgentCheck(
       { name: 'test-review', command: '/nonexistent/binary', prompt: 'Review this' },
       { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '' }
     )
-    assert.strictEqual(result.pass, false)
+    assert.strictEqual(result.pass, true)
+    assert.strictEqual(result.skipped, true)
+    assert.ok(result.reason.includes('not found'),
+      `Reason should mention binary not found, got: ${result.reason}`)
   })
 })

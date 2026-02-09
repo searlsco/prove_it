@@ -61,7 +61,7 @@ describe('Reviewer prompt passthrough (v2)', () => {
           event: 'PreToolUse',
           matcher: 'Bash',
           triggers: ['(^|\\s)git\\s+commit\\b'],
-          checks: [
+          tasks: [
             { name: 'full-tests', type: 'script', command: './script/test' },
             {
               name: 'commit-review',
@@ -102,7 +102,7 @@ describe('Reviewer prompt passthrough (v2)', () => {
           event: 'PreToolUse',
           matcher: 'Bash',
           triggers: ['(^|\\s)git\\s+commit\\b'],
-          checks: [
+          tasks: [
             { name: 'full-tests', type: 'script', command: './script/test' },
             {
               name: 'sql-review',
@@ -147,7 +147,7 @@ describe('Reviewer prompt passthrough (v2)', () => {
           event: 'PreToolUse',
           matcher: 'Bash',
           triggers: ['(^|\\s)git\\s+commit\\b'],
-          checks: [
+          tasks: [
             { name: 'full-tests', type: 'script', command: './script/test' },
             {
               name: 'commit-review',

@@ -25,11 +25,11 @@ script/agent
                       └─ records session baseline (lazy, internal)
 ```
 
-All child processes inherit the modified PATH: hook dispatchers, builtin checks, test scripts, agent reviewers.
+All child processes inherit the modified PATH: hook dispatchers, builtin tasks, test scripts, agent reviewers.
 
 ## Verification
 
-The project's `.claude/prove_it.json` includes a `local-shim-check` as the first SessionStart check. On every session start, it runs:
+The project's `.claude/prove_it.json` includes a `local-shim-check` as the first SessionStart task. On every session start, it runs:
 
 ```bash
 which prove_it | grep -q test/bin/prove_it
@@ -38,7 +38,7 @@ which prove_it | grep -q test/bin/prove_it
 - **Pass**: `prove_it resolves to local shim: .../test/bin/prove_it`
 - **Fail**: `WARNING: prove_it resolves to /opt/homebrew/bin/prove_it, not test/bin/prove_it. Use ./script/agent to launch Claude with the local version.`
 
-This is a SessionStart check, so it warns but doesn't block — the agent sees the message and knows whether it's running against local source or the installed version.
+This is a SessionStart task, so it warns but doesn't block — the agent sees the message and knows whether it's running against local source or the installed version.
 
 ## When to use what
 

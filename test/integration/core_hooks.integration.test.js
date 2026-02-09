@@ -37,7 +37,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         {
           type: 'claude',
           event: 'Stop',
-          checks: [
+          tasks: [
             { name: 'fast-tests', type: 'script', command: './script/test_fast' }
           ]
         }
@@ -63,7 +63,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         {
           type: 'claude',
           event: 'Stop',
-          checks: [
+          tasks: [
             { name: 'fast-tests', type: 'script', command: './script/test_fast' }
           ]
         }
@@ -91,7 +91,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
           event: 'PreToolUse',
           matcher: 'Bash',
           triggers: ['(^|\\s)git\\s+commit\\b'],
-          checks: [
+          tasks: [
             { name: 'full-tests', type: 'script', command: './script/test' }
           ]
         }
@@ -125,7 +125,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
           event: 'PreToolUse',
           matcher: 'Bash',
           triggers: ['(^|\\s)git\\s+commit\\b'],
-          checks: [
+          tasks: [
             { name: 'full-tests', type: 'script', command: './script/test' }
           ]
         }
@@ -154,7 +154,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
           event: 'PreToolUse',
           matcher: 'Bash',
           triggers: ['(^|\\s)git\\s+commit\\b'],
-          checks: [
+          tasks: [
             { name: 'full-tests', type: 'script', command: './script/test' }
           ]
         }
@@ -184,7 +184,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         {
           type: 'claude',
           event: 'SessionStart',
-          checks: [
+          tasks: [
             { name: 'hello-check', type: 'script', command: './hello_check.sh' }
           ]
         }
@@ -213,7 +213,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         {
           type: 'claude',
           event: 'SessionStart',
-          checks: [
+          tasks: [
             { name: 'fail-check', type: 'script', command: './fail_check.sh' },
             { name: 'pass-check', type: 'script', command: './pass_check.sh' }
           ]
@@ -245,7 +245,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         {
           type: 'git',
           event: 'pre-commit',
-          checks: [
+          tasks: [
             { name: 'full-tests', type: 'script', command: './script/test' }
           ]
         }
@@ -268,7 +268,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         {
           type: 'git',
           event: 'pre-commit',
-          checks: [
+          tasks: [
             { name: 'full-tests', type: 'script', command: './script/test' }
           ]
         }
@@ -293,7 +293,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         {
           type: 'git',
           event: 'pre-commit',
-          checks: [
+          tasks: [
             { name: 'full-tests', type: 'script', command: './script/test' }
           ]
         }
@@ -330,7 +330,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         {
           type: 'claude',
           event: 'Stop',
-          checks: [
+          tasks: [
             { name: 'fast-tests', type: 'script', command: './script/test_fast' }
           ]
         }
@@ -355,7 +355,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         {
           type: 'claude',
           event: 'Stop',
-          checks: [
+          tasks: [
             { name: 'fast-tests', type: 'script', command: './script/test_fast' }
           ]
         }

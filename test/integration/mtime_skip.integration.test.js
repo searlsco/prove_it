@@ -30,7 +30,7 @@ function stopHooks () {
     {
       type: 'claude',
       event: 'Stop',
-      checks: [
+      tasks: [
         { name: 'fast-tests', type: 'script', command: './script/test_fast' }
       ]
     }
@@ -44,7 +44,7 @@ function commitHooks () {
       event: 'PreToolUse',
       matcher: 'Bash',
       triggers: ['(^|\\s)git\\s+commit\\b'],
-      checks: [
+      tasks: [
         { name: 'full-tests', type: 'script', command: './script/test' }
       ]
     }

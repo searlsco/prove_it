@@ -2,7 +2,7 @@
 
 ## Architecture
 
-prove_it is a config-driven hook framework for Claude Code. It reads `.claude/prove_it.json` from a project directory and runs matching checks when Claude Code fires lifecycle events (SessionStart, PreToolUse, Stop). It also dispatches git hooks (pre-commit, pre-push).
+prove_it is a config-driven hook framework for Claude Code. It reads `.claude/prove_it.json` from a project directory and runs matching tasks when Claude Code fires lifecycle events (SessionStart, PreToolUse, Stop). It also dispatches git hooks (pre-commit, pre-push).
 
 ### Key modules
 
@@ -10,9 +10,9 @@ prove_it is a config-driven hook framework for Claude Code. It reads `.claude/pr
 - `lib/dispatcher/claude.js` — Main dispatcher for Claude Code events
 - `lib/dispatcher/git.js` — Dispatcher for git hooks
 - `lib/dispatcher/protocol.js` — Output formatting for Claude Code hook API
-- `lib/checks/script.js` — Runs shell commands as checks
-- `lib/checks/agent.js` — Runs AI agent reviewer checks
-- `lib/checks/builtins.js` — Built-in checks (config:lock, beads:require_wip, review:commit_quality, review:test_coverage)
+- `lib/checks/script.js` — Runs shell commands as tasks
+- `lib/checks/agent.js` — Runs AI agent reviewer tasks
+- `lib/checks/builtins.js` — Built-in tasks (config:lock, beads:require_wip, review:commit_quality, review:test_coverage)
 - `lib/config.js` — Config loading, merging, and `buildConfig()` for init
 - `lib/init.js` — Project initialization, git hook shim management
 - `lib/template.js` — Template variable expansion for agent prompts
@@ -59,5 +59,5 @@ Use the `/release` skill. It reads `RELEASE.md` for the full process.
 
 - No dependencies beyond Node.js stdlib (devDependencies: standard for linting only)
 - Linter: `npx standard --fix` (run automatically by `./script/test_fast`)
-- Config format: v2 schema with `configVersion: 2` and `hooks` array
+- Config format: v2 schema with `configVersion: 2` and `hooks` array containing `tasks`
 - Builtins are invoked via `prove_it run_builtin <namespace>:<name>`

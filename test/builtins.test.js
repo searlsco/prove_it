@@ -242,18 +242,24 @@ describe('builtins', () => {
     })
 
     it('does not fail-fast on missing sessionId (unlike test_coverage)', () => {
-      // Use a nonexistent reviewer command so it fails for a normal reason
-      // (binary not found) rather than a session guard
-      const result = reviewCommitQuality({ command: '__no_such_reviewer__' }, {
-        sessionId: null,
-        rootDir: '/tmp/nonexistent',
-        projectDir: '/tmp/nonexistent'
-      })
-      // Should attempt the review (not fail-fast like test_coverage),
-      // then fail because the reviewer binary doesn't exist
-      assert.strictEqual(result.pass, false)
-      assert.ok(result.reason.includes('not found'),
-        `Should fail due to missing binary, not session guard. Got: ${result.reason}`)
+      // Remove claude from PATH so the reviewer degrades gracefully
+      const origPath = process.env.PATH
+      process.env.PATH = '/nonexistent'
+      try {
+        const result = reviewCommitQuality({}, {
+          sessionId: null,
+          rootDir: '/tmp/nonexistent',
+          projectDir: '/tmp/nonexistent'
+        })
+        // Should attempt the review (not fail-fast like test_coverage),
+        // then degrade gracefully because the reviewer binary isn't on PATH
+        assert.strictEqual(result.pass, true)
+        assert.strictEqual(result.skipped, true)
+        assert.ok(result.reason.includes('not found'),
+          `Should warn about missing binary, not session guard. Got: ${result.reason}`)
+      } finally {
+        process.env.PATH = origPath
+      }
     })
   })
 
@@ -274,6 +280,18 @@ describe('builtins', () => {
       assert.strictEqual(result.skipped, false)
       assert.ok(result.reason.includes('session_id is missing'),
         `Reason should mention missing session_id, got: ${result.reason}`)
+    })
+
+    it('skips when session has no diffs', () => {
+      const result = reviewCoverage({}, {
+        sessionId: 'test-no-diffs',
+        rootDir: '/tmp/nonexistent',
+        projectDir: '/tmp/nonexistent'
+      })
+      assert.strictEqual(result.pass, true)
+      assert.strictEqual(result.skipped, true)
+      assert.ok(result.reason.includes('no session diffs'),
+        `Should skip with no diffs, got: ${result.reason}`)
     })
   })
 

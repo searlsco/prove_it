@@ -35,7 +35,7 @@ function commitGateHooks (testCommand = './script/test') {
       event: 'PreToolUse',
       matcher: 'Bash',
       triggers: ['(^|\\s)git\\s+commit\\b'],
-      checks: [
+      tasks: [
         { name: 'full-tests', type: 'script', command: testCommand }
       ]
     }
@@ -253,7 +253,7 @@ describe('v2 dispatcher: test enforcement', () => {
           event: 'PreToolUse',
           matcher: 'Bash',
           triggers: ['(^|\\s)git\\s+commit\\b', '(^|\\s)git\\s+push\\b'],
-          checks: [
+          tasks: [
             { name: 'full-tests', type: 'script', command: './script/test' }
           ]
         }

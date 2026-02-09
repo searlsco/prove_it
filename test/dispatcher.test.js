@@ -5,32 +5,32 @@ const { matchesHookEntry, evaluateWhen, defaultConfig } = require('../lib/dispat
 describe('claude dispatcher', () => {
   describe('matchesHookEntry', () => {
     it('matches type and event', () => {
-      const entry = { type: 'claude', event: 'Stop', checks: [] }
+      const entry = { type: 'claude', event: 'Stop', tasks: [] }
       assert.strictEqual(matchesHookEntry(entry, 'Stop', {}), true)
     })
 
     it('rejects wrong type', () => {
-      const entry = { type: 'git', event: 'Stop', checks: [] }
+      const entry = { type: 'git', event: 'Stop', tasks: [] }
       assert.strictEqual(matchesHookEntry(entry, 'Stop', {}), false)
     })
 
     it('rejects wrong event', () => {
-      const entry = { type: 'claude', event: 'PreToolUse', checks: [] }
+      const entry = { type: 'claude', event: 'PreToolUse', tasks: [] }
       assert.strictEqual(matchesHookEntry(entry, 'Stop', {}), false)
     })
 
     it('matches tool name via matcher', () => {
-      const entry = { type: 'claude', event: 'PreToolUse', matcher: 'Edit|Write', checks: [] }
+      const entry = { type: 'claude', event: 'PreToolUse', matcher: 'Edit|Write', tasks: [] }
       assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Edit' }), true)
     })
 
     it('rejects non-matching tool name', () => {
-      const entry = { type: 'claude', event: 'PreToolUse', matcher: 'Edit|Write', checks: [] }
+      const entry = { type: 'claude', event: 'PreToolUse', matcher: 'Edit|Write', tasks: [] }
       assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Read' }), false)
     })
 
     it('matches when no matcher specified', () => {
-      const entry = { type: 'claude', event: 'PreToolUse', checks: [] }
+      const entry = { type: 'claude', event: 'PreToolUse', tasks: [] }
       assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Read' }), true)
     })
 
@@ -40,7 +40,7 @@ describe('claude dispatcher', () => {
         event: 'PreToolUse',
         matcher: 'Bash',
         triggers: ['(^|\\s)git\\s+commit\\b'],
-        checks: []
+        tasks: []
       }
       assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', {
         tool_name: 'Bash',
@@ -54,7 +54,7 @@ describe('claude dispatcher', () => {
         event: 'PreToolUse',
         matcher: 'Bash',
         triggers: ['(^|\\s)git\\s+commit\\b'],
-        checks: []
+        tasks: []
       }
       assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', {
         tool_name: 'Bash',
@@ -63,17 +63,17 @@ describe('claude dispatcher', () => {
     })
 
     it('matches SessionStart source', () => {
-      const entry = { type: 'claude', event: 'SessionStart', source: 'startup|resume', checks: [] }
+      const entry = { type: 'claude', event: 'SessionStart', source: 'startup|resume', tasks: [] }
       assert.strictEqual(matchesHookEntry(entry, 'SessionStart', { source: 'startup' }), true)
     })
 
     it('rejects non-matching SessionStart source', () => {
-      const entry = { type: 'claude', event: 'SessionStart', source: 'startup|resume', checks: [] }
+      const entry = { type: 'claude', event: 'SessionStart', source: 'startup|resume', tasks: [] }
       assert.strictEqual(matchesHookEntry(entry, 'SessionStart', { source: 'clear' }), false)
     })
 
     it('matches SessionStart with no source filter', () => {
-      const entry = { type: 'claude', event: 'SessionStart', checks: [] }
+      const entry = { type: 'claude', event: 'SessionStart', tasks: [] }
       assert.strictEqual(matchesHookEntry(entry, 'SessionStart', { source: 'anything' }), true)
     })
   })

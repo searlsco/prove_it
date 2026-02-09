@@ -8,7 +8,7 @@ function makeTriggerEntry (triggers) {
     event: 'PreToolUse',
     matcher: 'Bash',
     triggers,
-    checks: []
+    tasks: []
   }
 }
 

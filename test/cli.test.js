@@ -49,6 +49,31 @@ describe('CLI', () => {
     })
   })
 
+  describe('reinstall', () => {
+    let tmpDir
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_reinstall_'))
+    })
+
+    afterEach(() => {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('uninstalls and reinstalls global hooks', () => {
+      const env = { ...process.env, HOME: tmpDir }
+      runCli(['install'], { env })
+      const result = runCli(['reinstall'], { env })
+      assert.strictEqual(result.exitCode, 0)
+
+      const settings = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'settings.json'), 'utf8'))
+      const serialized = JSON.stringify(settings.hooks)
+      assert.ok(serialized.includes('prove_it hook claude:Stop'))
+      assert.ok(serialized.includes('prove_it hook claude:PreToolUse'))
+      assert.ok(serialized.includes('prove_it hook claude:SessionStart'))
+    })
+  })
+
   describe('run_builtin', () => {
     it('shows usage with no arguments', () => {
       const result = runCli(['run_builtin'])
@@ -118,15 +143,16 @@ describe('init/deinit', () => {
     assert.strictEqual(content, '{"custom": true}')
   })
 
-  it('init TODO nudges to add prove_it record when script lacks it', () => {
+  it('init shows trap instructions when scripts lack prove_it record', () => {
     // Create customized scripts without prove_it record
     fs.mkdirSync(path.join(tmpDir, 'script'), { recursive: true })
     fs.writeFileSync(path.join(tmpDir, 'script', 'test'), '#!/usr/bin/env bash\nnpm test\n')
     fs.writeFileSync(path.join(tmpDir, 'script', 'test_fast'), '#!/usr/bin/env bash\nnpm run test:unit\n')
 
     const result = runCli(['init'], { cwd: tmpDir })
-    assert.match(result.stdout, /Add `prove_it record` to script\/test/)
-    assert.match(result.stdout, /Add `prove_it record` to script\/test_fast/)
+    assert.match(result.stdout, /skip redundant test runs/)
+    assert.match(result.stdout, /trap 'prove_it record --name full-tests --result \$\?' EXIT/)
+    assert.match(result.stdout, /trap 'prove_it record --name fast-tests --result \$\?' EXIT/)
   })
 
   it('init TODO shows done when script has prove_it record', () => {
@@ -139,6 +165,21 @@ describe('init/deinit', () => {
     const result = runCli(['init'], { cwd: tmpDir })
     assert.match(result.stdout, /\[x\] script\/test records results/)
     assert.match(result.stdout, /\[x\] script\/test_fast records results/)
+  })
+
+  it('reinit removes and recreates prove_it files', () => {
+    // Init first with custom content
+    runCli(['init'], { cwd: tmpDir })
+    const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+    assert.ok(fs.existsSync(cfgPath))
+
+    // Manually delete the config to prove reinit recreates it
+    fs.unlinkSync(cfgPath)
+    assert.ok(!fs.existsSync(cfgPath))
+
+    const result = runCli(['reinit'], { cwd: tmpDir })
+    assert.strictEqual(result.exitCode, 0)
+    assert.ok(fs.existsSync(cfgPath), 'reinit should recreate prove_it.json')
   })
 
   it('deinit removes prove_it files', () => {

@@ -52,7 +52,7 @@ describe('E2E: beads enforcement via claude CLI', { skip: !canRunE2E && 'require
         type: 'claude',
         event: 'PreToolUse',
         matcher: 'Edit|Write|NotebookEdit|Bash',
-        checks: [
+        tasks: [
           { name: 'lock-config', type: 'script', command: 'prove_it run_builtin config:lock' },
           { name: 'require-wip', type: 'script', command: 'prove_it run_builtin beads:require_wip', when: { fileExists: '.beads' } }
         ]

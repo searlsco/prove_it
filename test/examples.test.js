@@ -23,8 +23,8 @@ describe('example projects', () => {
         for (const hook of cfg.hooks) {
           assert.ok(['claude', 'git'].includes(hook.type), `hook type "${hook.type}" should be claude or git`)
           assert.ok(hook.event, 'hook should have an event')
-          assert.ok(Array.isArray(hook.checks), 'hook should have checks array')
-          for (const check of hook.checks) {
+          assert.ok(Array.isArray(hook.tasks), 'hook should have tasks array')
+          for (const check of hook.tasks) {
             assert.ok(check.name, 'check should have a name')
             assert.ok(['script', 'agent'].includes(check.type), `check type "${check.type}" should be script or agent`)
           }
@@ -62,7 +62,7 @@ describe('example projects', () => {
       it('references scripts that exist in config', () => {
         const cfgPath = path.join(dir, '.claude', 'prove_it.json')
         const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
-        const allChecks = cfg.hooks.flatMap(h => h.checks || [])
+        const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
         const scriptChecks = allChecks.filter(c => c.type === 'script' && !c.command.startsWith('prove_it '))
 
         for (const check of scriptChecks) {
@@ -205,7 +205,7 @@ describe('example projects', () => {
     it('has custom agent prompts', () => {
       const cfgPath = path.join(EXAMPLE_DIR, 'advanced', '.claude', 'prove_it.json')
       const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
-      const allChecks = cfg.hooks.flatMap(h => h.checks || [])
+      const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
       const agentChecks = allChecks.filter(c => c.type === 'agent')
       assert.ok(agentChecks.length > 0, 'Should have agent checks')
       for (const check of agentChecks) {

@@ -279,6 +279,7 @@ async function cmdInit () {
 
   // Build TODO list
   const todos = []
+  const scriptsNeedingRecord = []
 
   for (const [scriptPath, label, editMsg] of [
     ['script/test', 'script/test', 'Edit script/test to run your full test suite'],
@@ -289,7 +290,7 @@ async function cmdInit () {
     if (scriptResult.isStub) {
       todos.push({ done: false, text: editMsg })
     } else if (!scriptHasRecord(path.join(repoRoot, scriptPath))) {
-      todos.push({ done: false, text: `Add \`prove_it record\` to ${label} (see stub for trap pattern)` })
+      scriptsNeedingRecord.push(label)
     } else {
       todos.push({ done: true, text: `${label} records results` })
     }
@@ -310,6 +311,15 @@ async function cmdInit () {
   for (const todo of todos) {
     const checkbox = todo.done ? '[x]' : '[ ]'
     log(`  ${checkbox} ${todo.text}`)
+  }
+
+  if (scriptsNeedingRecord.length > 0) {
+    log(`\n  To skip redundant test runs, add this trap to ${scriptsNeedingRecord.join(' and ')}:`)
+    for (const label of scriptsNeedingRecord) {
+      const checkName = label === 'script/test' ? 'full-tests' : 'fast-tests'
+      log(`\n    # ${label}`)
+      log(`    trap 'prove_it record --name ${checkName} --result $?' EXIT`)
+    }
   }
   log('')
 }
@@ -655,8 +665,10 @@ Usage: prove_it <command>
 Commands:
   install     Install prove_it globally (~/.claude/)
   uninstall   Remove prove_it from global config
+  reinstall   Uninstall and reinstall global hooks
   init        Initialize prove_it in current repository
   deinit      Remove prove_it files from current repository
+  reinit      Deinit and re-init current repository
   diagnose    Check installation status and report issues
   hook        Run a hook dispatcher (claude:<Event> or git:<event>)
   run_builtin   Run a builtin check directly (e.g. prove_it run_builtin config:lock)
@@ -705,6 +717,10 @@ function main () {
     case 'uninstall':
       cmdUninstall()
       break
+    case 'reinstall':
+      cmdUninstall()
+      cmdInstall()
+      break
     case 'init':
       cmdInit().catch(err => {
         console.error(`prove_it init failed: ${err.message}`)
@@ -713,6 +729,13 @@ function main () {
       break
     case 'deinit':
       cmdDeinit()
+      break
+    case 'reinit':
+      cmdDeinit()
+      cmdInit().catch(err => {
+        console.error(`prove_it reinit failed: ${err.message}`)
+        process.exit(1)
+      })
       break
     case 'diagnose':
       cmdDiagnose()
