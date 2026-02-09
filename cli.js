@@ -314,7 +314,7 @@ async function cmdInit () {
   }
 
   if (scriptsNeedingRecord.length > 0) {
-    log(`\n  To skip redundant test runs, add this trap to ${scriptsNeedingRecord.join(' and ')}:`)
+    log(`\n  [ ] To skip redundant test runs, add this trap to ${scriptsNeedingRecord.join(' and ')}:`)
     for (const label of scriptsNeedingRecord) {
       const checkName = label === 'script/test' ? 'full-tests' : 'fast-tests'
       log(`\n    # ${label}`)
