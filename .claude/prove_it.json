@@ -4,24 +4,14 @@
   "sources": [
     "cli.js",
     "lib/**/*.js",
-    "test/**/*.js"
+    "test/**/*.js",
+    "script/**/*",
+    "example/**/*.js"
   ],
   "format": {
     "maxOutputChars": 12000
   },
   "hooks": [
-    {
-      "type": "claude",
-      "event": "SessionStart",
-      "checks": [
-        {
-          "name": "local-shim-check",
-          "type": "script",
-          "command": "./script/check_local_shim",
-          "mtime": false
-        }
-      ]
-    },
     {
       "type": "claude",
       "event": "PreToolUse",
@@ -50,6 +40,11 @@
           "name": "fast-tests",
           "type": "script",
           "command": "./script/test_fast"
+        },
+        {
+          "name": "coverage-review",
+          "type": "script",
+          "command": "prove_it run_builtin review:test_coverage"
         }
       ]
     },
@@ -61,6 +56,11 @@
           "name": "full-tests",
           "type": "script",
           "command": "./script/test"
+        },
+        {
+          "name": "commit-review",
+          "type": "script",
+          "command": "prove_it run_builtin review:commit_quality"
         }
       ]
     }
