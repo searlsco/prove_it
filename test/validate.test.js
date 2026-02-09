@@ -104,11 +104,11 @@ describe('validateConfig', () => {
       assert.ok(errors.some(e => e.includes('Top-level "checks" is not valid')))
     })
 
-    it('warns on unknown top-level keys', () => {
+    it('errors on unknown top-level keys', () => {
       const cfg = validConfig()
       cfg.customThing = true
-      const { warnings } = validateConfig(cfg)
-      assert.ok(warnings.some(w => w.includes('Unknown top-level key "customThing"')))
+      const { errors } = validateConfig(cfg)
+      assert.ok(errors.some(e => e.includes('Unknown key "customThing"')))
     })
 
     it('errors when hooks is missing', () => {
@@ -187,11 +187,11 @@ describe('validateConfig', () => {
       assert.ok(warnings.some(w => w.includes('source only applies to SessionStart')))
     })
 
-    it('warns on unknown hook keys', () => {
-      const { warnings } = validateConfig(cfgWith({
+    it('errors on unknown hook keys', () => {
+      const { errors } = validateConfig(cfgWith({
         type: 'claude', event: 'Stop', tasks: [], extraKey: true
       }))
-      assert.ok(warnings.some(w => w.includes('unknown key "extraKey"')))
+      assert.ok(errors.some(e => e.includes('unknown key "extraKey"')))
     })
   })
 
@@ -272,11 +272,11 @@ describe('validateConfig', () => {
       assert.ok(errors.some(e => e.includes('mtime must be a boolean')))
     })
 
-    it('warns on unknown task keys', () => {
-      const { warnings } = validateConfig(cfgWithTask({
+    it('errors on unknown task keys', () => {
+      const { errors } = validateConfig(cfgWithTask({
         name: 'a', type: 'script', command: 'x', extraKey: true
       }))
-      assert.ok(warnings.some(w => w.includes('unknown key "extraKey"')))
+      assert.ok(errors.some(e => e.includes('unknown key "extraKey"')))
     })
 
     it('passes valid when conditions', () => {

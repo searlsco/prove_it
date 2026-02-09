@@ -89,8 +89,7 @@ describe('loadEffectiveConfig ancestor discovery', () => {
     enabled: true,
     sources: null,
     format: { maxOutputChars: 12000 },
-    hooks: [],
-    commands: { test: { full: null, fast: null } }
+    hooks: []
   })
 
   const tmpBase = path.join(os.tmpdir(), 'prove_it_config_test_' + Date.now())
@@ -102,11 +101,11 @@ describe('loadEffectiveConfig ancestor discovery', () => {
 
     fs.writeFileSync(
       path.join(tmpBase, '.claude', 'prove_it.json'),
-      JSON.stringify({ configVersion: 3, hooks: [], commands: { test: { full: './root-test' } } })
+      JSON.stringify({ configVersion: 3, hooks: [], sources: ['root/**/*.js'] })
     )
     fs.writeFileSync(
       path.join(tmpBase, 'child', '.claude', 'prove_it.json'),
-      JSON.stringify({ configVersion: 3, hooks: [], commands: { test: { fast: './child-fast' } } })
+      JSON.stringify({ configVersion: 3, hooks: [], sources: ['child/**/*.js'] })
     )
   }
 
@@ -118,29 +117,29 @@ describe('loadEffectiveConfig ancestor discovery', () => {
     setup()
     try {
       const { cfg } = loadEffectiveConfig(path.join(tmpBase, 'child'), defaultTestConfig)
-      assert.strictEqual(cfg.commands.test.fast, './child-fast')
+      assert.deepStrictEqual(cfg.sources, ['child/**/*.js'])
     } finally {
       cleanup()
     }
   })
 
-  it('inherits ancestor config (child overrides root)', () => {
+  it('child config wins over ancestor (last writer wins for arrays)', () => {
     setup()
     try {
       const { cfg } = loadEffectiveConfig(path.join(tmpBase, 'child'), defaultTestConfig)
-      assert.strictEqual(cfg.commands.test.full, './root-test')
-      assert.strictEqual(cfg.commands.test.fast, './child-fast')
+      // Arrays are replaced, not merged — child sources win
+      assert.deepStrictEqual(cfg.sources, ['child/**/*.js'])
     } finally {
       cleanup()
     }
   })
 
-  it('grandchild inherits from ancestors', () => {
+  it('grandchild inherits from nearest ancestor', () => {
     setup()
     try {
       const { cfg } = loadEffectiveConfig(path.join(tmpBase, 'child', 'grandchild'), defaultTestConfig)
-      assert.strictEqual(cfg.commands.test.full, './root-test')
-      assert.strictEqual(cfg.commands.test.fast, './child-fast')
+      // grandchild has no config — inherits child's sources
+      assert.deepStrictEqual(cfg.sources, ['child/**/*.js'])
     } finally {
       cleanup()
     }
@@ -151,12 +150,11 @@ describe('loadEffectiveConfig ancestor discovery', () => {
     fs.mkdirSync(path.join(tmpBase, 'child', 'grandchild', '.claude'), { recursive: true })
     fs.writeFileSync(
       path.join(tmpBase, 'child', 'grandchild', '.claude', 'prove_it.json'),
-      JSON.stringify({ configVersion: 3, hooks: [], commands: { test: { full: './grandchild-test' } } })
+      JSON.stringify({ configVersion: 3, hooks: [], sources: ['grandchild/**/*.js'] })
     )
     try {
       const { cfg } = loadEffectiveConfig(path.join(tmpBase, 'child', 'grandchild'), defaultTestConfig)
-      assert.strictEqual(cfg.commands.test.full, './grandchild-test')
-      assert.strictEqual(cfg.commands.test.fast, './child-fast')
+      assert.deepStrictEqual(cfg.sources, ['grandchild/**/*.js'])
     } finally {
       cleanup()
     }
@@ -171,7 +169,7 @@ describe('loadEffectiveConfig ancestor discovery', () => {
       const { cfg } = loadEffectiveConfig(emptyDir, defaultTestConfig)
       assert.strictEqual(cfg.enabled, true)
       assert.strictEqual(Array.isArray(cfg.hooks), true, 'hooks should be an array')
-      assert.strictEqual(cfg.commands.test.full, null)
+      assert.strictEqual(cfg.sources, null)
     } finally {
       if (origDir !== undefined) process.env.PROVE_IT_DIR = origDir
       else delete process.env.PROVE_IT_DIR
