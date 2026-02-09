@@ -125,9 +125,9 @@ describe('init/deinit', () => {
     const stat = fs.statSync(path.join(tmpDir, 'script', 'test'))
     assert.ok(stat.mode & fs.constants.S_IXUSR, 'script/test should be executable')
 
-    // Check config is v2 format
+    // Check config is v3 format
     const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), 'utf8'))
-    assert.strictEqual(cfg.configVersion, 2)
+    assert.strictEqual(cfg.configVersion, 3)
     assert.ok(Array.isArray(cfg.hooks), 'hooks should be an array')
   })
 

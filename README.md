@@ -103,7 +103,7 @@ prove_it is configured with a `hooks` array in `.claude/prove_it.json`. Each hoo
 
 ```json
 {
-  "configVersion": 2,
+  "configVersion": 3,
   "enabled": true,
   "sources": ["src/**/*.js", "lib/**/*.js", "test/**/*.js"],
   "hooks": [

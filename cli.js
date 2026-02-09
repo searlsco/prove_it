@@ -465,12 +465,12 @@ function cmdDiagnose () {
   if (fs.existsSync(teamConfigPath)) {
     log('  [x] Team config exists: .claude/prove_it.json')
     const teamCfg = loadJson(teamConfigPath)
-    if (teamCfg?.configVersion === 2) {
+    if (teamCfg?.configVersion === 3) {
       const hookCount = (teamCfg.hooks || []).length
-      log(`      Config v2: ${hookCount} hook entries`)
+      log(`      Config v3: ${hookCount} hook entries`)
     } else {
-      log('      Warning: config missing configVersion: 2')
-      issues.push('Config may need migration to v2 format')
+      log(`      Warning: config has configVersion ${teamCfg?.configVersion || 'missing'}, expected 3`)
+      issues.push('Config may need migration to v3 format')
     }
   } else {
     log('  [ ] Team config missing: .claude/prove_it.json')
@@ -524,7 +524,8 @@ function cmdDiagnose () {
     const { cfg } = loadEffectiveConfig(repoRoot, defaultFn)
     log(JSON.stringify(cfg, null, 2).split('\n').map(l => '  ' + l).join('\n'))
   } catch (e) {
-    log(`  (error loading config: ${e.message})`)
+    log(e.message.split('\n').map(l => '  ' + l).join('\n'))
+    issues.push('Config validation failed (see above)')
   }
 
   // Summary

@@ -125,7 +125,7 @@ function initBeads (dir) {
 }
 
 /**
- * Write a v2 prove_it config to a project directory.
+ * Write a prove_it config to a project directory.
  */
 function writeConfig (dir, config) {
   const cfgPath = path.join(dir, '.claude', 'prove_it.json')
@@ -134,11 +134,11 @@ function writeConfig (dir, config) {
 }
 
 /**
- * Create a minimal v2 config with specified hooks.
+ * Create a minimal v3 config with specified hooks.
  */
 function makeConfig (hooks, overrides = {}) {
   return {
-    configVersion: 2,
+    configVersion: 3,
     enabled: true,
     format: { maxOutputChars: 12000 },
     hooks,

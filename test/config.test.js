@@ -102,11 +102,11 @@ describe('loadEffectiveConfig ancestor discovery', () => {
 
     fs.writeFileSync(
       path.join(tmpBase, '.claude', 'prove_it.json'),
-      JSON.stringify({ commands: { test: { full: './root-test' } } })
+      JSON.stringify({ configVersion: 3, hooks: [], commands: { test: { full: './root-test' } } })
     )
     fs.writeFileSync(
       path.join(tmpBase, 'child', '.claude', 'prove_it.json'),
-      JSON.stringify({ commands: { test: { fast: './child-fast' } } })
+      JSON.stringify({ configVersion: 3, hooks: [], commands: { test: { fast: './child-fast' } } })
     )
   }
 
@@ -151,7 +151,7 @@ describe('loadEffectiveConfig ancestor discovery', () => {
     fs.mkdirSync(path.join(tmpBase, 'child', 'grandchild', '.claude'), { recursive: true })
     fs.writeFileSync(
       path.join(tmpBase, 'child', 'grandchild', '.claude', 'prove_it.json'),
-      JSON.stringify({ commands: { test: { full: './grandchild-test' } } })
+      JSON.stringify({ configVersion: 3, hooks: [], commands: { test: { full: './grandchild-test' } } })
     )
     try {
       const { cfg } = loadEffectiveConfig(path.join(tmpBase, 'child', 'grandchild'), defaultTestConfig)

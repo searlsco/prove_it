@@ -53,7 +53,7 @@ describe('init', () => {
   describe('buildConfig', () => {
     it('returns full config with defaults (all features)', () => {
       const cfg = buildConfig()
-      assert.strictEqual(cfg.configVersion, 2)
+      assert.strictEqual(cfg.configVersion, 3)
       assert.ok(Array.isArray(cfg.hooks))
       // Should have git hooks
       assert.ok(cfg.hooks.some(h => h.type === 'git' && h.event === 'pre-commit'))
@@ -67,13 +67,13 @@ describe('init', () => {
 
     it('omits git hooks when gitHooks is false', () => {
       const cfg = buildConfig({ gitHooks: false })
-      assert.strictEqual(cfg.configVersion, 2)
+      assert.strictEqual(cfg.configVersion, 3)
       assert.ok(!cfg.hooks.some(h => h.type === 'git'))
     })
 
     it('omits default checks when defaultChecks is false', () => {
       const cfg = buildConfig({ defaultChecks: false })
-      assert.strictEqual(cfg.configVersion, 2)
+      assert.strictEqual(cfg.configVersion, 3)
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
       assert.ok(!allChecks.some(c => c.name === 'require-wip'))
       assert.ok(!allChecks.some(c => c.name === 'commit-review'))
@@ -82,7 +82,7 @@ describe('init', () => {
 
     it('returns base-only config with both features off', () => {
       const cfg = buildConfig({ gitHooks: false, defaultChecks: false })
-      assert.strictEqual(cfg.configVersion, 2)
+      assert.strictEqual(cfg.configVersion, 3)
       assert.ok(!cfg.hooks.some(h => h.type === 'git'))
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
       assert.ok(!allChecks.some(c => c.name === 'require-wip'))
