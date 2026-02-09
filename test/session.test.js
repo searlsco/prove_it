@@ -240,6 +240,37 @@ describe('session state functions', () => {
       assert.deepStrictEqual(generateDiffsSince(null, '/project', null, 10000), [])
     })
 
+    it('skips entries with null backupFileName without crashing', () => {
+      const projectDir = path.join(tmpDir, 'project')
+      fs.mkdirSync(projectDir, { recursive: true })
+      fs.writeFileSync(path.join(projectDir, 'ok.js'), 'console.log("ok");\n')
+
+      const fileHistoryDir = path.join(tmpDir, '.claude', 'file-history', SESSION_ID)
+      fs.mkdirSync(fileHistoryDir, { recursive: true })
+      fs.writeFileSync(path.join(fileHistoryDir, 'ok.js.bak'), 'console.log("old");\n')
+
+      const encoded = projectDir.replace(/[^a-zA-Z0-9-]/g, '-')
+      const jsonlDir = path.join(tmpDir, '.claude', 'projects', encoded)
+      fs.mkdirSync(jsonlDir, { recursive: true })
+
+      const snapshot = {
+        messageId: 'msg-null-backup',
+        trackedFileBackups: {
+          [path.join(projectDir, 'ok.js')]: { version: 1, backupFileName: 'ok.js.bak' },
+          [path.join(projectDir, 'broken.js')]: { version: 1, backupFileName: null }
+        }
+      }
+
+      fs.writeFileSync(
+        path.join(jsonlDir, `${SESSION_ID}.jsonl`),
+        JSON.stringify({ type: 'file-history-snapshot', snapshot }) + '\n'
+      )
+
+      const diffs = generateDiffsSince(SESSION_ID, projectDir, null, 10000)
+      assert.strictEqual(diffs.length, 1, 'Should only include ok.js, skipping null backupFileName')
+      assert.strictEqual(diffs[0].file, path.join(projectDir, 'ok.js'))
+    })
+
     it('generates diffs between backup and current file', () => {
       const projectDir = path.join(tmpDir, 'project')
       fs.mkdirSync(projectDir, { recursive: true })

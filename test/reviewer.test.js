@@ -9,19 +9,34 @@ const FIXTURES_DIR = path.join(__dirname, 'fixtures')
 
 describe('parseVerdict', () => {
   describe('PASS responses', () => {
-    it("parses 'PASS'", () => {
+    it("parses 'PASS' with fallback rationale", () => {
       const result = parseVerdict('PASS')
       assert.strictEqual(result.pass, true)
+      assert.strictEqual(result.reason, '<<Reviewer provided no rationale>>')
     })
 
     it("parses 'PASS' with trailing whitespace", () => {
       const result = parseVerdict('PASS\n\n')
       assert.strictEqual(result.pass, true)
+      assert.strictEqual(result.reason, '<<Reviewer provided no rationale>>')
     })
 
     it("parses 'PASS' with leading whitespace", () => {
       const result = parseVerdict('  PASS')
       assert.strictEqual(result.pass, true)
+      assert.strictEqual(result.reason, '<<Reviewer provided no rationale>>')
+    })
+
+    it("parses 'PASS: reasoning'", () => {
+      const result = parseVerdict('PASS: all changed lines have corresponding test assertions')
+      assert.strictEqual(result.pass, true)
+      assert.strictEqual(result.reason, 'all changed lines have corresponding test assertions')
+    })
+
+    it("parses 'PASS:no space'", () => {
+      const result = parseVerdict('PASS:no space')
+      assert.strictEqual(result.pass, true)
+      assert.strictEqual(result.reason, 'no space')
     })
   })
 
@@ -38,16 +53,10 @@ describe('parseVerdict', () => {
       assert.strictEqual(result.reason, 'missing tests')
     })
 
-    it("parses 'FAIL' on its own line with reason on next line", () => {
-      const result = parseVerdict('FAIL\nno tests added')
-      assert.strictEqual(result.pass, false)
-      assert.strictEqual(result.reason, 'no tests added')
-    })
-
-    it("parses 'FAIL' alone as failure with default reason", () => {
+    it("parses bare 'FAIL' with fallback rationale", () => {
       const result = parseVerdict('FAIL')
       assert.strictEqual(result.pass, false)
-      assert.strictEqual(result.reason, 'No reason provided')
+      assert.strictEqual(result.reason, '<<Reviewer provided no rationale>>')
     })
   })
 
