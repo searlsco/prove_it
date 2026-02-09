@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 set -e
+trap 'prove_it record --name fast-tests --result $?' EXIT
 npx standard --fix
 npm test
