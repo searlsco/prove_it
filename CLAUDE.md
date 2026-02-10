@@ -12,6 +12,7 @@ prove_it is a config-driven hook framework for Claude Code. It reads `.claude/pr
 - `lib/dispatcher/protocol.js` — Output formatting for Claude Code hook API
 - `lib/checks/script.js` — Runs shell commands as tasks
 - `lib/checks/agent.js` — Runs AI agent reviewer tasks
+- `lib/checks/env.js` — Runs env tasks that inject environment variables via CLAUDE_ENV_FILE
 - `lib/checks/builtins.js` — Built-in tasks (config:lock, beads:require_wip, review:commit_quality, review:test_coverage)
 - `lib/config.js` — Config loading, merging, and `buildConfig()` for init
 - `lib/init.js` — Project initialization, git hook shim management
@@ -22,7 +23,7 @@ prove_it is a config-driven hook framework for Claude Code. It reads `.claude/pr
 
 - PreToolUse: `permissionDecision` valid values are `"allow"`, `"deny"`, `"ask"` (inside `hookSpecificOutput`). Never use `"block"` or `"approve"` — Claude Code silently ignores them.
 - Stop: uses top-level `decision: "block"` or `"approve"` (different schema from PreToolUse).
-- SessionStart: outputs plain text to stdout (no JSON).
+- SessionStart: outputs JSON with `additionalContext` and optionally `systemMessage`.
 - `session_id` is available in hook input for all events.
 
 ## Testing
@@ -59,5 +60,5 @@ Use the `/release` skill. It reads `RELEASE.md` for the full process.
 
 - No dependencies beyond Node.js stdlib (devDependencies: standard for linting only)
 - Linter: `npx standard --fix` (run automatically by `./script/test_fast`)
-- Config format: v2 schema with `configVersion: 2` and `hooks` array containing `tasks`
+- Config format: v3 schema with `configVersion: 3` and `hooks` array containing `tasks`
 - Builtins are invoked via `prove_it run_builtin <namespace>:<name>`

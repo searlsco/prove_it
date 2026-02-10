@@ -348,6 +348,46 @@ describe('validateConfig', () => {
     })
   })
 
+  describe('env task validation', () => {
+    function cfgWithEnvTask (task, event = 'SessionStart') {
+      return validConfig({
+        hooks: [{
+          type: 'claude',
+          event,
+          tasks: [task]
+        }]
+      })
+    }
+
+    it('passes env task with command in SessionStart', () => {
+      const { errors } = validateConfig(cfgWithEnvTask({
+        name: 'setup-env', type: 'env', command: './script/env.sh'
+      }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('errors on env task without command', () => {
+      const { errors } = validateConfig(cfgWithEnvTask({
+        name: 'setup-env', type: 'env'
+      }))
+      assert.ok(errors.some(e => e.includes('type "env" but has no "command"')))
+    })
+
+    it('errors on env task in Stop hook', () => {
+      const { errors } = validateConfig(cfgWithEnvTask({
+        name: 'setup-env', type: 'env', command: './script/env.sh'
+      }, 'Stop'))
+      assert.ok(errors.some(e => e.includes('env tasks are only valid in SessionStart')))
+    })
+
+    it('errors on env task in PreToolUse hook', () => {
+      const { errors } = validateConfig(cfgWithEnvTask({
+        name: 'setup-env', type: 'env', command: './script/env.sh'
+      }, 'PreToolUse'))
+      assert.ok(errors.some(e => e.includes('env tasks are only valid in SessionStart')))
+    })
+  })
+
   describe('edge cases', () => {
     it('errors on null config', () => {
       const { errors } = validateConfig(null)

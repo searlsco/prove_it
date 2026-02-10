@@ -174,7 +174,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
   })
 
   describe('SessionStart hook', () => {
-    it('emits text output', () => {
+    it('emits structured JSON output', () => {
       createFile(tmpDir, 'hello_check.sh', '#!/usr/bin/env bash\necho "hello from session start"\nexit 0\n')
       const fs = require('fs')
       const path = require('path')
@@ -193,12 +193,14 @@ describe('v2 dispatcher: core hook behaviors', () => {
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',
         session_id: 'test-session',
+        source: 'startup',
         cwd: tmpDir
       }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
-      assert.ok(result.stdout.includes('hello_check.sh passed'),
-        'Should include check result text in stdout')
+      assert.ok(result.output, 'SessionStart should emit JSON')
+      assert.ok(result.output.additionalContext.includes('hello_check.sh passed'),
+        'Should include check result in additionalContext')
     })
 
     it('does not block on failing check — collects output instead', () => {
@@ -223,18 +225,21 @@ describe('v2 dispatcher: core hook behaviors', () => {
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',
         session_id: 'test-session-fail',
+        source: 'startup',
         cwd: tmpDir
       }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
-      // SessionStart never blocks — exit 0, no JSON decision output
+      // SessionStart never blocks — exit 0
       assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output, null, 'SessionStart should not emit JSON')
-      // Should still include the passing check's output
-      assert.ok(result.stdout.includes('pass_check.sh passed'),
-        'Should still emit passing checks output')
-      // Should include failing check's reason too
-      assert.ok(result.stdout.includes('failed'),
-        `Should include failure reason, got: ${result.stdout}`)
+      assert.ok(result.output, 'SessionStart should emit JSON')
+      // Should include the passing check's output in additionalContext
+      assert.ok(result.output.additionalContext.includes('pass_check.sh passed'),
+        'Should include passing checks in additionalContext')
+      // Should include failing check's reason in both channels
+      assert.ok(result.output.additionalContext.includes('failed'),
+        `additionalContext should include failure, got: ${result.output.additionalContext}`)
+      assert.ok(result.output.systemMessage.includes('failed'),
+        `systemMessage should include failure, got: ${result.output.systemMessage}`)
     })
   })
 

@@ -137,7 +137,7 @@ Each event type serves a different purpose. Tasks within a hook run in order.
 
 | Event | Purpose | Behavior |
 |-------|---------|----------|
-| `SessionStart` | Environment setup, injecting context | **Non-blocking.** All tasks run. Output is printed to Claude's context via stdout — use this to inject prompts, announce project state, or run setup scripts. |
+| `SessionStart` | Environment setup, injecting context | **Non-blocking.** All tasks run. Output is injected into Claude's context. Errors are also surfaced to the user. Use this to inject prompts, announce project state, set environment variables, or run setup scripts. |
 | `PreToolUse` | Guarding tool usage | **Blocking, fail-fast.** Tasks run in order; the first failure denies the tool and stops. Use this for config protection, enforcing workflows, or vetting commands before they execute. |
 | `Stop` | Verifying completed work | **Blocking, fail-fast.** Tasks run in order; the first failure sends Claude back to fix it. Put cheap tasks first (test suite), expensive ones last (AI reviewer). |
 
@@ -169,6 +169,7 @@ Block Claude from editing config files and require a tracked task before code ch
 
 - **`script`** — runs a shell command, fails on non-zero exit
 - **`agent`** — sends a prompt to an AI reviewer, expects PASS/FAIL response (see [Agent tasks](#agent-tasks))
+- **`env`** — runs a command that outputs environment variables, injected into Claude's session (SessionStart only, see [Env tasks](#env-tasks))
 
 ### Matchers and triggers
 
@@ -194,6 +195,38 @@ PreToolUse hooks can filter by tool name and command patterns:
 ```
 
 Supported conditions: `fileExists`, `envSet`, `envNotSet`.
+
+## Env tasks
+
+Env tasks run a command during SessionStart and inject the output as environment variables into Claude Code's session. They only run on `startup` and `resume` (not after `/clear` or compaction, where the environment is already set).
+
+```json
+{
+  "type": "claude",
+  "event": "SessionStart",
+  "tasks": [
+    { "name": "load-env", "type": "env", "command": "./script/load_env.sh" }
+  ]
+}
+```
+
+The command's stdout is parsed as environment variables. Three output formats work:
+
+```bash
+# .env format
+API_KEY=abc123
+DEBUG=true
+
+# export format
+export API_KEY=abc123
+export DEBUG="true"
+```
+
+```
+{"API_KEY": "abc123", "DEBUG": "true"}
+```
+
+Multiple env tasks merge in order — later tasks override earlier ones for the same key. If the command fails or output can't be parsed, the error is reported and execution continues.
 
 ## Agent tasks
 
