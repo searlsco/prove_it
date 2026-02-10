@@ -7,7 +7,7 @@
  *   uninstall - Remove prove_it from global config
  *   init      - Initialize prove_it in current repository
  *   deinit    - Remove prove_it files from current repository
- *   diagnose  - Check installation status and report issues
+ *   doctor    - Check installation status and report issues
  *   hook      - Run a hook dispatcher (claude:<Event> or git:<event>)
  *   run_builtin - Run a builtin check directly
  *   record    - Record a test run result for mtime caching
@@ -115,7 +115,7 @@ function cmdInstall () {
   log('Next steps:')
   log('  1. Restart Claude Code (required)')
   log('  2. Run: prove_it init  in a repo to add project config')
-  log('  3. Run: prove_it diagnose  to verify installation')
+  log('  3. Run: prove_it doctor  to verify installation')
 }
 
 // ============================================================================
@@ -407,35 +407,75 @@ function cmdDeinit () {
 }
 
 // ============================================================================
-// Diagnose command
+// Doctor command
 // ============================================================================
 
-function cmdDiagnose () {
+function findProveItGroup (settings, eventName) {
+  const groups = settings.hooks?.[eventName]
+  if (!Array.isArray(groups)) return null
+  return groups.find(g => {
+    const hooks = g && g.hooks ? g.hooks : []
+    return hooks.some(h => h.command && h.command.includes('prove_it hook'))
+  }) || null
+}
+
+function checkDispatcher (settings, eventName, expectedCommand, expectedMatcher, issues) {
+  const group = findProveItGroup(settings, eventName)
+  if (!group) {
+    log(`  [ ] ${eventName} dispatcher`)
+    issues.push(`${eventName} dispatcher not registered`)
+    return
+  }
+
+  const hook = group.hooks.find(h => h.command && h.command.includes('prove_it hook'))
+  const subIssues = []
+
+  if (hook.command !== expectedCommand) {
+    subIssues.push(`command is "${hook.command}", expected "${expectedCommand}"`)
+  }
+
+  if (expectedMatcher !== null) {
+    if (group.matcher !== expectedMatcher) {
+      subIssues.push(`matcher is "${group.matcher || '(missing)'}", expected "${expectedMatcher}"`)
+    }
+  } else {
+    // Stop should have no matcher
+    if (group.matcher) {
+      subIssues.push(`has unexpected matcher "${group.matcher}"`)
+    }
+  }
+
+  if (subIssues.length === 0) {
+    const matcherNote = expectedMatcher ? ` (matcher: ${expectedMatcher})` : ''
+    log(`  [x] ${eventName} dispatcher${matcherNote}`)
+  } else {
+    const matcherNote = expectedMatcher ? ` (matcher: ${expectedMatcher})` : ''
+    log(`  [!] ${eventName} dispatcher${matcherNote}`)
+    for (const sub of subIssues) {
+      log(`      ${sub}`)
+      issues.push(`${eventName} dispatcher: ${sub}`)
+    }
+  }
+}
+
+function cmdDoctor () {
   const { loadEffectiveConfig } = require('./lib/config')
+  const { validateConfig } = require('./lib/validate')
+  const { isTrackedByGit, isProveItShim, hasProveItSection } = require('./lib/init')
   const claudeDir = getClaudeDir()
   const repoRoot = process.cwd()
   const issues = []
 
-  log('prove_it diagnose\n')
+  log('prove_it doctor\n')
   log('Global installation:')
 
-  // Check settings.json for hook registration
+  // Check settings.json for hook registration — per-dispatcher structured validation
   const settingsPath = path.join(claudeDir, 'settings.json')
   const settings = loadJson(settingsPath)
   if (settings && settings.hooks) {
-    const serialized = JSON.stringify(settings.hooks)
-    const hasSessionStart = serialized.includes('prove_it hook claude:SessionStart')
-    const hasPreToolUse = serialized.includes('prove_it hook claude:PreToolUse')
-    const hasStop = serialized.includes('prove_it hook claude:Stop')
-
-    if (hasSessionStart && hasPreToolUse && hasStop) {
-      log('  [x] Hooks registered in settings.json (3 dispatchers)')
-    } else {
-      log('  [ ] Hooks not fully registered in settings.json')
-      if (!hasSessionStart) issues.push('SessionStart dispatcher not registered')
-      if (!hasPreToolUse) issues.push('PreToolUse dispatcher not registered')
-      if (!hasStop) issues.push('Stop dispatcher not registered')
-    }
+    checkDispatcher(settings, 'SessionStart', 'prove_it hook claude:SessionStart', 'startup|resume|clear|compact', issues)
+    checkDispatcher(settings, 'PreToolUse', 'prove_it hook claude:PreToolUse', 'Edit|Write|NotebookEdit|Bash', issues)
+    checkDispatcher(settings, 'Stop', 'prove_it hook claude:Stop', null, issues)
   } else {
     log('  [ ] settings.json missing or has no hooks')
     issues.push("Run 'prove_it install' to register hooks")
@@ -471,6 +511,16 @@ function cmdDiagnose () {
     } else {
       log(`      Warning: config has configVersion ${teamCfg?.configVersion || 'missing'}, expected 3`)
       issues.push('Config may need migration to v3 format')
+    }
+
+    // Sub-check: is team config tracked by git?
+    if (fs.existsSync(path.join(repoRoot, '.git'))) {
+      if (isTrackedByGit(repoRoot, '.claude/prove_it.json')) {
+        log('      Tracked by git')
+      } else {
+        log('      [ ] Not tracked by git')
+        issues.push('Team config .claude/prove_it.json is not committed to git')
+      }
     }
   } else {
     log('  [ ] Team config missing: .claude/prove_it.json')
@@ -513,7 +563,8 @@ function cmdDiagnose () {
   }
 
   // Effective merged config
-  log('\nEffective config (merged):')
+  log('\nEffective config:')
+  let effectiveCfg = null
   try {
     const defaultFn = () => ({
       enabled: true,
@@ -521,10 +572,52 @@ function cmdDiagnose () {
       hooks: []
     })
     const { cfg } = loadEffectiveConfig(repoRoot, defaultFn)
+    effectiveCfg = cfg
     log(JSON.stringify(cfg, null, 2).split('\n').map(l => '  ' + l).join('\n'))
   } catch (e) {
     log(e.message.split('\n').map(l => '  ' + l).join('\n'))
     issues.push('Config validation failed (see above)')
+  }
+
+  // Config-aware checks (derived from effective config)
+  if (effectiveCfg) {
+    log('\nConfig checks:')
+
+    // 1. Sources placeholder check
+    const sources = effectiveCfg.sources
+    if (Array.isArray(sources) && sources.some(s => s.includes('replace/these/with/globs'))) {
+      log('  [ ] Sources need customizing (placeholder glob found)')
+      issues.push('Replace placeholder globs in sources with your actual source/test file patterns')
+    } else if (Array.isArray(sources) && sources.length > 0) {
+      log('  [x] Sources configured')
+    }
+
+    // 2. Config validation warnings
+    const result = validateConfig(effectiveCfg)
+    if (result.warnings.length > 0) {
+      for (const w of result.warnings) {
+        log(`  [!] ${w}`)
+        issues.push(w)
+      }
+    }
+
+    // 3. Git hook shims — for each type:'git' hook in config
+    const gitHooks = (effectiveCfg.hooks || []).filter(h => h.type === 'git')
+    if (gitHooks.length > 0 && fs.existsSync(path.join(repoRoot, '.git'))) {
+      for (const hook of gitHooks) {
+        const event = hook.event
+        const hookPath = path.join(repoRoot, '.git', 'hooks', event)
+        if (fs.existsSync(hookPath) && (isProveItShim(hookPath) || hasProveItSection(hookPath))) {
+          log(`  [x] Git hook shim installed: .git/hooks/${event}`)
+        } else if (fs.existsSync(hookPath)) {
+          log(`  [ ] Git hook exists but missing prove_it shim: .git/hooks/${event}`)
+          issues.push(`Git hook .git/hooks/${event} exists but doesn't contain prove_it shim`)
+        } else {
+          log(`  [ ] Git hook shim missing: .git/hooks/${event}`)
+          issues.push(`Git hook shim missing for ${event} (run 'prove_it init' to install)`)
+        }
+      }
+    }
   }
 
   // Summary
@@ -669,7 +762,7 @@ Commands:
   init        Initialize prove_it in current repository
   deinit      Remove prove_it files from current repository
   reinit      Deinit and re-init current repository
-  diagnose    Check installation status and report issues
+  doctor      Check installation status and report issues
   hook        Run a hook dispatcher (claude:<Event> or git:<event>)
   run_builtin   Run a builtin check directly (e.g. prove_it run_builtin config:lock)
   record      Record a test run result for mtime caching
@@ -695,7 +788,7 @@ Examples:
   prove_it init                            # Interactive setup
   prove_it init --no-git-hooks             # Skip git hooks
   prove_it init --no-default-checks        # Base config only (no agents)
-  prove_it diagnose                        # Check installation status
+  prove_it doctor                          # Check installation status
   prove_it deinit                          # Remove prove_it from current repo
   prove_it uninstall                       # Remove global hooks
 `)
@@ -737,8 +830,9 @@ function main () {
         process.exit(1)
       })
       break
+    case 'doctor':
     case 'diagnose':
-      cmdDiagnose()
+      cmdDoctor()
       break
     case 'hook':
       cmdHook(args[1])

@@ -44,7 +44,7 @@ To use the development version instead of the Homebrew install, prepend `test/bi
 ```bash
 # From this directory
 PATH="../../test/bin:$PATH" prove_it hook claude:Stop < input.json
-PATH="../../test/bin:$PATH" prove_it diagnose
+PATH="../../test/bin:$PATH" prove_it doctor
 
 # Run Claude Code against this example with the local prove_it
 cd example/advanced

@@ -6,7 +6,7 @@ prove_it is a config-driven hook framework for Claude Code. It reads `.claude/pr
 
 ### Key modules
 
-- `cli.js` — CLI entry point, commands: install, uninstall, init, deinit, diagnose, hook, run_builtin
+- `cli.js` — CLI entry point, commands: install, uninstall, init, deinit, doctor, hook, run_builtin
 - `lib/dispatcher/claude.js` — Main dispatcher for Claude Code events
 - `lib/dispatcher/git.js` — Dispatcher for git hooks
 - `lib/dispatcher/protocol.js` — Output formatting for Claude Code hook API

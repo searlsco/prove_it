@@ -297,7 +297,7 @@ prove_it install       Register global hooks (~/.claude/settings.json)
 prove_it uninstall     Remove global hooks
 prove_it init          Set up current project (interactive or with flags)
 prove_it deinit        Remove prove_it from current project
-prove_it diagnose      Check installation and show effective config
+prove_it doctor        Check installation and show effective config
 prove_it hook <spec>   Run a dispatcher directly (claude:Stop, git:pre-commit)
 prove_it run_builtin <namespace:name> Run a builtin check directly
 prove_it record        Record a test run result (--name <check> --pass|--fail|--result <N>)
@@ -340,7 +340,7 @@ export PROVE_IT_DISABLED=1
 ## Troubleshooting
 
 ```bash
-prove_it diagnose
+prove_it doctor
 ```
 
 - **Hooks not firing** — Restart Claude Code after `prove_it install`

@@ -50,10 +50,10 @@ Run prove_it from the repo source (not the Homebrew install) to test hook behavi
    rm -rf "$tmpdir"
    ```
 
-   **Test diagnose:**
+   **Test doctor:**
    ```bash
    cd example/basic
-   prove_it diagnose
+   prove_it doctor
    ```
 
 4. Report the output and whether the behavior matches expectations.
