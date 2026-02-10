@@ -65,6 +65,8 @@ describe('Claude Code hook output contract', () => {
       if (result.output?.hookSpecificOutput?.permissionDecision) {
         assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
       }
+      assert.ok(result.output.systemMessage,
+        'denied PreToolUse should include systemMessage')
     })
 
     it('uses valid permissionDecision when denying config Write', () => {
@@ -170,6 +172,8 @@ describe('Claude Code hook output contract', () => {
       }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.output.decision, 'block')
+      assert.ok(result.output.systemMessage,
+        'blocked Stop should include systemMessage')
     })
 
     it('uses approve when tests pass', () => {
@@ -191,6 +195,8 @@ describe('Claude Code hook output contract', () => {
       }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.output.decision, 'approve')
+      assert.strictEqual(result.output.systemMessage, undefined,
+        'approved Stop should not include systemMessage')
     })
   })
 })

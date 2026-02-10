@@ -1,6 +1,6 @@
-const { describe, it } = require('node:test')
+const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
-const { passDecision, failDecision } = require('../lib/dispatcher/protocol')
+const { passDecision, failDecision, emitPreToolUse, emitStop } = require('../lib/dispatcher/protocol')
 
 describe('protocol', () => {
   describe('passDecision', () => {
@@ -32,6 +32,60 @@ describe('protocol', () => {
 
     it('returns deny for unknown events', () => {
       assert.strictEqual(failDecision('Whatever'), 'deny')
+    })
+  })
+
+  describe('emitPreToolUse', () => {
+    let captured
+    const origWrite = process.stdout.write
+
+    beforeEach(() => {
+      captured = ''
+      process.stdout.write = (chunk) => { captured += chunk }
+    })
+
+    afterEach(() => {
+      process.stdout.write = origWrite
+    })
+
+    it('includes systemMessage when provided', () => {
+      emitPreToolUse('deny', 'reason', 'user-visible msg')
+      const output = JSON.parse(captured)
+      assert.strictEqual(output.systemMessage, 'user-visible msg')
+      assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny')
+    })
+
+    it('omits systemMessage when not provided', () => {
+      emitPreToolUse('allow', 'ok')
+      const output = JSON.parse(captured)
+      assert.strictEqual(output.systemMessage, undefined)
+    })
+  })
+
+  describe('emitStop', () => {
+    let captured
+    const origWrite = process.stdout.write
+
+    beforeEach(() => {
+      captured = ''
+      process.stdout.write = (chunk) => { captured += chunk }
+    })
+
+    afterEach(() => {
+      process.stdout.write = origWrite
+    })
+
+    it('includes systemMessage when provided', () => {
+      emitStop('block', 'reason', 'user-visible msg')
+      const output = JSON.parse(captured)
+      assert.strictEqual(output.systemMessage, 'user-visible msg')
+      assert.strictEqual(output.decision, 'block')
+    })
+
+    it('omits systemMessage when not provided', () => {
+      emitStop('approve', 'ok')
+      const output = JSON.parse(captured)
+      assert.strictEqual(output.systemMessage, undefined)
     })
   })
 

@@ -55,6 +55,10 @@ describe('v2 dispatcher: core hook behaviors', () => {
         'Stop must block when fast tests fail')
       assert.ok(result.output.reason.includes('fast-tests failed'),
         `Reason should mention failure, got: ${result.output.reason}`)
+      assert.ok(result.output.systemMessage,
+        'blocked Stop should include systemMessage for user visibility')
+      assert.ok(result.output.systemMessage.includes('fast-tests failed'),
+        `systemMessage should mention failure, got: ${result.output.systemMessage}`)
     })
 
     it('approves when fast tests pass', () => {
@@ -79,6 +83,8 @@ describe('v2 dispatcher: core hook behaviors', () => {
       assert.ok(result.output, 'Hook should produce JSON output')
       assert.strictEqual(result.output.decision, 'approve',
         'Stop must approve when tests pass')
+      assert.strictEqual(result.output.systemMessage, undefined,
+        'approved Stop should not include systemMessage')
     })
   })
 
@@ -115,6 +121,8 @@ describe('v2 dispatcher: core hook behaviors', () => {
         result.output.hookSpecificOutput.permissionDecisionReason.includes('full-tests failed'),
         'Reason should mention test failure'
       )
+      assert.ok(result.output.systemMessage,
+        'denied PreToolUse should include systemMessage for user visibility')
     })
 
     it('allows commit when tests pass', () => {
@@ -145,6 +153,8 @@ describe('v2 dispatcher: core hook behaviors', () => {
         'allow',
         'Must allow when tests pass'
       )
+      assert.strictEqual(result.output.systemMessage, undefined,
+        'allowed PreToolUse should not include systemMessage')
     })
 
     it('ignores non-matching Bash commands', () => {
@@ -313,6 +323,8 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
       assert.strictEqual(result.exitCode, 0,
         'Git hook should exit 0 when CLAUDECODE is set and checks pass')
+      assert.ok(result.stderr.includes('all checks passed'),
+        `Stderr should confirm pass, got: ${result.stderr}`)
     })
   })
 
