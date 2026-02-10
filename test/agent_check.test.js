@@ -92,4 +92,81 @@ describe('agent check', () => {
     assert.ok(result.reason.includes('not found'),
       `Reason should mention binary not found, got: ${result.reason}`)
   })
+
+  it('resolves promptType reference to builtin prompt', () => {
+    const reviewerPath = path.join(tmpDir, 'capture_reviewer.sh')
+    const capturePath = path.join(tmpDir, 'captured.txt')
+    fs.writeFileSync(reviewerPath, `#!/usr/bin/env bash\ncat > "${capturePath}"\necho "PASS"\n`)
+    fs.chmodSync(reviewerPath, 0o755)
+
+    // Stage a change so staged_diff is non-empty
+    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'changed\n')
+    spawnSync('git', ['add', 'file.txt'], { cwd: tmpDir })
+
+    const result = runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'review:commit_quality', promptType: 'reference' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '' }
+    )
+    assert.strictEqual(result.pass, true)
+    // Verify the builtin prompt was used (contains staged_diff expansion)
+    const captured = fs.readFileSync(capturePath, 'utf8')
+    assert.ok(captured.includes('Test coverage gaps'),
+      `Should contain builtin prompt text, got: ${captured.substring(0, 200)}`)
+  })
+
+  it('fails with error for unknown prompt reference', () => {
+    const result = runAgentCheck(
+      { name: 'test-review', prompt: 'nonexistent:builtin', promptType: 'reference' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '' }
+    )
+    assert.strictEqual(result.pass, false)
+    assert.ok(result.reason.includes('unknown prompt reference'),
+      `Should mention unknown reference, got: ${result.reason}`)
+  })
+
+  it('fails with error for unknown template variables in custom prompt', () => {
+    const result = runAgentCheck(
+      { name: 'test-review', prompt: 'Review {{bogus_var}}' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '' }
+    )
+    assert.strictEqual(result.pass, false)
+    assert.ok(result.reason.includes('unknown template variable'),
+      `Should mention unknown template variable, got: ${result.reason}`)
+    assert.ok(result.reason.includes('bogus_var'),
+      `Should name the unknown variable, got: ${result.reason}`)
+  })
+
+  it('fails when prompt uses session_diffs but sessionId is null', () => {
+    const result = runAgentCheck(
+      { name: 'test-review', prompt: 'Review {{session_diffs}}' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '' }
+    )
+    assert.strictEqual(result.pass, false)
+    assert.ok(result.reason.includes('session_diffs'),
+      `Should name the unavailable var, got: ${result.reason}`)
+    assert.ok(result.reason.includes('session_id is null'),
+      `Should explain why, got: ${result.reason}`)
+  })
+
+  it('fails when prompt uses session_id but sessionId is null', () => {
+    const result = runAgentCheck(
+      { name: 'test-review', prompt: 'Session: {{session_id}}' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '' }
+    )
+    assert.strictEqual(result.pass, false)
+    assert.ok(result.reason.includes('session_id'),
+      `Should name the unavailable var, got: ${result.reason}`)
+  })
+
+  it('allows session vars when sessionId is present', () => {
+    const reviewerPath = path.join(tmpDir, 'pass_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    const result = runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Session: {{session_id}}' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: 'test-session', toolInput: null, testOutput: '' }
+    )
+    assert.strictEqual(result.pass, true)
+  })
 })

@@ -237,7 +237,7 @@ describe('session state functions', () => {
 
   describe('generateDiffsSince', () => {
     it('returns empty array when sessionId is null', () => {
-      assert.deepStrictEqual(generateDiffsSince(null, '/project', null, 10000), [])
+      assert.deepStrictEqual(generateDiffsSince(null, '/project', null), [])
     })
 
     it('skips entries with null backupFileName without crashing', () => {
@@ -266,7 +266,7 @@ describe('session state functions', () => {
         JSON.stringify({ type: 'file-history-snapshot', snapshot }) + '\n'
       )
 
-      const diffs = generateDiffsSince(SESSION_ID, projectDir, null, 10000)
+      const diffs = generateDiffsSince(SESSION_ID, projectDir, null)
       assert.strictEqual(diffs.length, 1, 'Should only include ok.js, skipping null backupFileName')
       assert.strictEqual(diffs[0].file, path.join(projectDir, 'ok.js'))
     })
@@ -297,7 +297,7 @@ describe('session state functions', () => {
         JSON.stringify({ type: 'file-history-snapshot', snapshot }) + '\n'
       )
 
-      const diffs = generateDiffsSince(SESSION_ID, projectDir, null, 10000)
+      const diffs = generateDiffsSince(SESSION_ID, projectDir, null)
       assert.strictEqual(diffs.length, 1)
       assert.strictEqual(diffs[0].file, path.join(projectDir, 'hello.js'))
       assert.strictEqual(diffs[0].diff.includes('hello world'), true, 'Diff should show the new content')

@@ -20,8 +20,8 @@ describe('git dispatcher', () => {
       assert.strictEqual(defaultConfig().sources, null)
     })
 
-    it('returns format with maxOutputChars', () => {
-      assert.strictEqual(defaultConfig().format.maxOutputChars, 12000)
+    it('returns no format key', () => {
+      assert.strictEqual(defaultConfig().format, undefined)
     })
   })
 

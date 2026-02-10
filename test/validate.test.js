@@ -288,6 +288,64 @@ describe('validateConfig', () => {
       }))
       assert.strictEqual(errors.length, 0)
     })
+
+    it('passes agent with promptType reference and valid reference', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'review:commit_quality', promptType: 'reference'
+      }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('errors on invalid promptType value', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'review this', promptType: 'builtin'
+      }))
+      assert.ok(errors.some(e => e.includes('promptType must be "string" or "reference"')))
+    })
+
+    it('errors on promptType reference with unknown prompt reference', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'nonexistent:builtin', promptType: 'reference'
+      }))
+      assert.ok(errors.some(e => e.includes('references unknown builtin "nonexistent:builtin"')))
+    })
+
+    it('passes promptType string with any prompt value', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'Review this code', promptType: 'string'
+      }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('passes variablesPresent as valid array', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { variablesPresent: ['staged_diff', 'session_diffs'] }
+      }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('errors when variablesPresent is not array', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { variablesPresent: 'staged_diff' }
+      }))
+      assert.ok(errors.some(e => e.includes('variablesPresent must be an array')))
+    })
+
+    it('errors when variablesPresent contains unknown var name', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { variablesPresent: ['bogus_var'] }
+      }))
+      assert.ok(errors.some(e => e.includes('unknown variable "bogus_var"')))
+    })
   })
 
   describe('edge cases', () => {

@@ -234,79 +234,44 @@ describe('builtins', () => {
     })
   })
 
-  describe('review:commit_quality', () => {
-    const reviewCommitQuality = builtins['review:commit_quality']
+  describe('BUILTIN_PROMPTS', () => {
+    const { BUILTIN_PROMPTS } = builtins
 
-    it('is a function', () => {
-      assert.strictEqual(typeof reviewCommitQuality, 'function')
+    it('has review:commit_quality prompt', () => {
+      assert.strictEqual(typeof BUILTIN_PROMPTS['review:commit_quality'], 'string')
+      assert.ok(BUILTIN_PROMPTS['review:commit_quality'].length > 0)
+      assert.ok(BUILTIN_PROMPTS['review:commit_quality'].includes('{{staged_diff}}'),
+        'commit_quality prompt should contain {{staged_diff}}')
     })
 
-    it('does not fail-fast on missing sessionId (unlike test_coverage)', () => {
-      // Remove claude from PATH so the reviewer degrades gracefully
-      const origPath = process.env.PATH
-      process.env.PATH = '/nonexistent'
-      try {
-        const result = reviewCommitQuality({}, {
-          sessionId: null,
-          rootDir: '/tmp/nonexistent',
-          projectDir: '/tmp/nonexistent'
-        })
-        // Should attempt the review (not fail-fast like test_coverage),
-        // then degrade gracefully because the reviewer binary isn't on PATH
-        assert.strictEqual(result.pass, true)
-        assert.strictEqual(result.skipped, true)
-        assert.ok(result.reason.includes('not found'),
-          `Should warn about missing binary, not session guard. Got: ${result.reason}`)
-      } finally {
-        process.env.PATH = origPath
-      }
-    })
-  })
-
-  describe('review:test_coverage', () => {
-    const reviewCoverage = builtins['review:test_coverage']
-
-    it('is a function', () => {
-      assert.strictEqual(typeof reviewCoverage, 'function')
-    })
-
-    it('fails fast when sessionId is null', () => {
-      const result = reviewCoverage({}, {
-        sessionId: null,
-        rootDir: '/tmp/fake',
-        projectDir: '/tmp/fake'
-      })
-      assert.strictEqual(result.pass, false)
-      assert.strictEqual(result.skipped, false)
-      assert.ok(result.reason.includes('session_id is missing'),
-        `Reason should mention missing session_id, got: ${result.reason}`)
-    })
-
-    it('skips when session has no diffs', () => {
-      const result = reviewCoverage({}, {
-        sessionId: 'test-no-diffs',
-        rootDir: '/tmp/nonexistent',
-        projectDir: '/tmp/nonexistent'
-      })
-      assert.strictEqual(result.pass, true)
-      assert.strictEqual(result.skipped, true)
-      assert.ok(result.reason.includes('no session diffs'),
-        `Should skip with no diffs, got: ${result.reason}`)
+    it('has review:test_coverage prompt', () => {
+      assert.strictEqual(typeof BUILTIN_PROMPTS['review:test_coverage'], 'string')
+      assert.ok(BUILTIN_PROMPTS['review:test_coverage'].length > 0)
+      assert.ok(BUILTIN_PROMPTS['review:test_coverage'].includes('{{session_diffs}}'),
+        'test_coverage prompt should contain {{session_diffs}}')
     })
   })
 
   describe('exports all expected builtins', () => {
-    const expectedNames = [
+    const expectedFunctions = [
       'config:lock',
-      'beads:require_wip',
-      'review:commit_quality',
-      'review:test_coverage'
+      'beads:require_wip'
     ]
 
-    for (const name of expectedNames) {
-      it(`exports ${name}`, () => {
+    for (const name of expectedFunctions) {
+      it(`exports ${name} as function`, () => {
         assert.strictEqual(typeof builtins[name], 'function', `Missing builtin: ${name}`)
       })
     }
+
+    it('does not export review builtins as functions', () => {
+      assert.notStrictEqual(typeof builtins['review:commit_quality'], 'function')
+      assert.notStrictEqual(typeof builtins['review:test_coverage'], 'function')
+    })
+
+    it('exports BUILTIN_PROMPTS object', () => {
+      assert.strictEqual(typeof builtins.BUILTIN_PROMPTS, 'object')
+      assert.ok(builtins.BUILTIN_PROMPTS !== null)
+    })
   })
 })

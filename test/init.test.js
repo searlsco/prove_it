@@ -98,6 +98,28 @@ describe('init', () => {
       assert.ok(full.hooks.length >= base.hooks.length,
         'Full config should have at least as many hooks as base')
     })
+
+    it('commit-review uses type agent with promptType reference', () => {
+      const cfg = buildConfig()
+      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
+      const commitReview = allTasks.find(t => t.name === 'commit-review')
+      assert.ok(commitReview, 'Should have commit-review task')
+      assert.strictEqual(commitReview.type, 'agent')
+      assert.strictEqual(commitReview.promptType, 'reference')
+      assert.strictEqual(commitReview.prompt, 'review:commit_quality')
+      assert.deepStrictEqual(commitReview.when.variablesPresent, ['staged_diff'])
+    })
+
+    it('coverage-review uses type agent with promptType reference', () => {
+      const cfg = buildConfig()
+      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
+      const coverageReview = allTasks.find(t => t.name === 'coverage-review')
+      assert.ok(coverageReview, 'Should have coverage-review task')
+      assert.strictEqual(coverageReview.type, 'agent')
+      assert.strictEqual(coverageReview.promptType, 'reference')
+      assert.strictEqual(coverageReview.prompt, 'review:test_coverage')
+      assert.deepStrictEqual(coverageReview.when.variablesPresent, ['session_diffs'])
+    })
   })
 
   describe('addToGitignore', () => {

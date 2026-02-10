@@ -5,9 +5,6 @@
     "**/*.*",
     "replace/these/with/globs/of/your/source/and/test/files.*"
   ],
-  "format": {
-    "maxOutputChars": 12000
-  },
   "hooks": [
     {
       "type": "claude",
@@ -40,8 +37,14 @@
         },
         {
           "name": "coverage-review",
-          "type": "script",
-          "command": "prove_it run_builtin review:test_coverage"
+          "type": "agent",
+          "promptType": "reference",
+          "prompt": "review:test_coverage",
+          "when": {
+            "variablesPresent": [
+              "session_diffs"
+            ]
+          }
         }
       ]
     },
@@ -56,8 +59,14 @@
         },
         {
           "name": "commit-review",
-          "type": "script",
-          "command": "prove_it run_builtin review:commit_quality"
+          "type": "agent",
+          "promptType": "reference",
+          "prompt": "review:commit_quality",
+          "when": {
+            "variablesPresent": [
+              "staged_diff"
+            ]
+          }
         }
       ]
     }

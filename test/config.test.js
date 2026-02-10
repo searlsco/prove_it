@@ -88,7 +88,6 @@ describe('loadEffectiveConfig ancestor discovery', () => {
   const defaultTestConfig = () => ({
     enabled: true,
     sources: null,
-    format: { maxOutputChars: 12000 },
     hooks: []
   })
 

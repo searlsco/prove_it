@@ -1,5 +1,9 @@
-const { describe, it } = require('node:test')
+const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
+const fs = require('fs')
+const path = require('path')
+const os = require('os')
+const { spawnSync } = require('child_process')
 const { matchesHookEntry, evaluateWhen, defaultConfig } = require('../lib/dispatcher/claude')
 
 describe('claude dispatcher', () => {
@@ -122,6 +126,68 @@ describe('claude dispatcher', () => {
         delete process.env.PROVE_IT_TEST_VAR2
       }
     })
+
+    describe('variablesPresent', () => {
+      let tmpDir
+
+      beforeEach(() => {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_vp_'))
+        spawnSync('git', ['init'], { cwd: tmpDir })
+        spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
+        spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
+        fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'initial\n')
+        spawnSync('git', ['add', '.'], { cwd: tmpDir })
+        spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+      })
+
+      afterEach(() => {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      })
+
+      it('passes when variable resolves to non-empty value', () => {
+        // Stage a change so staged_diff is non-empty
+        fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'changed\n')
+        spawnSync('git', ['add', 'file.txt'], { cwd: tmpDir })
+
+        const result = evaluateWhen(
+          { variablesPresent: ['staged_diff'] },
+          { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null }
+        )
+        assert.strictEqual(result, true)
+      })
+
+      it('fails when variable resolves to empty (no staged changes)', () => {
+        const result = evaluateWhen(
+          { variablesPresent: ['staged_diff'] },
+          { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null }
+        )
+        assert.strictEqual(result, false)
+      })
+
+      it('fails for session_diffs when sessionId is null', () => {
+        const result = evaluateWhen(
+          { variablesPresent: ['session_diffs'] },
+          { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null }
+        )
+        assert.strictEqual(result, false)
+      })
+
+      it('fails for unknown variable name', () => {
+        const result = evaluateWhen(
+          { variablesPresent: ['nonexistent_var'] },
+          { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null }
+        )
+        assert.strictEqual(result, false)
+      })
+
+      it('passes for empty array', () => {
+        const result = evaluateWhen(
+          { variablesPresent: [] },
+          { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null }
+        )
+        assert.strictEqual(result, true)
+      })
+    })
   })
 
   describe('defaultConfig', () => {
@@ -133,8 +199,8 @@ describe('claude dispatcher', () => {
       assert.deepStrictEqual(defaultConfig().hooks, [])
     })
 
-    it('returns format with maxOutputChars', () => {
-      assert.strictEqual(defaultConfig().format.maxOutputChars, 12000)
+    it('returns no format key', () => {
+      assert.strictEqual(defaultConfig().format, undefined)
     })
   })
 })

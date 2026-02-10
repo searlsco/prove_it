@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
-const { expandTemplate, makeResolvers } = require('../lib/template')
+const { expandTemplate, makeResolvers, KNOWN_VARS, SESSION_VARS, getUnknownVars, getSessionVars } = require('../lib/template')
 
 describe('template', () => {
   describe('expandTemplate', () => {
@@ -53,6 +53,85 @@ describe('template', () => {
       const context = { testOutput: 'PASS: all good', rootDir: '.', projectDir: '.', sessionId: null, toolInput: null }
       const result = expandTemplate('output: {{test_output}}', context)
       assert.strictEqual(result, 'output: PASS: all good')
+    })
+  })
+
+  describe('KNOWN_VARS', () => {
+    it('has all 12 expected keys', () => {
+      const expected = [
+        'staged_diff', 'staged_files', 'working_diff', 'changed_files',
+        'session_diffs', 'test_output', 'tool_command', 'file_path',
+        'project_dir', 'root_dir', 'session_id', 'git_head'
+      ]
+      assert.deepStrictEqual(KNOWN_VARS, expected)
+    })
+
+    it('matches the keys returned by makeResolvers', () => {
+      const context = { rootDir: '.', projectDir: '.', sessionId: null, toolInput: null }
+      const resolvers = makeResolvers(context)
+      const resolverKeys = Object.keys(resolvers).sort()
+      const knownSorted = [...KNOWN_VARS].sort()
+      assert.deepStrictEqual(resolverKeys, knownSorted)
+    })
+  })
+
+  describe('SESSION_VARS', () => {
+    it('contains session_diffs and session_id', () => {
+      assert.deepStrictEqual(SESSION_VARS, ['session_diffs', 'session_id'])
+    })
+
+    it('is a subset of KNOWN_VARS', () => {
+      for (const v of SESSION_VARS) {
+        assert.ok(KNOWN_VARS.includes(v), `${v} should be in KNOWN_VARS`)
+      }
+    })
+  })
+
+  describe('getSessionVars', () => {
+    it('returns session vars used in template', () => {
+      assert.deepStrictEqual(getSessionVars('Review {{session_diffs}}'), ['session_diffs'])
+    })
+
+    it('returns both session vars when both used', () => {
+      assert.deepStrictEqual(getSessionVars('{{session_id}} {{session_diffs}}'), ['session_id', 'session_diffs'])
+    })
+
+    it('returns empty array when no session vars', () => {
+      assert.deepStrictEqual(getSessionVars('{{staged_diff}} {{project_dir}}'), [])
+    })
+
+    it('returns empty array for null template', () => {
+      assert.deepStrictEqual(getSessionVars(null), [])
+    })
+
+    it('deduplicates', () => {
+      assert.deepStrictEqual(getSessionVars('{{session_diffs}} {{session_diffs}}'), ['session_diffs'])
+    })
+  })
+
+  describe('getUnknownVars', () => {
+    it('returns unknown variable names', () => {
+      assert.deepStrictEqual(getUnknownVars('{{bogus}} and {{fake}}'), ['bogus', 'fake'])
+    })
+
+    it('returns empty array for known variables', () => {
+      assert.deepStrictEqual(getUnknownVars('{{staged_diff}} {{project_dir}}'), [])
+    })
+
+    it('deduplicates repeated unknowns', () => {
+      assert.deepStrictEqual(getUnknownVars('{{bogus}} {{bogus}}'), ['bogus'])
+    })
+
+    it('returns empty array for null template', () => {
+      assert.deepStrictEqual(getUnknownVars(null), [])
+    })
+
+    it('returns empty array for empty string', () => {
+      assert.deepStrictEqual(getUnknownVars(''), [])
+    })
+
+    it('handles mix of known and unknown', () => {
+      assert.deepStrictEqual(getUnknownVars('{{staged_diff}} {{typo}}'), ['typo'])
     })
   })
 

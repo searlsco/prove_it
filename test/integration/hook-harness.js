@@ -140,7 +140,6 @@ function makeConfig (hooks, overrides = {}) {
   return {
     configVersion: 3,
     enabled: true,
-    format: { maxOutputChars: 12000 },
     hooks,
     ...overrides
   }

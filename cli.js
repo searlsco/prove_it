@@ -518,7 +518,6 @@ function cmdDiagnose () {
     const defaultFn = () => ({
       enabled: true,
       sources: null,
-      format: { maxOutputChars: 12000 },
       hooks: []
     })
     const { cfg } = loadEffectiveConfig(repoRoot, defaultFn)
@@ -628,7 +627,7 @@ function cmdRunCheck () {
 
   const builtins = require('./lib/checks/builtins')
   const fn = builtins[builtinName]
-  if (!fn) {
+  if (typeof fn !== 'function') {
     console.error(`Unknown builtin: ${builtinName}`)
     console.error(`Available: ${Object.keys(builtins).filter(k => typeof builtins[k] === 'function').join(', ')}`)
     process.exit(1)
