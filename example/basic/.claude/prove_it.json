@@ -42,7 +42,7 @@
           "prompt": "review:test_coverage",
           "when": {
             "variablesPresent": [
-              "session_diffs"
+              "session_diff"
             ]
           }
         }

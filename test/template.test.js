@@ -60,7 +60,7 @@ describe('template', () => {
     it('has all 12 expected keys', () => {
       const expected = [
         'staged_diff', 'staged_files', 'working_diff', 'changed_files',
-        'session_diffs', 'test_output', 'tool_command', 'file_path',
+        'session_diff', 'test_output', 'tool_command', 'file_path',
         'project_dir', 'root_dir', 'session_id', 'git_head'
       ]
       assert.deepStrictEqual(KNOWN_VARS, expected)
@@ -76,8 +76,8 @@ describe('template', () => {
   })
 
   describe('SESSION_VARS', () => {
-    it('contains session_diffs and session_id', () => {
-      assert.deepStrictEqual(SESSION_VARS, ['session_diffs', 'session_id'])
+    it('contains session_diff and session_id', () => {
+      assert.deepStrictEqual(SESSION_VARS, ['session_diff', 'session_id'])
     })
 
     it('is a subset of KNOWN_VARS', () => {
@@ -89,11 +89,11 @@ describe('template', () => {
 
   describe('getSessionVars', () => {
     it('returns session vars used in template', () => {
-      assert.deepStrictEqual(getSessionVars('Review {{session_diffs}}'), ['session_diffs'])
+      assert.deepStrictEqual(getSessionVars('Review {{session_diff}}'), ['session_diff'])
     })
 
     it('returns both session vars when both used', () => {
-      assert.deepStrictEqual(getSessionVars('{{session_id}} {{session_diffs}}'), ['session_id', 'session_diffs'])
+      assert.deepStrictEqual(getSessionVars('{{session_id}} {{session_diff}}'), ['session_id', 'session_diff'])
     })
 
     it('returns empty array when no session vars', () => {
@@ -105,7 +105,7 @@ describe('template', () => {
     })
 
     it('deduplicates', () => {
-      assert.deepStrictEqual(getSessionVars('{{session_diffs}} {{session_diffs}}'), ['session_diffs'])
+      assert.deepStrictEqual(getSessionVars('{{session_diff}} {{session_diff}}'), ['session_diff'])
     })
   })
 
@@ -141,7 +141,7 @@ describe('template', () => {
       const resolvers = makeResolvers(context)
       const expectedKeys = [
         'staged_diff', 'staged_files', 'working_diff', 'changed_files',
-        'session_diffs', 'test_output', 'tool_command', 'file_path',
+        'session_diff', 'test_output', 'tool_command', 'file_path',
         'project_dir', 'root_dir', 'session_id', 'git_head'
       ]
       for (const key of expectedKeys) {

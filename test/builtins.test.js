@@ -247,8 +247,8 @@ describe('builtins', () => {
     it('has review:test_coverage prompt', () => {
       assert.strictEqual(typeof BUILTIN_PROMPTS['review:test_coverage'], 'string')
       assert.ok(BUILTIN_PROMPTS['review:test_coverage'].length > 0)
-      assert.ok(BUILTIN_PROMPTS['review:test_coverage'].includes('{{session_diffs}}'),
-        'test_coverage prompt should contain {{session_diffs}}')
+      assert.ok(BUILTIN_PROMPTS['review:test_coverage'].includes('{{session_diff}}'),
+        'test_coverage prompt should contain {{session_diff}}')
     })
   })
 

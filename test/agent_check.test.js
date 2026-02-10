@@ -136,13 +136,13 @@ describe('agent check', () => {
       `Should name the unknown variable, got: ${result.reason}`)
   })
 
-  it('fails when prompt uses session_diffs but sessionId is null', () => {
+  it('fails when prompt uses session_diff but sessionId is null', () => {
     const result = runAgentCheck(
-      { name: 'test-review', prompt: 'Review {{session_diffs}}' },
+      { name: 'test-review', prompt: 'Review {{session_diff}}' },
       { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '' }
     )
     assert.strictEqual(result.pass, false)
-    assert.ok(result.reason.includes('session_diffs'),
+    assert.ok(result.reason.includes('session_diff'),
       `Should name the unavailable var, got: ${result.reason}`)
     assert.ok(result.reason.includes('session_id is null'),
       `Should explain why, got: ${result.reason}`)

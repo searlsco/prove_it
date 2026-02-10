@@ -118,7 +118,7 @@ describe('init', () => {
       assert.strictEqual(coverageReview.type, 'agent')
       assert.strictEqual(coverageReview.promptType, 'reference')
       assert.strictEqual(coverageReview.prompt, 'review:test_coverage')
-      assert.deepStrictEqual(coverageReview.when.variablesPresent, ['session_diffs'])
+      assert.deepStrictEqual(coverageReview.when.variablesPresent, ['session_diff'])
     })
   })
 

@@ -164,9 +164,9 @@ describe('claude dispatcher', () => {
         assert.strictEqual(result, false)
       })
 
-      it('fails for session_diffs when sessionId is null', () => {
+      it('fails for session_diff when sessionId is null', () => {
         const result = evaluateWhen(
-          { variablesPresent: ['session_diffs'] },
+          { variablesPresent: ['session_diff'] },
           { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null }
         )
         assert.strictEqual(result, false)

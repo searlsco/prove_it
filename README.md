@@ -114,7 +114,7 @@ prove_it is configured with a `hooks` array in `.claude/prove_it.json`. Each hoo
       "event": "Stop",
       "tasks": [
         { "name": "fast-tests", "type": "script", "command": "./script/test_fast" },
-        { "name": "coverage-review", "type": "agent", "prompt": "Check coverage...\n\n{{session_diffs}}" }
+        { "name": "coverage-review", "type": "agent", "prompt": "Check coverage...\n\n{{session_diff}}" }
       ]
     }
   ]
@@ -219,7 +219,7 @@ These expand in agent prompts:
 | `{{staged_files}}` | `git diff --cached --name-only` |
 | `{{working_diff}}` | `git diff` (unstaged changes) |
 | `{{changed_files}}` | `git diff --name-only HEAD` |
-| `{{session_diffs}}` | All changes since session baseline |
+| `{{session_diff}}` | All changes since session baseline |
 | `{{test_output}}` | Output from the most recent script check |
 | `{{tool_command}}` | The command Claude is trying to run |
 | `{{file_path}}` | The file Claude is trying to edit |

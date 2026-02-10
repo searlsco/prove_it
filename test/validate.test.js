@@ -322,7 +322,7 @@ describe('validateConfig', () => {
         name: 'a',
         type: 'script',
         command: 'x',
-        when: { variablesPresent: ['staged_diff', 'session_diffs'] }
+        when: { variablesPresent: ['staged_diff', 'session_diff'] }
       }))
       assert.strictEqual(errors.length, 0)
     })

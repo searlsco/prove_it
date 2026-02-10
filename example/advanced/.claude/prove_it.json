@@ -41,10 +41,10 @@
         {
           "name": "coverage-review",
           "type": "agent",
-          "prompt": "Check that calculator code changes have corresponding test coverage, especially edge cases (zero, negative numbers, large values).\n\nRespond with exactly one of:\n- PASS (on a line by itself)\n- FAIL: <reason> (on a line by itself)\n\n{{session_diffs}}",
+          "prompt": "Check that calculator code changes have corresponding test coverage, especially edge cases (zero, negative numbers, large values).\n\nRespond with exactly one of:\n- PASS (on a line by itself)\n- FAIL: <reason> (on a line by itself)\n\n{{session_diff}}",
           "when": {
             "variablesPresent": [
-              "session_diffs"
+              "session_diff"
             ]
           }
         }
