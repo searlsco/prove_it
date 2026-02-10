@@ -427,6 +427,13 @@ describe('doctor', () => {
       fs.writeFileSync(path.join(tmpRepo, 'script', 'test'), '#!/bin/bash\nexit 0\n')
       // Create .gitignore with local config
       fs.writeFileSync(path.join(tmpRepo, '.gitignore'), 'prove_it.local.json\n')
+      // Install /prove skill
+      const skillDir = path.join(tmpHome, '.claude', 'skills', 'prove')
+      fs.mkdirSync(skillDir, { recursive: true })
+      fs.copyFileSync(
+        path.join(__dirname, '..', 'lib', 'skills', 'prove.md'),
+        path.join(skillDir, 'SKILL.md')
+      )
 
       const result = run()
       assert.match(result.stdout, /All checks passed/)

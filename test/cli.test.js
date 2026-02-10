@@ -307,4 +307,67 @@ describe('install/uninstall', () => {
     assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'prove_it.md')),
       'prove_it rules file should be removed')
   })
+
+  it('install creates skill file', () => {
+    runCli(['install'], { env: { ...process.env, HOME: tmpDir } })
+
+    const skillPath = path.join(tmpDir, '.claude', 'skills', 'prove', 'SKILL.md')
+    assert.ok(fs.existsSync(skillPath), 'SKILL.md should exist')
+
+    const content = fs.readFileSync(skillPath, 'utf8')
+    assert.match(content, /^---\nname: prove\n/,
+      'Should have valid frontmatter with name: prove')
+    assert.match(content, /allowed-tools:/,
+      'Should have allowed-tools')
+    assert.match(content, /disable-model-invocation: true/,
+      'Should have disable-model-invocation: true')
+  })
+
+  it('install overwrites existing skill file', () => {
+    const env = { ...process.env, HOME: tmpDir }
+    const skillDir = path.join(tmpDir, '.claude', 'skills', 'prove')
+    fs.mkdirSync(skillDir, { recursive: true })
+    fs.writeFileSync(path.join(skillDir, 'SKILL.md'), 'old content')
+
+    runCli(['install'], { env })
+
+    const content = fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8')
+    assert.ok(content !== 'old content', 'Should overwrite old content')
+    assert.match(content, /^---\nname: prove\n/,
+      'Should have current skill content')
+  })
+
+  it('uninstall removes skill directory', () => {
+    const env = { ...process.env, HOME: tmpDir }
+    runCli(['install'], { env })
+
+    const skillDir = path.join(tmpDir, '.claude', 'skills', 'prove')
+    assert.ok(fs.existsSync(skillDir), 'Skill dir should exist after install')
+
+    runCli(['uninstall'], { env })
+    assert.ok(!fs.existsSync(skillDir), 'Skill dir should be removed after uninstall')
+  })
+})
+
+describe('skill source', () => {
+  it('has valid frontmatter', () => {
+    const skillSource = path.join(__dirname, '..', 'lib', 'skills', 'prove.md')
+    const content = fs.readFileSync(skillSource, 'utf8')
+
+    // Single opening --- (not double)
+    assert.ok(content.startsWith('---\n'), 'Should start with single ---')
+    assert.ok(!content.startsWith('---\n---'), 'Should not have double ---')
+
+    // Extract frontmatter
+    const endIdx = content.indexOf('\n---\n', 4)
+    assert.ok(endIdx > 0, 'Should have closing ---')
+    const frontmatter = content.slice(4, endIdx)
+
+    assert.match(frontmatter, /^name: prove$/m, 'name should be prove')
+    assert.match(frontmatter, /disable-model-invocation: true/,
+      'Should disable model invocation')
+    assert.match(frontmatter, /allowed-tools:/, 'Should have allowed-tools')
+    assert.match(frontmatter, /- Bash/, 'Should allow Bash tool')
+    assert.match(frontmatter, /argument-hint:/, 'Should have argument-hint')
+  })
 })

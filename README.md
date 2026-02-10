@@ -292,6 +292,24 @@ prove_it ships with built-in tasks invoked via `prove_it run_builtin <name>`:
 | `review:commit_quality` | pre-commit | Agent reviews staged diff for bugs and dead code |
 | `review:test_coverage` | Stop | Agent reviews session diffs for test coverage |
 
+## Skills
+
+prove_it installs a Claude Code [skill](https://code.claude.com/docs/en/skills)
+called `/prove` — evidence-based verification that forces Claude to actually
+run the thing and show you the results.
+
+Invoke it with `/prove <claim>` (e.g., `/prove the search API handles
+pagination`). If you just type `/prove` with uncommitted changes, it'll prove
+those changes work. Claude will:
+
+1. **State what it's trying to prove** and what "working" looks like
+2. **Show evidence it works** — commands, output, artifacts
+3. **Show evidence it might not work** — edge cases, error paths, things it tried to break
+4. **Give its honest judgment** — ready to ship, or what needs to change
+
+The skill is installed to `~/.claude/skills/prove/SKILL.md` and updated on
+every `prove_it install`.
+
 ## Commands
 
 ```

@@ -3,7 +3,7 @@
  * prove_it CLI
  *
  * Commands:
- *   install   - Install prove_it globally (~/.claude/)
+ *   install   - Install prove_it globally (~/.claude/) including /prove skill
  *   uninstall - Remove prove_it from global config
  *   init      - Initialize prove_it in current repository
  *   deinit    - Remove prove_it files from current repository
@@ -105,8 +105,17 @@ function cmdInstall () {
 
   writeJson(settingsPath, settings)
 
+  // Install /prove skill
+  const skillDir = path.join(claudeDir, 'skills', 'prove')
+  fs.mkdirSync(skillDir, { recursive: true })
+  fs.copyFileSync(
+    path.join(__dirname, 'lib', 'skills', 'prove.md'),
+    path.join(skillDir, 'SKILL.md')
+  )
+
   log('prove_it installed.')
   log(`  Settings: ${settingsPath}`)
+  log(`  Skill:    ${path.join(skillDir, 'SKILL.md')}`)
   log('')
   log('════════════════════════════════════════════════════════════════════')
   log('IMPORTANT: Restart Claude Code for hooks to take effect.')
@@ -140,11 +149,13 @@ function cmdUninstall () {
   // Remove prove_it files (best-effort)
   rmIfExists(path.join(claudeDir, 'prove_it'))
   rmIfExists(path.join(claudeDir, 'rules', 'prove_it.md'))
+  rmIfExists(path.join(claudeDir, 'skills', 'prove'))
 
   log('prove_it uninstalled.')
   log(`  Settings: ${settingsPath}`)
   log('  Removed: ~/.claude/prove_it/')
   log('  Removed: ~/.claude/rules/prove_it.md')
+  log('  Removed: ~/.claude/skills/prove/')
 }
 
 // ============================================================================
@@ -481,6 +492,23 @@ function cmdDoctor () {
     issues.push("Run 'prove_it install' to register hooks")
   }
 
+  // Check /prove skill
+  const skillPath = path.join(claudeDir, 'skills', 'prove', 'SKILL.md')
+  const shippedSkillPath = path.join(__dirname, 'lib', 'skills', 'prove.md')
+  if (fs.existsSync(skillPath)) {
+    const installed = fs.readFileSync(skillPath, 'utf8')
+    const shipped = fs.readFileSync(shippedSkillPath, 'utf8')
+    if (installed === shipped) {
+      log('  [x] /prove skill (current)')
+    } else {
+      log('  [!] /prove skill (outdated — run prove_it install to update)')
+      issues.push('/prove skill is outdated')
+    }
+  } else {
+    log('  [ ] /prove skill not installed')
+    issues.push("/prove skill not installed — run 'prove_it install'")
+  }
+
   log('\nCurrent repository:')
 
   // Check for test scripts
@@ -756,7 +784,7 @@ function showHelp () {
 Usage: prove_it <command>
 
 Commands:
-  install     Install prove_it globally (~/.claude/)
+  install     Install prove_it globally (~/.claude/) and /prove skill
   uninstall   Remove prove_it from global config
   reinstall   Uninstall and reinstall global hooks
   init        Initialize prove_it in current repository
