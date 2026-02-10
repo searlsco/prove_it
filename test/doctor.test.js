@@ -370,6 +370,31 @@ describe('doctor', () => {
       assert.match(result.stdout, /\[ \] Git hook shim missing: \.git\/hooks\/pre-push/)
     })
 
+    it('shows [!] when shim is after exec in git hook', () => {
+      writeSettings(tmpHome, correctSettings())
+      writeTeamConfig(tmpRepo, {
+        configVersion: 3,
+        enabled: true,
+        sources: ['**/*.js'],
+        hooks: [
+          { type: 'git', event: 'pre-commit', tasks: [{ name: 'tests', type: 'script', command: './test' }] }
+        ]
+      })
+
+      // Write a hook with exec BEFORE prove_it section (unreachable)
+      const hooksDir = path.join(tmpRepo, '.git', 'hooks')
+      fs.mkdirSync(hooksDir, { recursive: true })
+      fs.writeFileSync(
+        path.join(hooksDir, 'pre-commit'),
+        '#!/usr/bin/env bash\nexec bd hook pre-commit "$@"\n\n# --- prove_it ---\nprove_it hook git:pre-commit\n# --- prove_it ---\n'
+      )
+
+      const result = run()
+      assert.match(result.stdout, /\[!\] Git hook shim unreachable/)
+      assert.match(result.stdout, /has 'exec' before prove_it section/)
+      assert.match(result.stdout, /run 'prove_it init' to fix/)
+    })
+
     it('skips git hook checks when config has no git hooks', () => {
       writeSettings(tmpHome, correctSettings())
       writeTeamConfig(tmpRepo, {

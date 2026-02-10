@@ -13,6 +13,8 @@ const {
   removeGitHookShim,
   isProveItShim,
   hasProveItSection,
+  hasExecLine,
+  isProveItAfterExec,
   PROVE_IT_SHIM_MARKER
 } = require('../lib/init')
 
@@ -194,6 +196,66 @@ describe('init', () => {
       assert.ok(!result.installed)
       assert.ok(!result.merged)
     })
+
+    it('inserts before exec when autoMerge is true', () => {
+      const hookPath = path.join(tmpDir, '.git', 'hooks', 'pre-commit')
+      fs.mkdirSync(path.dirname(hookPath), { recursive: true })
+      fs.writeFileSync(hookPath, '#!/usr/bin/env bash\nexec bd hook pre-commit "$@"\n')
+      fs.chmodSync(hookPath, 0o755)
+
+      const result = installGitHookShim(tmpDir, 'pre-commit', true)
+      assert.ok(result.existed)
+      assert.ok(result.merged)
+      const content = fs.readFileSync(hookPath, 'utf8')
+      const proveItPos = content.indexOf(PROVE_IT_SHIM_MARKER)
+      const execPos = content.indexOf('exec bd hook')
+      assert.ok(proveItPos < execPos,
+        `prove_it section (pos ${proveItPos}) should be before exec (pos ${execPos})`)
+      assert.ok(content.includes('prove_it hook git:pre-commit'))
+      assert.ok(content.includes('exec bd hook'))
+    })
+
+    it('repositions existing section from after exec to before exec', () => {
+      const hookPath = path.join(tmpDir, '.git', 'hooks', 'pre-commit')
+      fs.mkdirSync(path.dirname(hookPath), { recursive: true })
+      // Simulate a stale merge: prove_it section AFTER exec
+      const staleContent = [
+        '#!/usr/bin/env bash',
+        'exec bd hook pre-commit "$@"',
+        '',
+        PROVE_IT_SHIM_MARKER,
+        'prove_it hook git:pre-commit',
+        PROVE_IT_SHIM_MARKER,
+        ''
+      ].join('\n')
+      fs.writeFileSync(hookPath, staleContent)
+      fs.chmodSync(hookPath, 0o755)
+
+      const result = installGitHookShim(tmpDir, 'pre-commit', true)
+      assert.ok(result.existed)
+      assert.ok(result.repositioned)
+      const content = fs.readFileSync(hookPath, 'utf8')
+      const proveItPos = content.indexOf(PROVE_IT_SHIM_MARKER)
+      const execPos = content.indexOf('exec bd hook')
+      assert.ok(proveItPos < execPos,
+        `prove_it section (pos ${proveItPos}) should be before exec (pos ${execPos})`)
+    })
+
+    it('appends normally when no exec present', () => {
+      const hookPath = path.join(tmpDir, '.git', 'hooks', 'pre-commit')
+      fs.mkdirSync(path.dirname(hookPath), { recursive: true })
+      fs.writeFileSync(hookPath, '#!/usr/bin/env bash\nrun-lint\n')
+      fs.chmodSync(hookPath, 0o755)
+
+      const result = installGitHookShim(tmpDir, 'pre-commit', true)
+      assert.ok(result.merged)
+      const content = fs.readFileSync(hookPath, 'utf8')
+      // prove_it section should be at the end, after run-lint
+      const lintPos = content.indexOf('run-lint')
+      const proveItPos = content.indexOf(PROVE_IT_SHIM_MARKER)
+      assert.ok(proveItPos > lintPos,
+        'prove_it section should be appended after existing content')
+    })
   })
 
   describe('removeGitHookShim', () => {
@@ -235,6 +297,61 @@ describe('init', () => {
 
       const removed = removeGitHookShim(tmpDir, 'pre-commit')
       assert.ok(!removed)
+    })
+  })
+
+  describe('hasExecLine', () => {
+    it('returns true for line starting with exec', () => {
+      assert.ok(hasExecLine('#!/usr/bin/env bash\nexec bd hook pre-commit "$@"\n'))
+    })
+
+    it('returns false for exec in a comment', () => {
+      assert.ok(!hasExecLine('#!/usr/bin/env bash\n# exec bd hook pre-commit\nrun-lint\n'))
+    })
+
+    it('returns false when no exec present', () => {
+      assert.ok(!hasExecLine('#!/usr/bin/env bash\nrun-lint\nnpm test\n'))
+    })
+
+    it('returns true for indented exec', () => {
+      assert.ok(hasExecLine('#!/usr/bin/env bash\n  exec bd hook pre-commit "$@"\n'))
+    })
+  })
+
+  describe('isProveItAfterExec', () => {
+    it('returns true when prove_it section is after exec', () => {
+      const content = [
+        '#!/usr/bin/env bash',
+        'exec bd hook pre-commit "$@"',
+        '',
+        PROVE_IT_SHIM_MARKER,
+        'prove_it hook git:pre-commit',
+        PROVE_IT_SHIM_MARKER
+      ].join('\n')
+      assert.ok(isProveItAfterExec(content))
+    })
+
+    it('returns false when prove_it section is before exec', () => {
+      const content = [
+        '#!/usr/bin/env bash',
+        PROVE_IT_SHIM_MARKER,
+        'prove_it hook git:pre-commit',
+        PROVE_IT_SHIM_MARKER,
+        '',
+        'exec bd hook pre-commit "$@"'
+      ].join('\n')
+      assert.ok(!isProveItAfterExec(content))
+    })
+
+    it('returns false when no exec present', () => {
+      const content = [
+        '#!/usr/bin/env bash',
+        'run-lint',
+        PROVE_IT_SHIM_MARKER,
+        'prove_it hook git:pre-commit',
+        PROVE_IT_SHIM_MARKER
+      ].join('\n')
+      assert.ok(!isProveItAfterExec(content))
     })
   })
 

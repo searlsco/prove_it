@@ -277,6 +277,7 @@ async function cmdInit () {
       if (r.installed) log(`  Installed: .git/hooks/${label}`)
       else if (r.merged) log(`  Merged: .git/hooks/${label} (appended prove_it)`)
       else if (r.skipped) skippedHooks.push(label)
+      else if (r.repositioned) log(`  Fixed: .git/hooks/${label} (moved prove_it before exec)`)
       else if (r.existed) log(`  Exists: .git/hooks/${label} (already has prove_it)`)
     }
   }
@@ -472,7 +473,7 @@ function checkDispatcher (settings, eventName, expectedCommand, expectedMatcher,
 function cmdDoctor () {
   const { loadEffectiveConfig } = require('./lib/config')
   const { validateConfig } = require('./lib/validate')
-  const { isTrackedByGit, isProveItShim, hasProveItSection } = require('./lib/init')
+  const { isTrackedByGit, isProveItShim, hasProveItSection, hasExecLine, isProveItAfterExec } = require('./lib/init')
   const claudeDir = getClaudeDir()
   const repoRoot = process.cwd()
   const issues = []
@@ -636,7 +637,13 @@ function cmdDoctor () {
         const event = hook.event
         const hookPath = path.join(repoRoot, '.git', 'hooks', event)
         if (fs.existsSync(hookPath) && (isProveItShim(hookPath) || hasProveItSection(hookPath))) {
-          log(`  [x] Git hook shim installed: .git/hooks/${event}`)
+          const hookContent = fs.readFileSync(hookPath, 'utf8')
+          if (hasExecLine(hookContent) && isProveItAfterExec(hookContent)) {
+            log(`  [!] Git hook shim unreachable: .git/hooks/${event} has 'exec' before prove_it section (run 'prove_it init' to fix)`)
+            issues.push(`Git hook shim unreachable: .git/hooks/${event} has 'exec' before prove_it section`)
+          } else {
+            log(`  [x] Git hook shim installed: .git/hooks/${event}`)
+          }
         } else if (fs.existsSync(hookPath)) {
           log(`  [ ] Git hook exists but missing prove_it shim: .git/hooks/${event}`)
           issues.push(`Git hook .git/hooks/${event} exists but doesn't contain prove_it shim`)
