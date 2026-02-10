@@ -3,7 +3,7 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 
-const { parseVerdict, parseJsonlOutput, runReviewer } = require('../lib/shared')
+const { parseVerdict, runReviewer } = require('../lib/shared')
 
 const FIXTURES_DIR = path.join(__dirname, 'fixtures')
 
@@ -79,84 +79,24 @@ describe('parseVerdict', () => {
   })
 })
 
-describe('parseJsonlOutput', () => {
-  it('extracts agent_message from codex JSONL', () => {
-    const jsonl = [
-      '{"type":"thread.started","thread_id":"t-001"}',
-      '{"type":"turn.started"}',
-      '{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"Thinking..."}}',
-      '{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"PASS"}}',
-      '{"type":"turn.completed","usage":{"input_tokens":100}}'
-    ].join('\n')
-
-    assert.strictEqual(parseJsonlOutput(jsonl), 'PASS')
-  })
-
-  it('extracts FAIL message from codex JSONL', () => {
-    const jsonl = [
-      '{"type":"thread.started","thread_id":"t-001"}',
-      '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"FAIL: no tests"}}',
-      '{"type":"turn.completed","usage":{}}'
-    ].join('\n')
-
-    assert.strictEqual(parseJsonlOutput(jsonl), 'FAIL: no tests')
-  })
-
-  it('returns last agent_message when multiple exist', () => {
-    const jsonl = [
-      '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"thinking out loud"}}',
-      '{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"PASS"}}'
-    ].join('\n')
-
-    assert.strictEqual(parseJsonlOutput(jsonl), 'PASS')
-  })
-
-  it('returns null when no agent_message found', () => {
-    const jsonl = [
-      '{"type":"thread.started","thread_id":"t-001"}',
-      '{"type":"turn.completed","usage":{}}'
-    ].join('\n')
-
-    assert.strictEqual(parseJsonlOutput(jsonl), null)
-  })
-
-  it('skips non-JSON lines gracefully', () => {
-    const jsonl = [
-      'not json at all',
-      '{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"PASS"}}',
-      '2026-02-06 ERROR something'
-    ].join('\n')
-
-    assert.strictEqual(parseJsonlOutput(jsonl), 'PASS')
-  })
-
-  it('returns null for empty input', () => {
-    assert.strictEqual(parseJsonlOutput(''), null)
-  })
-})
-
 describe('runReviewer with fixture shims', () => {
   const tmpDir = path.join(require('os').tmpdir(), 'prove_it_reviewer_shim_' + Date.now())
   const fraudePath = path.join(FIXTURES_DIR, 'fraude')
-  const faudexPath = path.join(FIXTURES_DIR, 'faudex')
-
   function setup () {
     fs.mkdirSync(tmpDir, { recursive: true })
   }
 
   function cleanup () {
     delete process.env.FRAUDE_RESPONSE
-    delete process.env.FAUDEX_RESPONSE
     fs.rmSync(tmpDir, { recursive: true, force: true })
   }
 
   describe('fraude (text mode)', () => {
-    it('returns PASS via text mode', () => {
+    it('returns PASS', () => {
       setup()
       process.env.FRAUDE_RESPONSE = 'PASS'
       const review = runReviewer(tmpDir, {
-        command: `${fraudePath} -p`,
-        outputMode: 'text'
+        command: `${fraudePath} -p`
       }, 'test prompt')
 
       assert.strictEqual(review.available, true)
@@ -164,12 +104,11 @@ describe('runReviewer with fixture shims', () => {
       cleanup()
     })
 
-    it('returns FAIL with reason via text mode', () => {
+    it('returns FAIL with reason', () => {
       setup()
       process.env.FRAUDE_RESPONSE = 'FAIL: no tests for new function'
       const review = runReviewer(tmpDir, {
-        command: `${fraudePath} -p`,
-        outputMode: 'text'
+        command: `${fraudePath} -p`
       }, 'test prompt')
 
       assert.strictEqual(review.available, true)
@@ -179,41 +118,11 @@ describe('runReviewer with fixture shims', () => {
     })
   })
 
-  describe('faudex (jsonl mode)', () => {
-    it('returns PASS via jsonl mode', () => {
-      setup()
-      process.env.FAUDEX_RESPONSE = 'PASS'
-      const review = runReviewer(tmpDir, {
-        command: `${faudexPath} exec --sandbox read-only --json`,
-        outputMode: 'jsonl'
-      }, 'test prompt')
-
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true)
-      cleanup()
-    })
-
-    it('returns FAIL with reason via jsonl mode', () => {
-      setup()
-      process.env.FAUDEX_RESPONSE = 'FAIL: missing coverage for auth.js'
-      const review = runReviewer(tmpDir, {
-        command: `${faudexPath} exec --json`,
-        outputMode: 'jsonl'
-      }, 'test prompt')
-
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, false)
-      assert.strictEqual(review.reason, 'missing coverage for auth.js')
-      cleanup()
-    })
-  })
-
   describe('binary availability', () => {
     it('returns available: false when binary not found', () => {
       setup()
       const review = runReviewer(tmpDir, {
-        command: 'nonexistent_binary_xyz',
-        outputMode: 'text'
+        command: 'nonexistent_binary_xyz'
       }, 'test')
 
       assert.strictEqual(review.available, false)
