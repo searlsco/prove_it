@@ -238,7 +238,7 @@ By default, agent tasks use `claude -p` (Claude Code in pipe mode). The reviewer
 {
   "name": "commit-review",
   "type": "agent",
-  "prompt": "Review staged changes for:\n1. Test coverage gaps\n2. Logic errors or edge cases\n3. Dead code\n\n{{staged_diff}}"
+  "prompt": "Review staged changes for:\n1. Test coverage gaps\n2. Logic errors or edge cases\n3. Dead code\n\nCheck recent git history before failing for coverage gaps.\n\n{{staged_diff}}\n\n{{recent_commits}}\n\n{{git_status}}"
 }
 ```
 
@@ -258,6 +258,8 @@ These expand in agent prompts:
 | `{{file_path}}` | The file Claude is trying to edit |
 | `{{project_dir}}` | Project directory |
 | `{{git_head}}` | Current HEAD commit SHA |
+| `{{git_status}}` | `git status --short` (staged/modified/untracked files) |
+| `{{recent_commits}}` | `git log --oneline --stat -5` (last 5 commits with file stats) |
 
 ### Adversarial cross-platform review
 

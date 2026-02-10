@@ -242,6 +242,10 @@ describe('builtins', () => {
       assert.ok(BUILTIN_PROMPTS['review:commit_quality'].length > 0)
       assert.ok(BUILTIN_PROMPTS['review:commit_quality'].includes('{{staged_diff}}'),
         'commit_quality prompt should contain {{staged_diff}}')
+      assert.ok(BUILTIN_PROMPTS['review:commit_quality'].includes('{{recent_commits}}'),
+        'commit_quality prompt should contain {{recent_commits}}')
+      assert.ok(BUILTIN_PROMPTS['review:commit_quality'].includes('{{git_status}}'),
+        'commit_quality prompt should contain {{git_status}}')
     })
 
     it('has review:test_coverage prompt', () => {
@@ -249,6 +253,10 @@ describe('builtins', () => {
       assert.ok(BUILTIN_PROMPTS['review:test_coverage'].length > 0)
       assert.ok(BUILTIN_PROMPTS['review:test_coverage'].includes('{{session_diff}}'),
         'test_coverage prompt should contain {{session_diff}}')
+      assert.ok(BUILTIN_PROMPTS['review:test_coverage'].includes('{{recent_commits}}'),
+        'test_coverage prompt should contain {{recent_commits}}')
+      assert.ok(BUILTIN_PROMPTS['review:test_coverage'].includes('{{git_status}}'),
+        'test_coverage prompt should contain {{git_status}}')
     })
   })
 

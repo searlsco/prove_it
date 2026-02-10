@@ -57,11 +57,12 @@ describe('template', () => {
   })
 
   describe('KNOWN_VARS', () => {
-    it('has all 12 expected keys', () => {
+    it('has all 14 expected keys', () => {
       const expected = [
         'staged_diff', 'staged_files', 'working_diff', 'changed_files',
         'session_diff', 'test_output', 'tool_command', 'file_path',
-        'project_dir', 'root_dir', 'session_id', 'git_head'
+        'project_dir', 'root_dir', 'session_id', 'git_head',
+        'git_status', 'recent_commits'
       ]
       assert.deepStrictEqual(KNOWN_VARS, expected)
     })
@@ -142,7 +143,8 @@ describe('template', () => {
       const expectedKeys = [
         'staged_diff', 'staged_files', 'working_diff', 'changed_files',
         'session_diff', 'test_output', 'tool_command', 'file_path',
-        'project_dir', 'root_dir', 'session_id', 'git_head'
+        'project_dir', 'root_dir', 'session_id', 'git_head',
+        'git_status', 'recent_commits'
       ]
       for (const key of expectedKeys) {
         assert.strictEqual(typeof resolvers[key], 'function', `Missing resolver: ${key}`)
@@ -224,6 +226,25 @@ describe('template', () => {
       it('returns empty string for working_diff with clean tree', () => {
         const resolvers = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null })
         assert.strictEqual(resolvers.working_diff(), '')
+      })
+
+      it('resolves git_status for modified files', () => {
+        fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'modified\n')
+
+        const resolvers = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null })
+        const status = resolvers.git_status()
+        assert.ok(status.includes('file.txt'), `git_status should list file.txt, got: ${status}`)
+      })
+
+      it('returns empty string for git_status with clean tree', () => {
+        const resolvers = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null })
+        assert.strictEqual(resolvers.git_status(), '')
+      })
+
+      it('resolves recent_commits with commit history', () => {
+        const resolvers = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null })
+        const commits = resolvers.recent_commits()
+        assert.ok(commits.includes('init'), `recent_commits should include 'init' commit, got: ${commits}`)
       })
     })
   })
