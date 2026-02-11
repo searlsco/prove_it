@@ -57,12 +57,12 @@ describe('template', () => {
   })
 
   describe('KNOWN_VARS', () => {
-    it('has all 14 expected keys', () => {
+    it('has all 16 expected keys', () => {
       const expected = [
         'staged_diff', 'staged_files', 'working_diff', 'changed_files',
         'session_diff', 'test_output', 'tool_command', 'file_path',
         'project_dir', 'root_dir', 'session_id', 'git_head',
-        'git_status', 'recent_commits'
+        'git_status', 'recent_commits', 'recently_edited_files', 'sources'
       ]
       assert.deepStrictEqual(KNOWN_VARS, expected)
     })
@@ -144,7 +144,7 @@ describe('template', () => {
         'staged_diff', 'staged_files', 'working_diff', 'changed_files',
         'session_diff', 'test_output', 'tool_command', 'file_path',
         'project_dir', 'root_dir', 'session_id', 'git_head',
-        'git_status', 'recent_commits'
+        'git_status', 'recent_commits', 'recently_edited_files', 'sources'
       ]
       for (const key of expectedKeys) {
         assert.strictEqual(typeof resolvers[key], 'function', `Missing resolver: ${key}`)
@@ -239,6 +239,84 @@ describe('template', () => {
       it('returns empty string for git_status with clean tree', () => {
         const resolvers = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null })
         assert.strictEqual(resolvers.git_status(), '')
+      })
+
+      it('resolves recently_edited_files for modified source files', () => {
+        fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'modified\n')
+
+        const resolvers = makeResolvers({
+          rootDir: tmpDir,
+          projectDir: tmpDir,
+          sessionId: null,
+          toolInput: null,
+          sources: ['**/*.txt']
+        })
+        const files = resolvers.recently_edited_files()
+        assert.ok(files.includes('file.txt'), `should include file.txt, got: ${files}`)
+      })
+
+      it('recently_edited_files filters out non-source files', () => {
+        fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'modified\n')
+        fs.writeFileSync(path.join(tmpDir, 'readme.md'), 'docs\n')
+
+        const resolvers = makeResolvers({
+          rootDir: tmpDir,
+          projectDir: tmpDir,
+          sessionId: null,
+          toolInput: null,
+          sources: ['**/*.txt']
+        })
+        const files = resolvers.recently_edited_files()
+        assert.ok(files.includes('file.txt'), `should include file.txt, got: ${files}`)
+        assert.ok(!files.includes('readme.md'), `should not include readme.md, got: ${files}`)
+      })
+
+      it('recently_edited_files includes untracked new files', () => {
+        // Create a new file that hasn't been git add'd
+        fs.writeFileSync(path.join(tmpDir, 'brand_new.txt'), 'new stuff\n')
+
+        const resolvers = makeResolvers({
+          rootDir: tmpDir,
+          projectDir: tmpDir,
+          sessionId: null,
+          toolInput: null,
+          sources: ['**/*.txt']
+        })
+        const files = resolvers.recently_edited_files()
+        assert.ok(files.includes('brand_new.txt'), `should include untracked brand_new.txt, got: ${files}`)
+      })
+
+      it('recently_edited_files returns empty for clean tree', () => {
+        const resolvers = makeResolvers({
+          rootDir: tmpDir,
+          projectDir: tmpDir,
+          sessionId: null,
+          toolInput: null,
+          sources: ['**/*.txt']
+        })
+        assert.strictEqual(resolvers.recently_edited_files(), '')
+      })
+
+      it('resolves sources as newline-separated list', () => {
+        const resolvers = makeResolvers({
+          rootDir: tmpDir,
+          projectDir: tmpDir,
+          sessionId: null,
+          toolInput: null,
+          sources: ['**/*.js', '**/*.ts']
+        })
+        assert.strictEqual(resolvers.sources(), '**/*.js\n**/*.ts')
+      })
+
+      it('resolves sources as empty string when null', () => {
+        const resolvers = makeResolvers({
+          rootDir: tmpDir,
+          projectDir: tmpDir,
+          sessionId: null,
+          toolInput: null,
+          sources: null
+        })
+        assert.strictEqual(resolvers.sources(), '')
       })
 
       it('resolves recent_commits with commit history', () => {

@@ -65,6 +65,7 @@ describe('init', () => {
       assert.ok(allChecks.some(c => c.name === 'require-wip'))
       assert.ok(allChecks.some(c => c.name === 'commit-review'))
       assert.ok(allChecks.some(c => c.name === 'coverage-review'))
+      assert.ok(allChecks.some(c => c.name === 'investment-check'))
     })
 
     it('omits git hooks when gitHooks is false', () => {
@@ -121,6 +122,39 @@ describe('init', () => {
       assert.strictEqual(coverageReview.promptType, 'reference')
       assert.strictEqual(coverageReview.prompt, 'review:test_coverage')
       assert.deepStrictEqual(coverageReview.when.variablesPresent, ['session_diff'])
+    })
+
+    it('investment-check uses type agent with promptType reference', () => {
+      const cfg = buildConfig()
+      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
+      const investmentCheck = allTasks.find(t => t.name === 'investment-check')
+      assert.ok(investmentCheck, 'Should have investment-check task')
+      assert.strictEqual(investmentCheck.type, 'agent')
+      assert.strictEqual(investmentCheck.promptType, 'reference')
+      assert.strictEqual(investmentCheck.prompt, 'review:test_investment')
+      assert.strictEqual(investmentCheck.when.linesWrittenSinceLastRun, 500)
+    })
+
+    it('investment-check is in PreToolUse edit entry', () => {
+      const cfg = buildConfig()
+      const editEntry = cfg.hooks.find(h =>
+        h.type === 'claude' && h.event === 'PreToolUse' && h.matcher === 'Edit|Write|NotebookEdit|Bash')
+      assert.ok(editEntry, 'Should have PreToolUse edit entry')
+      const investmentCheck = editEntry.tasks.find(t => t.name === 'investment-check')
+      assert.ok(investmentCheck, 'investment-check should be in PreToolUse edit entry')
+    })
+
+    it('omits investment-check when defaultChecks is false', () => {
+      const cfg = buildConfig({ defaultChecks: false })
+      const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
+      assert.ok(!allChecks.some(c => c.name === 'investment-check'))
+    })
+
+    it('generated config passes validation', () => {
+      const { validateConfig } = require('../lib/validate')
+      const cfg = buildConfig()
+      const { errors } = validateConfig(cfg)
+      assert.deepStrictEqual(errors, [], `buildConfig() should produce valid config, got errors: ${errors.join('; ')}`)
     })
   })
 

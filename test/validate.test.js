@@ -289,6 +289,64 @@ describe('validateConfig', () => {
       assert.strictEqual(errors.length, 0)
     })
 
+    it('passes linesWrittenSinceLastRun as valid when key', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'agent',
+        prompt: 'review this',
+        command: 'prove_it run_builtin review:test_investment',
+        when: { linesWrittenSinceLastRun: 500 }
+      }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('errors when linesWrittenSinceLastRun is not a number', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { linesWrittenSinceLastRun: '500' }
+      }))
+      assert.ok(errors.some(e => e.includes('linesWrittenSinceLastRun must be a positive number')))
+    })
+
+    it('errors when linesWrittenSinceLastRun is zero', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { linesWrittenSinceLastRun: 0 }
+      }))
+      assert.ok(errors.some(e => e.includes('linesWrittenSinceLastRun must be a positive number')))
+    })
+
+    it('errors when linesWrittenSinceLastRun is negative', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { linesWrittenSinceLastRun: -10 }
+      }))
+      assert.ok(errors.some(e => e.includes('linesWrittenSinceLastRun must be a positive number')))
+    })
+
+    it('warns when linesWrittenSinceLastRun is used on a git hook', () => {
+      const { errors, warnings } = validateConfig(validConfig({
+        hooks: [{
+          type: 'git',
+          event: 'pre-commit',
+          tasks: [{
+            name: 'a',
+            type: 'script',
+            command: 'x',
+            when: { linesWrittenSinceLastRun: 500 }
+          }]
+        }]
+      }))
+      assert.strictEqual(errors.length, 0)
+      assert.ok(warnings.some(w => w.includes('linesWrittenSinceLastRun') && w.includes('git')))
+    })
+
     it('passes agent with promptType reference and valid reference', () => {
       const { errors } = validateConfig(cfgWithTask({
         name: 'a', type: 'agent', prompt: 'review:commit_quality', promptType: 'reference'
