@@ -71,10 +71,28 @@ describe('E2E: beads enforcement via claude CLI', { skip: !canRunE2E && 'require
   it('denies file edit when no bead is in_progress', () => {
     const hookLog = path.join(tmpDir, 'hook.log')
 
+    // Create a fake `bd` that shadows the real one. It returns "No issues found"
+    // for `bd list` (so the beads check sees no in_progress bead) but no-ops for
+    // everything else (so Claude can't self-remedy by running `bd create`).
+    const fakeBinDir = path.join(tmpDir, '.fake-bin')
+    fs.mkdirSync(fakeBinDir, { recursive: true })
+    const fakeBd = path.join(fakeBinDir, 'bd')
+    fs.writeFileSync(fakeBd, [
+      '#!/usr/bin/env bash',
+      'if [ "$1" = "list" ]; then',
+      '  echo "No issues found"',
+      '  exit 0',
+      'fi',
+      'exit 0'
+    ].join('\n'))
+    fs.chmodSync(fakeBd, 0o755)
+    const fakePath = `${fakeBinDir}:${process.env.PATH}`
+
     // Wrapper that logs invocation details and delegates to the prove_it dispatcher
     const wrapperScript = path.join(tmpDir, '.claude', 'hooks', 'beads-wrapper.sh')
     createFile(tmpDir, '.claude/hooks/beads-wrapper.sh', [
       '#!/usr/bin/env bash',
+      `export PATH="${fakePath}"`,
       'INPUT=$(cat)',
       'TOOL=$(echo "$INPUT" | jq -r .tool_name 2>/dev/null)',
       `echo "HOOK_FIRED: tool=$TOOL" >> ${hookLog}`,
@@ -117,7 +135,7 @@ describe('E2E: beads enforcement via claude CLI', { skip: !canRunE2E && 'require
         cwd: tmpDir,
         encoding: 'utf8',
         timeout: 60000,
-        env: { ...process.env, CLAUDE_PROJECT_DIR: tmpDir }
+        env: { ...process.env, CLAUDE_PROJECT_DIR: tmpDir, PATH: fakePath }
       }
     )
 
