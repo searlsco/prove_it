@@ -65,10 +65,60 @@ function removeProveItGroups (groups) {
   })
 }
 
+function buildHookGroups () {
+  return [
+    {
+      event: 'SessionStart',
+      group: {
+        matcher: 'startup|resume|clear|compact',
+        hooks: [{ type: 'command', command: 'prove_it hook claude:SessionStart' }]
+      }
+    },
+    {
+      event: 'PreToolUse',
+      group: {
+        matcher: 'Edit|Write|NotebookEdit|Bash',
+        hooks: [{ type: 'command', command: 'prove_it hook claude:PreToolUse' }]
+      }
+    },
+    {
+      event: 'Stop',
+      group: {
+        hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }]
+      }
+    }
+  ]
+}
+
+function isInstallCurrent (settings) {
+  if (!settings || !settings.hooks) return false
+  const expected = buildHookGroups()
+  for (const { event, group } of expected) {
+    const found = findProveItGroup(settings, event)
+    if (!found || JSON.stringify(found) !== JSON.stringify(group)) return false
+  }
+  return true
+}
+
+function isSkillCurrent (claudeDir) {
+  const skillPath = path.join(claudeDir, 'skills', 'prove', 'SKILL.md')
+  const shippedPath = path.join(__dirname, 'lib', 'skills', 'prove.md')
+  if (!fs.existsSync(skillPath)) return false
+  return fs.readFileSync(skillPath, 'utf8') === fs.readFileSync(shippedPath, 'utf8')
+}
+
 function cmdInstall () {
   const claudeDir = getClaudeDir()
   const settingsPath = path.join(claudeDir, 'settings.json')
   const settings = loadJson(settingsPath) || {}
+
+  // Check if already up to date
+  if (isInstallCurrent(settings) && isSkillCurrent(claudeDir)) {
+    log('prove_it already up to date.')
+    log(`  Settings: ${settingsPath}`)
+    return
+  }
+
   if (!settings.hooks) settings.hooks = {}
 
   // Clean up old-style hook registrations first
@@ -79,29 +129,10 @@ function cmdInstall () {
     }
   }
 
-  // Register 3 thin dispatchers
-  addHookGroup(settings.hooks, 'SessionStart', {
-    matcher: 'startup|resume|clear|compact',
-    hooks: [{
-      type: 'command',
-      command: 'prove_it hook claude:SessionStart'
-    }]
-  })
-
-  addHookGroup(settings.hooks, 'PreToolUse', {
-    matcher: 'Edit|Write|NotebookEdit|Bash',
-    hooks: [{
-      type: 'command',
-      command: 'prove_it hook claude:PreToolUse'
-    }]
-  })
-
-  addHookGroup(settings.hooks, 'Stop', {
-    hooks: [{
-      type: 'command',
-      command: 'prove_it hook claude:Stop'
-    }]
-  })
+  // Register dispatchers
+  for (const { event, group } of buildHookGroups()) {
+    addHookGroup(settings.hooks, event, group)
+  }
 
   writeJson(settingsPath, settings)
 

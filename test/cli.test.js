@@ -361,6 +361,56 @@ describe('install/uninstall', () => {
     }
   })
 
+  it('install reports "up to date" on second run', () => {
+    const env = { ...process.env, HOME: tmpDir }
+    runCli(['install'], { env })
+    const result = runCli(['install'], { env })
+    assert.strictEqual(result.exitCode, 0)
+    assert.match(result.stdout, /already up to date/)
+    assert.ok(!result.stdout.includes('Restart Claude Code'),
+      'Should not show restart banner when already up to date')
+  })
+
+  it('install updates outdated hooks', () => {
+    const env = { ...process.env, HOME: tmpDir }
+    runCli(['install'], { env })
+
+    // Simulate outdated hooks by changing a matcher
+    const settingsPath = path.join(tmpDir, '.claude', 'settings.json')
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+    const ptGroup = settings.hooks.PreToolUse.find(g =>
+      JSON.stringify(g).includes('prove_it hook'))
+    ptGroup.matcher = 'Edit|Write'
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n')
+
+    // Re-install should fix it
+    const result = runCli(['install'], { env })
+    assert.strictEqual(result.exitCode, 0)
+    assert.match(result.stdout, /prove_it installed/)
+
+    const updated = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+    const updatedGroup = updated.hooks.PreToolUse.find(g =>
+      JSON.stringify(g).includes('prove_it hook'))
+    assert.strictEqual(updatedGroup.matcher, 'Edit|Write|NotebookEdit|Bash')
+  })
+
+  it('install detects outdated skill file', () => {
+    const env = { ...process.env, HOME: tmpDir }
+    runCli(['install'], { env })
+
+    // Tamper with the skill file
+    const skillPath = path.join(tmpDir, '.claude', 'skills', 'prove', 'SKILL.md')
+    fs.writeFileSync(skillPath, 'outdated content')
+
+    // Re-install should detect it and update
+    const result = runCli(['install'], { env })
+    assert.strictEqual(result.exitCode, 0)
+    assert.match(result.stdout, /prove_it installed/)
+
+    const content = fs.readFileSync(skillPath, 'utf8')
+    assert.ok(content !== 'outdated content', 'Skill should be updated')
+  })
+
   it('uninstall removes hooks and config', () => {
     const env = { ...process.env, HOME: tmpDir }
     runCli(['install'], { env })
