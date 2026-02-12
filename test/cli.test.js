@@ -131,16 +131,93 @@ describe('init/deinit', () => {
     assert.ok(Array.isArray(cfg.hooks), 'hooks should be an array')
   })
 
-  it('init is non-destructive', () => {
-    // Create a custom prove_it.json first
+  it('init is non-destructive for legacy configs without hash', () => {
+    // Create a custom prove_it.json first (no _generatedHash = legacy)
     fs.mkdirSync(path.join(tmpDir, '.claude'), { recursive: true })
     fs.writeFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), '{"custom": true}')
 
     runCli(['init'], { cwd: tmpDir })
 
-    // Custom content should be preserved
+    // Custom content should be preserved (non-interactive → no overwrite prompt)
     const content = fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), 'utf8')
     assert.strictEqual(content, '{"custom": true}')
+  })
+
+  it('init reports "(up to date)" when config matches current defaults', () => {
+    // First init creates with hash
+    runCli(['init'], { cwd: tmpDir })
+    // Second init should detect up-to-date
+    const result = runCli(['init'], { cwd: tmpDir })
+    assert.strictEqual(result.exitCode, 0)
+    assert.match(result.stdout, /up to date/)
+  })
+
+  it('init auto-upgrades outdated unedited config', () => {
+    // First init with no default checks
+    runCli(['init', '--no-default-checks'], { cwd: tmpDir })
+    // Re-init with default checks — should auto-upgrade
+    const result = runCli(['init'], { cwd: tmpDir })
+    assert.strictEqual(result.exitCode, 0)
+    assert.match(result.stdout, /Updated:.*upgraded to current defaults/)
+  })
+
+  it('init --no-overwrite reports "(customized)" for edited config', () => {
+    // Init to create config with hash
+    runCli(['init'], { cwd: tmpDir })
+    // Modify the config
+    const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    cfg.sources = ['src/**/*.js']
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
+
+    const result = runCli(['init', '--no-overwrite'], { cwd: tmpDir })
+    assert.strictEqual(result.exitCode, 0)
+    assert.match(result.stdout, /customized/)
+  })
+
+  it('init --overwrite overwrites edited config', () => {
+    // Init to create config with hash
+    runCli(['init'], { cwd: tmpDir })
+    // Modify the config
+    const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    cfg.sources = ['src/**/*.js']
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
+
+    const result = runCli(['init', '--overwrite'], { cwd: tmpDir })
+    assert.strictEqual(result.exitCode, 0)
+    assert.match(result.stdout, /Updated:.*overwritten with current defaults/)
+    // Config should now have default sources, not the customized ones
+    const newCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    assert.ok(newCfg.initSeed, 'should have initSeed')
+    assert.ok(!newCfg.sources.includes('src/**/*.js'))
+  })
+
+  it('init --overwrite respects other flags', () => {
+    // Init with defaults (includes default checks)
+    runCli(['init'], { cwd: tmpDir })
+    // Modify the config so it's "edited"
+    const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    cfg.sources = ['src/**/*.js']
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
+
+    // Overwrite with --no-default-checks
+    const result = runCli(['init', '--overwrite', '--no-default-checks'], { cwd: tmpDir })
+    assert.strictEqual(result.exitCode, 0)
+    const newCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    assert.ok(newCfg.initSeed)
+    const allTasks = newCfg.hooks.flatMap(h => h.tasks || [])
+    assert.ok(!allTasks.some(t => t.name === 'commit-review'), 'should not have default checks')
+    assert.ok(!allTasks.some(t => t.name === 'coverage-review'), 'should not have default checks')
+  })
+
+  it('init shows "Commit changes" TODO after auto-upgrade', () => {
+    // Init with --no-default-checks, then re-init with defaults to trigger upgrade
+    runCli(['init', '--no-default-checks'], { cwd: tmpDir })
+    const result = runCli(['init'], { cwd: tmpDir })
+    assert.strictEqual(result.exitCode, 0)
+    assert.match(result.stdout, /\[ \] Commit changes/)
   })
 
   it('init shows trap instructions when scripts lack prove_it record', () => {

@@ -183,11 +183,11 @@ function askYesNo (rl, question, defaultYes = true) {
  * and hasExplicitFlags indicates whether any flags were explicitly provided.
  */
 function parseInitFlags (args) {
-  const flags = { gitHooks: true, defaultChecks: true, autoMergeGitHooks: false }
+  const flags = { gitHooks: true, defaultChecks: true, autoMergeGitHooks: false, overwrite: null }
   let hasExplicitFlags = false
 
   for (const arg of args) {
-    if (arg === '--git-hooks') { flags.gitHooks = true; hasExplicitFlags = true } else if (arg === '--no-git-hooks') { flags.gitHooks = false; hasExplicitFlags = true } else if (arg === '--default-checks') { flags.defaultChecks = true; hasExplicitFlags = true } else if (arg === '--no-default-checks') { flags.defaultChecks = false; hasExplicitFlags = true } else if (arg === '--automatic-git-hook-merge') { flags.autoMergeGitHooks = true; hasExplicitFlags = true } else if (arg === '--no-automatic-git-hook-merge') { flags.autoMergeGitHooks = false; hasExplicitFlags = true }
+    if (arg === '--git-hooks') { flags.gitHooks = true; hasExplicitFlags = true } else if (arg === '--no-git-hooks') { flags.gitHooks = false; hasExplicitFlags = true } else if (arg === '--default-checks') { flags.defaultChecks = true; hasExplicitFlags = true } else if (arg === '--no-default-checks') { flags.defaultChecks = false; hasExplicitFlags = true } else if (arg === '--automatic-git-hook-merge') { flags.autoMergeGitHooks = true; hasExplicitFlags = true } else if (arg === '--no-automatic-git-hook-merge') { flags.autoMergeGitHooks = false; hasExplicitFlags = true } else if (arg === '--overwrite') { flags.overwrite = true; hasExplicitFlags = true } else if (arg === '--no-overwrite') { flags.overwrite = false; hasExplicitFlags = true }
   }
 
   return { flags, hasExplicitFlags }
@@ -203,7 +203,7 @@ function scriptHasRecord (filePath) {
 }
 
 async function cmdInit () {
-  const { initProject } = require('./lib/init')
+  const { initProject, overwriteTeamConfig } = require('./lib/init')
   const repoRoot = process.cwd()
 
   const args = process.argv.slice(3)
@@ -211,10 +211,13 @@ async function cmdInit () {
 
   const isTTY = process.stdin.isTTY && process.stdout.isTTY
 
-  // Interactive mode: TTY with no explicit flags
-  if (isTTY && !hasExplicitFlags) {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-    try {
+  const rl = (isTTY && !hasExplicitFlags)
+    ? readline.createInterface({ input: process.stdin, output: process.stdout })
+    : null
+
+  try {
+    // Interactive mode: TTY with no explicit flags
+    if (rl) {
       flags.gitHooks = await askYesNo(rl, 'Install git hooks?')
 
       if (flags.gitHooks) {
@@ -227,113 +230,144 @@ async function cmdInit () {
       }
 
       flags.defaultChecks = await askYesNo(rl, 'Include default checks (beads gate, code review, coverage review)?')
-    } finally {
-      rl.close()
     }
-  }
 
-  const results = initProject(repoRoot, flags)
+    const results = initProject(repoRoot, flags)
 
-  log('prove_it initialized.\n')
-
-  if (results.teamConfig.created) {
-    log(`  Created: ${results.teamConfig.path}`)
-  } else {
-    log(`  Exists:  ${results.teamConfig.path}`)
-  }
-
-  if (results.localConfig.created) {
-    log(`  Created: ${results.localConfig.path}`)
-  } else {
-    log(`  Exists:  ${results.localConfig.path}`)
-  }
-
-  if (results.scriptTest.created) {
-    log(`  Created: ${results.scriptTest.path} (stub)`)
-  } else if (results.scriptTest.isStub) {
-    log(`  Exists:  ${results.scriptTest.path} (stub - needs customization)`)
-  } else {
-    log(`  Exists:  ${results.scriptTest.path}`)
-  }
-
-  if (results.scriptTestFast.created) {
-    log(`  Created: ${results.scriptTestFast.path} (stub)`)
-  } else if (results.scriptTestFast.isStub) {
-    log(`  Exists:  ${results.scriptTestFast.path} (stub - needs customization)`)
-  } else {
-    log(`  Exists:  ${results.scriptTestFast.path}`)
-  }
-
-  if (results.addedToGitignore) {
-    log('  Added to .gitignore: .claude/prove_it.local.json')
-  }
-
-  // Report git hook results
-  const skippedHooks = []
-  if (results.gitHookFiles.preCommit || results.gitHookFiles.prePush) {
-    for (const [label, hookName] of [['pre-commit', 'preCommit'], ['pre-push', 'prePush']]) {
-      const r = results.gitHookFiles[hookName]
-      if (!r) continue
-      if (r.installed) log(`  Installed: .git/hooks/${label}`)
-      else if (r.merged) log(`  Merged: .git/hooks/${label} (appended prove_it)`)
-      else if (r.skipped) skippedHooks.push(label)
-      else if (r.repositioned) log(`  Fixed: .git/hooks/${label} (moved prove_it before exec)`)
-      else if (r.existed) log(`  Exists: .git/hooks/${label} (already has prove_it)`)
+    // Handle edited config — prompt or respect --overwrite/--no-overwrite
+    let overwritten = false
+    if (results.teamConfig.edited) {
+      if (flags.overwrite === true) {
+        overwriteTeamConfig(repoRoot, flags)
+        overwritten = true
+      } else if (flags.overwrite === null && rl) {
+        const doOverwrite = await askYesNo(rl, 'Existing prove_it.json has been customized. Overwrite with current defaults?', false)
+        if (doOverwrite) {
+          overwriteTeamConfig(repoRoot, flags)
+          overwritten = true
+        }
+      }
+      // flags.overwrite === false or user said no → keep existing
     }
-  }
 
-  if (skippedHooks.length > 0) {
-    const hooks = skippedHooks.join(', ')
-    console.error(`\nError: existing git hooks found: ${hooks}`)
-    console.error('Either merge prove_it into your hooks manually, or re-run with --automatic-git-hook-merge')
-    process.exit(1)
-  }
+    log('prove_it initialized.\n')
 
-  // Build TODO list
-  const todos = []
-  const scriptsNeedingRecord = []
-
-  for (const [scriptPath, label, editMsg] of [
-    ['script/test', 'script/test', 'Edit script/test to run your full test suite'],
-    ['script/test_fast', 'script/test_fast', 'Edit script/test_fast to run your fast (unit) tests']
-  ]) {
-    const resultKey = scriptPath === 'script/test' ? 'scriptTest' : 'scriptTestFast'
-    const scriptResult = results[resultKey]
-    if (scriptResult.isStub) {
-      todos.push({ done: false, text: editMsg })
-    } else if (!scriptHasRecord(path.join(repoRoot, scriptPath))) {
-      scriptsNeedingRecord.push(label)
+    if (results.teamConfig.created) {
+      log(`  Created: ${results.teamConfig.path}`)
+    } else if (results.teamConfig.upgraded) {
+      log(`  Updated: ${results.teamConfig.path} (upgraded to current defaults)`)
+    } else if (overwritten) {
+      log(`  Updated: ${results.teamConfig.path} (overwritten with current defaults)`)
+    } else if (results.teamConfig.upToDate) {
+      log(`  Exists:  ${results.teamConfig.path} (up to date)`)
+    } else if (results.teamConfig.edited) {
+      log(`  Exists:  ${results.teamConfig.path} (customized)`)
     } else {
-      todos.push({ done: true, text: `${label} records results` })
+      log(`  Exists:  ${results.teamConfig.path}`)
     }
-  }
 
-  todos.push({
-    done: false,
-    text: 'Customize .claude/prove_it.json (source globs, check commands)'
-  })
-
-  if (results.teamConfigNeedsCommit) {
-    todos.push({ done: false, text: 'Commit changes' })
-  } else if (results.teamConfig.existed) {
-    todos.push({ done: true, text: '.claude/prove_it.json committed' })
-  }
-
-  log('\nTODO:')
-  for (const todo of todos) {
-    const checkbox = todo.done ? '[x]' : '[ ]'
-    log(`  ${checkbox} ${todo.text}`)
-  }
-
-  if (scriptsNeedingRecord.length > 0) {
-    log(`\n  [ ] To skip redundant test runs, add this trap to ${scriptsNeedingRecord.join(' and ')}:`)
-    for (const label of scriptsNeedingRecord) {
-      const checkName = label === 'script/test' ? 'full-tests' : 'fast-tests'
-      log(`\n    # ${label}`)
-      log(`    trap 'prove_it record --name ${checkName} --result $?' EXIT`)
+    if (results.localConfig.created) {
+      log(`  Created: ${results.localConfig.path}`)
+    } else {
+      log(`  Exists:  ${results.localConfig.path}`)
     }
+
+    if (results.scriptTest.created) {
+      log(`  Created: ${results.scriptTest.path} (stub)`)
+    } else if (results.scriptTest.isStub) {
+      log(`  Exists:  ${results.scriptTest.path} (stub - needs customization)`)
+    } else {
+      log(`  Exists:  ${results.scriptTest.path}`)
+    }
+
+    if (results.scriptTestFast.created) {
+      log(`  Created: ${results.scriptTestFast.path} (stub)`)
+    } else if (results.scriptTestFast.isStub) {
+      log(`  Exists:  ${results.scriptTestFast.path} (stub - needs customization)`)
+    } else {
+      log(`  Exists:  ${results.scriptTestFast.path}`)
+    }
+
+    if (results.addedToGitignore) {
+      log('  Added to .gitignore: .claude/prove_it.local.json')
+    }
+
+    // Report git hook results
+    const skippedHooks = []
+    if (results.gitHookFiles.preCommit || results.gitHookFiles.prePush) {
+      for (const [label, hookName] of [['pre-commit', 'preCommit'], ['pre-push', 'prePush']]) {
+        const r = results.gitHookFiles[hookName]
+        if (!r) continue
+        if (r.installed) log(`  Installed: .git/hooks/${label}`)
+        else if (r.merged) log(`  Merged: .git/hooks/${label} (appended prove_it)`)
+        else if (r.skipped) skippedHooks.push(label)
+        else if (r.repositioned) log(`  Fixed: .git/hooks/${label} (moved prove_it before exec)`)
+        else if (r.existed) log(`  Exists: .git/hooks/${label} (already has prove_it)`)
+      }
+    }
+
+    if (skippedHooks.length > 0) {
+      const hooks = skippedHooks.join(', ')
+      console.error(`\nError: existing git hooks found: ${hooks}`)
+      console.error('Either merge prove_it into your hooks manually, or re-run with --automatic-git-hook-merge')
+      process.exit(1)
+    }
+
+    // Build TODO list
+    const todos = []
+    const scriptsNeedingRecord = []
+
+    for (const [scriptPath, label, editMsg] of [
+      ['script/test', 'script/test', 'Edit script/test to run your full test suite'],
+      ['script/test_fast', 'script/test_fast', 'Edit script/test_fast to run your fast (unit) tests']
+    ]) {
+      const resultKey = scriptPath === 'script/test' ? 'scriptTest' : 'scriptTestFast'
+      const scriptResult = results[resultKey]
+      if (scriptResult.isStub) {
+        todos.push({ done: false, text: editMsg })
+      } else if (!scriptHasRecord(path.join(repoRoot, scriptPath))) {
+        scriptsNeedingRecord.push(label)
+      } else {
+        todos.push({ done: true, text: `${label} records results` })
+      }
+    }
+
+    if (results.teamConfig.upgraded || overwritten) {
+      todos.push({
+        done: false,
+        text: 'Review updated .claude/prove_it.json (source globs, check commands)'
+      })
+    } else {
+      todos.push({
+        done: false,
+        text: 'Customize .claude/prove_it.json (source globs, check commands)'
+      })
+    }
+
+    if (results.teamConfigNeedsCommit || results.teamConfig.upgraded || overwritten) {
+      todos.push({ done: false, text: 'Commit changes' })
+    } else if (results.teamConfig.existed) {
+      todos.push({ done: true, text: '.claude/prove_it.json committed' })
+    }
+
+    log('\nTODO:')
+    for (const todo of todos) {
+      const checkbox = todo.done ? '[x]' : '[ ]'
+      log(`  ${checkbox} ${todo.text}`)
+    }
+
+    if (scriptsNeedingRecord.length > 0) {
+      log(`\n  [ ] To skip redundant test runs, add this trap to ${scriptsNeedingRecord.join(' and ')}:`)
+      for (const label of scriptsNeedingRecord) {
+        const checkName = label === 'script/test' ? 'full-tests' : 'fast-tests'
+        log(`\n    # ${label}`)
+        log(`    trap 'prove_it record --name ${checkName} --result $?' EXIT`)
+      }
+    }
+    log('')
+  } finally {
+    if (rl) rl.close()
   }
-  log('')
 }
 
 // ============================================================================
@@ -814,6 +848,7 @@ Init options:
   --[no-]git-hooks                Install git hooks (pre-commit, pre-push) (default: yes)
   --[no-]default-checks           Include beads gate, code review, coverage review (default: yes)
   --[no-]automatic-git-hook-merge Merge with existing git hooks (default: yes)
+  --[no-]overwrite                Overwrite customized prove_it.json with defaults
 
   With no flags and a TTY, prove_it init asks interactively.
   With no flags and no TTY, all defaults apply (equivalent to all features on).

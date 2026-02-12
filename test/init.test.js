@@ -5,10 +5,12 @@ const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
 const {
+  configHash,
   isScriptTestStub,
   buildConfig,
   addToGitignore,
   initProject,
+  overwriteTeamConfig,
   installGitHookShim,
   removeGitHookShim,
   isProveItShim,
@@ -420,6 +422,31 @@ describe('init', () => {
     })
   })
 
+  describe('configHash', () => {
+    it('returns consistent hash for same content', () => {
+      const cfg = { configVersion: 3, enabled: true, hooks: [] }
+      assert.strictEqual(configHash(cfg), configHash(cfg))
+    })
+
+    it('returns different hash for different content', () => {
+      const cfg1 = { configVersion: 3, enabled: true, hooks: [] }
+      const cfg2 = { configVersion: 3, enabled: false, hooks: [] }
+      assert.notStrictEqual(configHash(cfg1), configHash(cfg2))
+    })
+
+    it('ignores initSeed field', () => {
+      const cfg1 = { configVersion: 3, hooks: [] }
+      const cfg2 = { configVersion: 3, hooks: [], initSeed: 'abc123def456' }
+      assert.strictEqual(configHash(cfg1), configHash(cfg2))
+    })
+
+    it('returns a 12-character hex string', () => {
+      const hash = configHash({ configVersion: 3 })
+      assert.strictEqual(hash.length, 12)
+      assert.match(hash, /^[0-9a-f]{12}$/)
+    })
+  })
+
   describe('initProject', () => {
     it('creates team config, local config, script/test, and script/test_fast', () => {
       const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
@@ -433,6 +460,22 @@ describe('init', () => {
       assert.ok(fs.existsSync(path.join(tmpDir, 'script', 'test_fast')))
     })
 
+    it('newly created config includes initSeed', () => {
+      initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), 'utf8'))
+      assert.ok(cfg.initSeed, 'should have initSeed')
+      assert.strictEqual(cfg.initSeed.length, 12)
+      assert.strictEqual(cfg.initSeed, configHash(cfg))
+    })
+
+    it('config written to disk passes validation', () => {
+      const { validateConfig } = require('../lib/validate')
+      initProject(tmpDir, { gitHooks: true, defaultChecks: true })
+      const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), 'utf8'))
+      const { errors } = validateConfig(cfg)
+      assert.deepStrictEqual(errors, [], `Config on disk should be valid, got errors: ${errors.join('; ')}`)
+    })
+
     it('does not overwrite existing team config', () => {
       const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
       fs.mkdirSync(path.dirname(cfgPath), { recursive: true })
@@ -441,6 +484,7 @@ describe('init', () => {
       const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
       assert.ok(results.teamConfig.existed)
       assert.ok(!results.teamConfig.created)
+      assert.ok(results.teamConfig.edited)
 
       const content = fs.readFileSync(cfgPath, 'utf8')
       assert.strictEqual(content, '{"custom": true}')
@@ -504,6 +548,92 @@ describe('init', () => {
     it('does not install git hook shims when gitHooks is false', () => {
       const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
       assert.deepStrictEqual(results.gitHookFiles, {})
+    })
+
+    it('sets upToDate when config matches current defaults', () => {
+      initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      assert.ok(results.teamConfig.existed)
+      assert.ok(results.teamConfig.upToDate)
+      assert.ok(!results.teamConfig.upgraded)
+      assert.ok(!results.teamConfig.edited)
+    })
+
+    it('sets upgraded when config is unedited but outdated', () => {
+      // Init with one set of flags
+      initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      // Re-init with different flags — simulates a new version's defaults
+      const results = initProject(tmpDir, { gitHooks: false, defaultChecks: true })
+      assert.ok(results.teamConfig.existed)
+      assert.ok(results.teamConfig.upgraded)
+      assert.ok(!results.teamConfig.upToDate)
+      assert.ok(!results.teamConfig.edited)
+    })
+
+    it('auto-upgraded config updates initSeed', () => {
+      initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      initProject(tmpDir, { gitHooks: false, defaultChecks: true })
+      const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), 'utf8'))
+      assert.ok(cfg.initSeed)
+      assert.strictEqual(cfg.initSeed, configHash(cfg))
+    })
+
+    it('sets edited when config was modified by user', () => {
+      initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      // Simulate user editing the config
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      cfg.sources = ['src/**/*.js']
+      fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
+
+      const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      assert.ok(results.teamConfig.existed)
+      assert.ok(results.teamConfig.edited)
+      assert.ok(!results.teamConfig.upgraded)
+      assert.ok(!results.teamConfig.upToDate)
+    })
+
+    it('sets edited for legacy configs with no initSeed', () => {
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+      fs.mkdirSync(path.dirname(cfgPath), { recursive: true })
+      fs.writeFileSync(cfgPath, JSON.stringify({ configVersion: 3, hooks: [] }, null, 2) + '\n')
+
+      const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      assert.ok(results.teamConfig.existed)
+      assert.ok(results.teamConfig.edited)
+    })
+
+    it('treats corrupted JSON config as edited and preserves it', () => {
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+      fs.mkdirSync(path.dirname(cfgPath), { recursive: true })
+      fs.writeFileSync(cfgPath, '{"truncated":')
+
+      const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      assert.ok(results.teamConfig.existed)
+      assert.ok(results.teamConfig.edited)
+      // File should be untouched
+      assert.strictEqual(fs.readFileSync(cfgPath, 'utf8'), '{"truncated":')
+    })
+  })
+
+  describe('overwriteTeamConfig', () => {
+    it('writes fresh config with initSeed', () => {
+      initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      // Simulate user edit
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+      fs.writeFileSync(cfgPath, JSON.stringify({ custom: true }, null, 2) + '\n')
+
+      overwriteTeamConfig(tmpDir, { gitHooks: false, defaultChecks: false })
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      assert.ok(cfg.initSeed)
+      assert.strictEqual(cfg.configVersion, 3)
+      assert.ok(!cfg.custom)
+    })
+
+    it('generates matching initSeed', () => {
+      overwriteTeamConfig(tmpDir, { gitHooks: false, defaultChecks: false })
+      const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), 'utf8'))
+      assert.strictEqual(cfg.initSeed, configHash(cfg))
     })
   })
 })
