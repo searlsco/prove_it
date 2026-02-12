@@ -386,7 +386,7 @@ describe('doctor', () => {
       fs.mkdirSync(hooksDir, { recursive: true })
       fs.writeFileSync(
         path.join(hooksDir, 'pre-commit'),
-        '#!/usr/bin/env bash\nexec bd hook pre-commit "$@"\n\n# --- prove_it ---\nprove_it hook git:pre-commit\n# --- prove_it ---\n'
+        '#!/usr/bin/env bash\nexec other-tool hook pre-commit "$@"\n\n# --- prove_it ---\nprove_it hook git:pre-commit\n# --- prove_it ---\n'
       )
 
       const result = run()

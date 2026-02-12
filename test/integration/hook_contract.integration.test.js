@@ -10,7 +10,6 @@ const {
   createFile,
   createTestScript,
   createFastTestScript,
-  initBeads,
   writeConfig,
   makeConfig,
   assertValidPermissionDecision,
@@ -45,12 +44,10 @@ describe('Claude Code hook output contract', () => {
           event: 'PreToolUse',
           matcher: 'Edit|Write|NotebookEdit|Bash',
           tasks: [
-            { name: 'lock-config', type: 'script', command: 'prove_it run_builtin config:lock' },
-            { name: 'require-wip', type: 'script', command: 'prove_it run_builtin beads:require_wip', when: { fileExists: '.beads' } }
+            { name: 'lock-config', type: 'script', command: 'prove_it run_builtin config:lock' }
           ]
         }
       ]))
-      initBeads(tmpDir)
     })
 
     it('uses valid permissionDecision when denying config Edit', () => {

@@ -327,7 +327,7 @@ describe('Config-driven hook behavior (v2)', () => {
 
   describe('when conditions', () => {
     it('skips check when fileExists condition is not met', () => {
-      // beads:require_wip has when: { fileExists: '.beads' } — no .beads dir exists
+      // Task has when: { fileExists: '.missing' } — directory does not exist
       writeConfig(tmpDir, makeConfig([
         {
           type: 'claude',
@@ -335,10 +335,10 @@ describe('Config-driven hook behavior (v2)', () => {
           matcher: 'Edit|Write',
           tasks: [
             {
-              name: 'require-wip',
+              name: 'conditional-check',
               type: 'script',
-              command: 'prove_it run_builtin beads:require_wip',
-              when: { fileExists: '.beads' }
+              command: 'prove_it run_builtin config:lock',
+              when: { fileExists: '.missing' }
             }
           ]
         }

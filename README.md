@@ -20,7 +20,6 @@ The two most important things prove_it does:
 Other stuff prove_it does:
 
 * **Git hooks for Claude commits** — prove_it installs git pre-commit hooks that run your test suite when Claude commits. Human commits pass through instantly (the hooks only activate when the `CLAUDECODE` environment variable is set)
-* **[Beads](https://github.com/steveyegge/beads) integration** — if your project uses beads to track work, prove_it will stop Claude from editing code unless a current task is in progress, essentially forcing it to know _what_ it's working on before it starts working
 * **Tracks runs** — if code hasn't changed since the last successful test run, prove_it skips re-running your tests (configurable per-task)
 * **Config protection** — blocks Claude from editing your prove_it config files directly
 
@@ -55,7 +54,7 @@ Available flags:
 
 ```
 --[no-]git-hooks                Install git pre-commit/pre-push hooks (default: on)
---[no-]default-checks           Include beads gate, AI code review, AI coverage review (default: on)
+--[no-]default-checks           Include AI code review, AI coverage review (default: on)
 --[no-]automatic-git-hook-merge Merge with existing git hooks (default: off — fails if hooks exist)
 ```
 
@@ -150,7 +149,7 @@ Each event type serves a different purpose. Tasks within a hook run in order.
 
 **Example: PreToolUse guard**
 
-Block Claude from editing config files and require a tracked task before code changes:
+Block Claude from editing config files:
 
 ```json
 {
@@ -158,9 +157,7 @@ Block Claude from editing config files and require a tracked task before code ch
   "event": "PreToolUse",
   "matcher": "Edit|Write|NotebookEdit|Bash",
   "tasks": [
-    { "name": "lock-config", "type": "script", "command": "prove_it run_builtin config:lock" },
-    { "name": "require-wip", "type": "script", "command": "prove_it run_builtin beads:require_wip",
-      "when": { "fileExists": ".beads" } }
+    { "name": "lock-config", "type": "script", "command": "prove_it run_builtin config:lock" }
   ]
 }
 ```
@@ -190,8 +187,8 @@ PreToolUse hooks can filter by tool name and command patterns:
 ### Conditional tasks
 
 ```json
-{ "name": "require-wip", "type": "script", "command": "prove_it run_builtin beads:require_wip",
-  "when": { "fileExists": ".beads" } }
+{ "name": "my-check", "type": "script", "command": "./script/check",
+  "when": { "fileExists": ".config" } }
 ```
 
 Supported conditions: `fileExists`, `envSet`, `envNotSet`.
@@ -288,7 +285,6 @@ prove_it ships with built-in tasks invoked via `prove_it run_builtin <name>`:
 | Builtin | Event | What it does |
 |---------|-------|-------------|
 | `config:lock` | PreToolUse | Blocks direct edits to prove_it config files |
-| `beads:require_wip` | PreToolUse | Requires an in-progress issue before code changes |
 | `review:commit_quality` | pre-commit | Agent reviews staged diff for bugs and dead code |
 | `review:test_coverage` | Stop | Agent reviews session diffs for test coverage |
 

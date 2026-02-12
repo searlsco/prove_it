@@ -71,7 +71,6 @@ describe('init', () => {
       assert.ok(!cfg.hooks.some(h => h.type === 'git' && h.event === 'pre-push'))
       // Should have default checks
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
-      assert.ok(allChecks.some(c => c.name === 'require-wip'))
       assert.ok(allChecks.some(c => c.name === 'commit-review'))
       assert.ok(allChecks.some(c => c.name === 'coverage-review'))
       assert.ok(allChecks.some(c => c.name === 'ensure-tests'))
@@ -87,7 +86,6 @@ describe('init', () => {
       const cfg = buildConfig({ defaultChecks: false })
       assert.strictEqual(cfg.configVersion, 3)
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
-      assert.ok(!allChecks.some(c => c.name === 'require-wip'))
       assert.ok(!allChecks.some(c => c.name === 'commit-review'))
       assert.ok(!allChecks.some(c => c.name === 'coverage-review'))
     })
@@ -97,7 +95,6 @@ describe('init', () => {
       assert.strictEqual(cfg.configVersion, 3)
       assert.ok(!cfg.hooks.some(h => h.type === 'git'))
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
-      assert.ok(!allChecks.some(c => c.name === 'require-wip'))
       assert.ok(!allChecks.some(c => c.name === 'commit-review'))
       // Should still have base checks
       assert.ok(allChecks.some(c => c.name === 'lock-config'))
@@ -243,7 +240,7 @@ describe('init', () => {
     it('inserts before exec when autoMerge is true', () => {
       const hookPath = path.join(tmpDir, '.git', 'hooks', 'pre-commit')
       fs.mkdirSync(path.dirname(hookPath), { recursive: true })
-      fs.writeFileSync(hookPath, '#!/usr/bin/env bash\nexec bd hook pre-commit "$@"\n')
+      fs.writeFileSync(hookPath, '#!/usr/bin/env bash\nexec other-tool hook pre-commit "$@"\n')
       fs.chmodSync(hookPath, 0o755)
 
       const result = installGitHookShim(tmpDir, 'pre-commit', true)
@@ -251,11 +248,11 @@ describe('init', () => {
       assert.ok(result.merged)
       const content = fs.readFileSync(hookPath, 'utf8')
       const proveItPos = content.indexOf(PROVE_IT_SHIM_MARKER)
-      const execPos = content.indexOf('exec bd hook')
+      const execPos = content.indexOf('exec other-tool hook')
       assert.ok(proveItPos < execPos,
         `prove_it section (pos ${proveItPos}) should be before exec (pos ${execPos})`)
       assert.ok(content.includes('prove_it hook git:pre-commit'))
-      assert.ok(content.includes('exec bd hook'))
+      assert.ok(content.includes('exec other-tool hook'))
     })
 
     it('repositions existing section from after exec to before exec', () => {
@@ -264,7 +261,7 @@ describe('init', () => {
       // Simulate a stale merge: prove_it section AFTER exec
       const staleContent = [
         '#!/usr/bin/env bash',
-        'exec bd hook pre-commit "$@"',
+        'exec other-tool hook pre-commit "$@"',
         '',
         PROVE_IT_SHIM_MARKER,
         'prove_it hook git:pre-commit',
@@ -279,7 +276,7 @@ describe('init', () => {
       assert.ok(result.repositioned)
       const content = fs.readFileSync(hookPath, 'utf8')
       const proveItPos = content.indexOf(PROVE_IT_SHIM_MARKER)
-      const execPos = content.indexOf('exec bd hook')
+      const execPos = content.indexOf('exec other-tool hook')
       assert.ok(proveItPos < execPos,
         `prove_it section (pos ${proveItPos}) should be before exec (pos ${execPos})`)
     })
@@ -345,11 +342,11 @@ describe('init', () => {
 
   describe('hasExecLine', () => {
     it('returns true for line starting with exec', () => {
-      assert.ok(hasExecLine('#!/usr/bin/env bash\nexec bd hook pre-commit "$@"\n'))
+      assert.ok(hasExecLine('#!/usr/bin/env bash\nexec other-tool hook pre-commit "$@"\n'))
     })
 
     it('returns false for exec in a comment', () => {
-      assert.ok(!hasExecLine('#!/usr/bin/env bash\n# exec bd hook pre-commit\nrun-lint\n'))
+      assert.ok(!hasExecLine('#!/usr/bin/env bash\n# exec other-tool hook pre-commit\nrun-lint\n'))
     })
 
     it('returns false when no exec present', () => {
@@ -357,7 +354,7 @@ describe('init', () => {
     })
 
     it('returns true for indented exec', () => {
-      assert.ok(hasExecLine('#!/usr/bin/env bash\n  exec bd hook pre-commit "$@"\n'))
+      assert.ok(hasExecLine('#!/usr/bin/env bash\n  exec other-tool hook pre-commit "$@"\n'))
     })
   })
 
@@ -365,7 +362,7 @@ describe('init', () => {
     it('returns true when prove_it section is after exec', () => {
       const content = [
         '#!/usr/bin/env bash',
-        'exec bd hook pre-commit "$@"',
+        'exec other-tool hook pre-commit "$@"',
         '',
         PROVE_IT_SHIM_MARKER,
         'prove_it hook git:pre-commit',
@@ -381,7 +378,7 @@ describe('init', () => {
         'prove_it hook git:pre-commit',
         PROVE_IT_SHIM_MARKER,
         '',
-        'exec bd hook pre-commit "$@"'
+        'exec other-tool hook pre-commit "$@"'
       ].join('\n')
       assert.ok(!isProveItAfterExec(content))
     })

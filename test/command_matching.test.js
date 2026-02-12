@@ -29,11 +29,6 @@ describe('commands that require tests', () => {
     '(^|\\s)git\\s+push\\b'
   ]
 
-  const withBeadsTriggers = [
-    '(^|\\s)git\\s+commit\\b',
-    '(^|\\s)(beads|bd)\\s+(done|finish|close)\\b'
-  ]
-
   describe('git commit', () => {
     it("requires tests for 'git commit'", () => {
       assert.strictEqual(matchesTriggers('git commit', defaultTriggers), true)
@@ -75,28 +70,6 @@ describe('commands that require tests', () => {
 
     it("does not require tests for 'git pull'", () => {
       assert.strictEqual(matchesTriggers('git pull', defaultTriggers), false)
-    })
-  })
-
-  describe('beads/bd done/finish/close (not triggered by default)', () => {
-    it("does not require tests for 'beads done' by default", () => {
-      assert.strictEqual(matchesTriggers('beads done', defaultTriggers), false)
-    })
-
-    it("does not require tests for 'bd close' by default", () => {
-      assert.strictEqual(matchesTriggers('bd close', defaultTriggers), false)
-    })
-
-    it("requires tests for 'bd close' when added to triggers", () => {
-      assert.strictEqual(matchesTriggers('bd close', withBeadsTriggers), true)
-    })
-
-    it("requires tests for 'beads done 123' when added to triggers", () => {
-      assert.strictEqual(matchesTriggers('beads done 123', withBeadsTriggers), true)
-    })
-
-    it("does not require tests for 'beads list' even when beads triggers added", () => {
-      assert.strictEqual(matchesTriggers('beads list', withBeadsTriggers), false)
     })
   })
 

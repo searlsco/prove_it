@@ -13,7 +13,7 @@ prove_it is a config-driven hook framework for Claude Code. It reads `.claude/pr
 - `lib/checks/script.js` — Runs shell commands as tasks
 - `lib/checks/agent.js` — Runs AI agent reviewer tasks
 - `lib/checks/env.js` — Runs env tasks that inject environment variables via CLAUDE_ENV_FILE
-- `lib/checks/builtins.js` — Built-in tasks (config:lock, beads:require_wip, review:commit_quality, review:test_coverage)
+- `lib/checks/builtins.js` — Built-in tasks (config:lock, review:commit_quality, review:test_coverage)
 - `lib/config.js` — Config loading, merging, and `buildConfig()` for init
 - `lib/init.js` — Project initialization, git hook shim management
 - `lib/template.js` — Template variable expansion for agent prompts
@@ -31,7 +31,7 @@ prove_it is a config-driven hook framework for Claude Code. It reads `.claude/pr
 ```bash
 ./script/test          # lint + unit tests + integration tests (the verification oracle)
 ./script/test_fast     # lint + unit tests only (runs on Stop hook)
-npm run test:e2e       # end-to-end beads integration
+npm run test:integration  # integration tests
 ```
 
 - Unit tests: `test/*.test.js`

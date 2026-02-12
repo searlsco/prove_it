@@ -124,7 +124,7 @@ describe('isSourceFile', () => {
 
   it('matches files in lib/', () => {
     assert.strictEqual(isSourceFile('/repo/lib/shared.js', rootDir, sources), true)
-    assert.strictEqual(isSourceFile('/repo/lib/hooks/prove_it_beads.js', rootDir, sources), true)
+    assert.strictEqual(isSourceFile('/repo/lib/hooks/prove_it_edit.js', rootDir, sources), true)
   })
 
   it('matches files in src/', () => {
@@ -136,7 +136,7 @@ describe('isSourceFile', () => {
   })
 
   it('matches test files', () => {
-    assert.strictEqual(isSourceFile('/repo/test/beads.test.js', rootDir, sources), true)
+    assert.strictEqual(isSourceFile('/repo/test/config.test.js', rootDir, sources), true)
   })
 
   it('does not match README', () => {
@@ -194,7 +194,7 @@ describe('globToRegex', () => {
   it('matches globstar with prefix (lib/**/*.js)', () => {
     const re = globToRegex('lib/**/*.js')
     assert.strictEqual(re.test('lib/shared.js'), true, 'Should match files directly in lib/')
-    assert.strictEqual(re.test('lib/hooks/beads.js'), true, 'Should match nested files')
+    assert.strictEqual(re.test('lib/hooks/edit.js'), true, 'Should match nested files')
     assert.strictEqual(re.test('lib/shared.ts'), false, 'Should not match wrong extension')
     assert.strictEqual(re.test('src/shared.js'), false, 'Should not match wrong prefix')
   })

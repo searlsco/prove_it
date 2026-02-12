@@ -13,7 +13,7 @@ describe('script check', () => {
     })
 
     it('returns true for other run_builtin builtins', () => {
-      assert.ok(isBuiltin('prove_it run_builtin beads:require_wip'))
+      assert.ok(isBuiltin('prove_it run_builtin some:check'))
     })
 
     it('returns false for regular commands', () => {
@@ -34,8 +34,8 @@ describe('script check', () => {
       assert.strictEqual(getBuiltinName('prove_it run_builtin config:lock'), 'config:lock')
     })
 
-    it('extracts beads:require_wip name', () => {
-      assert.strictEqual(getBuiltinName('prove_it run_builtin beads:require_wip'), 'beads:require_wip')
+    it('extracts namespaced name', () => {
+      assert.strictEqual(getBuiltinName('prove_it run_builtin some:check'), 'some:check')
     })
   })
 

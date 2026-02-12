@@ -116,15 +116,6 @@ function createFastTestScript (dir, shouldPass = true) {
 }
 
 /**
- * Initialize beads in the given directory.
- */
-function initBeads (dir) {
-  const beadsDir = path.join(dir, '.beads')
-  fs.mkdirSync(beadsDir, { recursive: true })
-  fs.writeFileSync(path.join(beadsDir, 'config.yaml'), '# beads config\n', 'utf8')
-}
-
-/**
  * Write a prove_it config to a project directory.
  */
 function writeConfig (dir, config) {
@@ -215,7 +206,6 @@ module.exports = {
   makeExecutable,
   createTestScript,
   createFastTestScript,
-  initBeads,
   writeConfig,
   makeConfig,
   assertValidPermissionDecision,

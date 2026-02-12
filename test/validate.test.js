@@ -284,7 +284,7 @@ describe('validateConfig', () => {
         name: 'a',
         type: 'script',
         command: 'x',
-        when: { fileExists: '.beads', envSet: 'CI', envNotSet: 'SKIP' }
+        when: { fileExists: '.config', envSet: 'CI', envNotSet: 'SKIP' }
       }))
       assert.strictEqual(errors.length, 0)
     })

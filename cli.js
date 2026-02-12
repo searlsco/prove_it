@@ -56,7 +56,6 @@ function removeProveItGroups (groups) {
     // Remove all prove_it hook registrations (old .js files, short-form, v2 dispatch)
     if (serialized.includes('prove_it_test.js')) return false
     if (serialized.includes('prove_it_session_start.js')) return false
-    if (serialized.includes('prove_it_beads.js')) return false
     if (serialized.includes('prove_it_stop.js')) return false
     if (serialized.includes('prove_it_done.js')) return false
     if (serialized.includes('prove_it_edit.js')) return false
@@ -260,7 +259,7 @@ async function cmdInit () {
         }
       }
 
-      flags.defaultChecks = await askYesNo(rl, 'Include default checks (beads gate, code review, coverage review)?')
+      flags.defaultChecks = await askYesNo(rl, 'Include default checks (code review, coverage review)?')
     }
 
     const results = initProject(repoRoot, flags)
@@ -648,14 +647,6 @@ function cmdDoctor () {
     }
   }
 
-  // Check beads
-  const beadsDir = path.join(repoRoot, '.beads')
-  if (fs.existsSync(beadsDir)) {
-    log('  [x] Beads directory exists: .beads/')
-  } else {
-    log('  [ ] Beads not initialized (optional): .beads/')
-  }
-
   // Effective merged config
   log('\nEffective config:')
   let effectiveCfg = null
@@ -877,7 +868,7 @@ Record options:
 
 Init options:
   --[no-]git-hooks                Install git hooks (pre-commit, pre-push) (default: yes)
-  --[no-]default-checks           Include beads gate, code review, coverage review (default: yes)
+  --[no-]default-checks           Include code review, coverage review (default: yes)
   --[no-]automatic-git-hook-merge Merge with existing git hooks (default: yes)
   --[no-]overwrite                Overwrite customized prove_it.json with defaults
 
