@@ -277,25 +277,33 @@ describe('claude dispatcher', () => {
       assert.strictEqual(result, false)
     })
 
-    it('keeps firing when task run is NOT recorded (simulates fail-no-reset)', () => {
-      const sessionId = 'test-lwslr-no-reset'
+    it('resets budget on failure so agent can write tests (no deadlock)', () => {
+      const sessionId = 'test-lwslr-no-deadlock'
       recordWrite(sessionId, 600)
-      // Task fires (600 >= 500), fails — recordTaskRun NOT called
-      // Next check: still 600 >= 500, fires again
+      // Task fires (600 >= 500), fails — dispatcher records task run anyway
       const result = evaluateWhen(
         { linesWrittenSinceLastRun: 500 },
         { rootDir: '.', sessionId },
         'my-check'
       )
       assert.strictEqual(result, true)
-      // Simulate more writes without recording — still fires
-      recordWrite(sessionId, 100)
+      // Dispatcher records the run on failure (budget reset)
+      recordTaskRun(sessionId, 'my-check')
+      // Next write: counter reset, agent has a fresh budget to write tests
       const result2 = evaluateWhen(
         { linesWrittenSinceLastRun: 500 },
         { rootDir: '.', sessionId },
         'my-check'
       )
-      assert.strictEqual(result2, true)
+      assert.strictEqual(result2, false)
+      // After writing 500+ more lines (hopefully tests), check fires again
+      recordWrite(sessionId, 500)
+      const result3 = evaluateWhen(
+        { linesWrittenSinceLastRun: 500 },
+        { rootDir: '.', sessionId },
+        'my-check'
+      )
+      assert.strictEqual(result3, true)
     })
   })
 

@@ -36,7 +36,7 @@ describe('init', () => {
     it('returns true for stub script', () => {
       const scriptPath = path.join(tmpDir, 'script', 'test')
       fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
-      fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\n# prove_it: Replace this\nexit 1\n')
+      fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\necho "No tests configured. Edit script/test to run your test suite."\nexit 1\n')
       assert.ok(isScriptTestStub(scriptPath))
     })
 
@@ -44,6 +44,13 @@ describe('init', () => {
       const scriptPath = path.join(tmpDir, 'script', 'test')
       fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
       fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nnpm test\n')
+      assert.ok(!isScriptTestStub(scriptPath))
+    })
+
+    it('returns false for customized script that kept prove_it comment header', () => {
+      const scriptPath = path.join(tmpDir, 'script', 'test')
+      fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
+      fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\n# prove_it: full test suite\nset -e\nnpm test\n')
       assert.ok(!isScriptTestStub(scriptPath))
     })
 
@@ -65,7 +72,7 @@ describe('init', () => {
       assert.ok(allChecks.some(c => c.name === 'require-wip'))
       assert.ok(allChecks.some(c => c.name === 'commit-review'))
       assert.ok(allChecks.some(c => c.name === 'coverage-review'))
-      assert.ok(allChecks.some(c => c.name === 'investment-check'))
+      assert.ok(allChecks.some(c => c.name === 'ensure-tests'))
     })
 
     it('omits git hooks when gitHooks is false', () => {
@@ -124,30 +131,30 @@ describe('init', () => {
       assert.deepStrictEqual(coverageReview.when.variablesPresent, ['session_diff'])
     })
 
-    it('investment-check uses type agent with promptType reference', () => {
+    it('ensure-tests uses type agent with promptType reference', () => {
       const cfg = buildConfig()
       const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
-      const investmentCheck = allTasks.find(t => t.name === 'investment-check')
-      assert.ok(investmentCheck, 'Should have investment-check task')
-      assert.strictEqual(investmentCheck.type, 'agent')
-      assert.strictEqual(investmentCheck.promptType, 'reference')
-      assert.strictEqual(investmentCheck.prompt, 'review:test_investment')
-      assert.strictEqual(investmentCheck.when.linesWrittenSinceLastRun, 500)
+      const ensureTests = allTasks.find(t => t.name === 'ensure-tests')
+      assert.ok(ensureTests, 'Should have ensure-tests task')
+      assert.strictEqual(ensureTests.type, 'agent')
+      assert.strictEqual(ensureTests.promptType, 'reference')
+      assert.strictEqual(ensureTests.prompt, 'review:test_investment')
+      assert.strictEqual(ensureTests.when.linesWrittenSinceLastRun, 500)
     })
 
-    it('investment-check is in PreToolUse edit entry', () => {
+    it('ensure-tests is in PreToolUse edit entry', () => {
       const cfg = buildConfig()
       const editEntry = cfg.hooks.find(h =>
         h.type === 'claude' && h.event === 'PreToolUse' && h.matcher === 'Edit|Write|NotebookEdit|Bash')
       assert.ok(editEntry, 'Should have PreToolUse edit entry')
-      const investmentCheck = editEntry.tasks.find(t => t.name === 'investment-check')
-      assert.ok(investmentCheck, 'investment-check should be in PreToolUse edit entry')
+      const ensureTests = editEntry.tasks.find(t => t.name === 'ensure-tests')
+      assert.ok(ensureTests, 'ensure-tests should be in PreToolUse edit entry')
     })
 
-    it('omits investment-check when defaultChecks is false', () => {
+    it('omits ensure-tests when defaultChecks is false', () => {
       const cfg = buildConfig({ defaultChecks: false })
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
-      assert.ok(!allChecks.some(c => c.name === 'investment-check'))
+      assert.ok(!allChecks.some(c => c.name === 'ensure-tests'))
     })
 
     it('generated config passes validation', () => {
