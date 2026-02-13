@@ -34,6 +34,7 @@
           "name": "coverage-review",
           "type": "agent",
           "prompt": "Check that calculator code changes have corresponding test coverage, especially edge cases (zero, negative numbers, large values).\n\nRespond with exactly one of:\n- PASS (on a line by itself)\n- FAIL: <reason> (on a line by itself)\n\n{{session_diff}}",
+          "model": "haiku",
           "when": {
             "variablesPresent": [
               "session_diff"
@@ -60,6 +61,7 @@
           "name": "commit-review",
           "type": "agent",
           "prompt": "Review staged changes to the calculator module for:\n1. Division by zero handling\n2. Integer overflow edge cases\n3. Missing test coverage for error paths\n\nRespond with exactly one of:\n- PASS (on a line by itself)\n- FAIL: <reason> (on a line by itself)\n\n{{staged_diff}}",
+          "model": "sonnet",
           "when": {
             "variablesPresent": [
               "staged_diff"

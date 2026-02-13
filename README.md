@@ -278,6 +278,21 @@ You can use a different AI for each reviewer, so the agent doing the work is che
 
 The `command` field accepts any CLI that reads a prompt from stdin and writes its response to stdout. Defaults to `claude -p`.
 
+### Model selection
+
+Agent tasks accept a `model` field to control which model the reviewer uses. When `command` is `claude` (the default), prove_it appends `--model <model>` to the command automatically:
+
+```json
+{
+  "name": "coverage-review",
+  "type": "agent",
+  "prompt": "Check test coverage...\n\n{{session_diff}}",
+  "model": "haiku"
+}
+```
+
+Use fast, cheap models (`haiku`) for Stop and PreToolUse reviewers where latency matters, and deeper models (`sonnet`) for pre-commit reviewers where thoroughness matters more. The default config uses these defaults. The `model` field is ignored for non-`claude` commands (e.g. `codex exec -`).
+
 ## Builtins
 
 prove_it ships with built-in tasks invoked via `prove_it run_builtin <name>`:

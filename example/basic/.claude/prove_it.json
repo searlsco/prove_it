@@ -30,8 +30,9 @@
         {
           "name": "coverage-review",
           "type": "agent",
-          "promptType": "reference",
           "prompt": "review:test_coverage",
+          "promptType": "reference",
+          "model": "haiku",
           "when": {
             "variablesPresent": [
               "session_diff"
@@ -52,8 +53,9 @@
         {
           "name": "commit-review",
           "type": "agent",
-          "promptType": "reference",
           "prompt": "review:commit_quality",
+          "promptType": "reference",
+          "model": "sonnet",
           "when": {
             "variablesPresent": [
               "staged_diff"

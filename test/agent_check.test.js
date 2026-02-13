@@ -158,6 +158,21 @@ describe('agent check', () => {
       `Should name the unavailable var, got: ${result.reason}`)
   })
 
+  it('passes model through to reviewer config', () => {
+    // Create a shim named 'claude' that echoes its args so we can verify --model
+    const shimPath = path.join(tmpDir, 'claude')
+    fs.writeFileSync(shimPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS: args=$*"\n')
+    fs.chmodSync(shimPath, 0o755)
+
+    const result = runAgentCheck(
+      { name: 'test-review', command: `${shimPath} -p`, prompt: 'Review {{project_dir}}', model: 'haiku' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '' }
+    )
+    assert.strictEqual(result.pass, true)
+    assert.ok(result.reason.includes('--model') && result.reason.includes('haiku'),
+      `Expected --model haiku in reviewer output, got: ${result.reason}`)
+  })
+
   it('allows session vars when sessionId is present', () => {
     const reviewerPath = path.join(tmpDir, 'pass_reviewer.sh')
     fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS"\n')

@@ -145,4 +145,76 @@ describe('runReviewer with fixture shims', () => {
       cleanup()
     })
   })
+
+  describe('model support', () => {
+    it('appends --model to claude commands', () => {
+      setup()
+      // Create a shim that echoes its own command-line args so we can verify --model was passed
+      const shimPath = path.join(tmpDir, 'claude')
+      fs.writeFileSync(shimPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
+      fs.chmodSync(shimPath, 0o755)
+
+      const review = runReviewer(tmpDir, {
+        command: `${shimPath} -p`,
+        model: 'haiku'
+      }, 'test prompt')
+
+      assert.strictEqual(review.available, true)
+      assert.strictEqual(review.pass, true)
+      assert.ok(review.reason.includes('--model') && review.reason.includes('haiku'),
+        `Expected --model haiku in args, got: ${review.reason}`)
+      cleanup()
+    })
+
+    it('does not append --model to non-claude commands', () => {
+      setup()
+      // Create a shim named something other than 'claude'
+      const shimPath = path.join(tmpDir, 'codex')
+      fs.writeFileSync(shimPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
+      fs.chmodSync(shimPath, 0o755)
+
+      const review = runReviewer(tmpDir, {
+        command: `${shimPath} exec -`,
+        model: 'haiku'
+      }, 'test prompt')
+
+      assert.strictEqual(review.available, true)
+      assert.strictEqual(review.pass, true)
+      assert.ok(!review.reason.includes('--model'),
+        `Expected no --model in args, got: ${review.reason}`)
+      cleanup()
+    })
+
+    it('does not append --model when model is null', () => {
+      setup()
+      process.env.FRAUDE_RESPONSE = 'PASS: no model'
+      const review = runReviewer(tmpDir, {
+        command: `${fraudePath} -p`,
+        model: null
+      }, 'test prompt')
+
+      assert.strictEqual(review.available, true)
+      assert.strictEqual(review.pass, true)
+      cleanup()
+    })
+  })
+
+  describe('timeout from config', () => {
+    it('uses timeout from reviewerCfg', () => {
+      setup()
+      // Create a script that sleeps briefly — if timeout were 1ms it would fail
+      const shimPath = path.join(tmpDir, 'slow_reviewer.sh')
+      fs.writeFileSync(shimPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS"\n')
+      fs.chmodSync(shimPath, 0o755)
+
+      const review = runReviewer(tmpDir, {
+        command: shimPath,
+        timeout: 30000
+      }, 'test prompt')
+
+      assert.strictEqual(review.available, true)
+      assert.strictEqual(review.pass, true)
+      cleanup()
+    })
+  })
 })
