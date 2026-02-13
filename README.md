@@ -343,6 +343,30 @@ those changes work. Claude will:
 The skill is installed to `~/.claude/skills/prove/SKILL.md` and updated on
 every `prove_it install`.
 
+## Monitoring
+
+Run `prove_it monitor` in a separate terminal to watch hook results in real time:
+
+```
+prove_it monitor
+Session: ea0da8e4 | /Users/justin/code/searls/sugoi_tv | started 02/13/2026, 08:53
+
+09:00:48  CRASH  coverage-review       Unexpected reviewer output: Based on my investigation…
+09:00:52  PASS   fast-tests            ./script/test_fast passed (2.3s)
+09:01:12  SKIP   fast-tests            cached pass (no code changes)
+09:14:33  PASS   commit-review         All changes look correct and well-tested.
+
+watching for new entries… (ctrl-c to stop)
+```
+
+All task types — script, agent, and env — log their outcomes to session `.jsonl` files. The monitor formats these into a human-readable stream.
+
+```
+prove_it monitor             # tail most recent session
+prove_it monitor --all       # tail all sessions and project logs
+prove_it monitor <id>        # tail a specific session (prefix match OK)
+```
+
 ## Commands
 
 ```
@@ -351,6 +375,7 @@ prove_it uninstall     Remove global hooks
 prove_it init          Set up current project (interactive or with flags)
 prove_it deinit        Remove prove_it from current project
 prove_it doctor        Check installation and show effective config
+prove_it monitor       Tail hook results in real time
 prove_it hook <spec>   Run a dispatcher directly (claude:Stop, git:pre-commit)
 prove_it run_builtin <namespace:name> Run a builtin check directly
 prove_it record        Record a test run result (--name <check> --pass|--fail|--result <N>)

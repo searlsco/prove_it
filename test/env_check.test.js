@@ -138,14 +138,28 @@ describe('parseEnvOutput', () => {
 
 describe('runEnvTask', () => {
   let tmpDir
+  let origProveItDir
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_env_'))
+    origProveItDir = process.env.PROVE_IT_DIR
+    process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
   })
 
   afterEach(() => {
+    if (origProveItDir === undefined) {
+      delete process.env.PROVE_IT_DIR
+    } else {
+      process.env.PROVE_IT_DIR = origProveItDir
+    }
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
+
+  function readLogEntries (sessionId) {
+    const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${sessionId}.jsonl`)
+    if (!fs.existsSync(logFile)) return []
+    return fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+  }
 
   it('returns parsed vars on success', () => {
     const script = path.join(tmpDir, 'env.sh')
@@ -211,6 +225,76 @@ describe('runEnvTask', () => {
     )
     assert.deepStrictEqual(result.vars, { A: '1' })
     assert.strictEqual(result.error, null)
+  })
+
+  describe('logReview integration', () => {
+    const SESSION_ID = 'test-session-env-log'
+
+    it('logs PASS with var names on success', () => {
+      const script = path.join(tmpDir, 'env.sh')
+      fs.writeFileSync(script, '#!/usr/bin/env bash\necho "FOO=bar"\necho "BAZ=qux"\n')
+      fs.chmodSync(script, 0o755)
+
+      runEnvTask(
+        { name: 'test-env', command: script, timeout: 5000 },
+        { rootDir: tmpDir, sessionId: SESSION_ID, projectDir: tmpDir }
+      )
+
+      const entries = readLogEntries(SESSION_ID)
+      assert.strictEqual(entries.length, 1)
+      assert.strictEqual(entries[0].status, 'PASS')
+      assert.strictEqual(entries[0].reviewer, 'test-env')
+      assert.ok(entries[0].reason.includes('FOO'))
+      assert.ok(entries[0].reason.includes('BAZ'))
+    })
+
+    it('logs PASS with "no vars" for empty output', () => {
+      const script = path.join(tmpDir, 'empty.sh')
+      fs.writeFileSync(script, '#!/usr/bin/env bash\n')
+      fs.chmodSync(script, 0o755)
+
+      runEnvTask(
+        { name: 'empty-env', command: script, timeout: 5000 },
+        { rootDir: tmpDir, sessionId: SESSION_ID, projectDir: tmpDir }
+      )
+
+      const entries = readLogEntries(SESSION_ID)
+      assert.strictEqual(entries.length, 1)
+      assert.strictEqual(entries[0].status, 'PASS')
+      assert.strictEqual(entries[0].reason, 'no vars')
+    })
+
+    it('logs FAIL when command fails', () => {
+      const script = path.join(tmpDir, 'fail.sh')
+      fs.writeFileSync(script, '#!/usr/bin/env bash\nexit 1\n')
+      fs.chmodSync(script, 0o755)
+
+      runEnvTask(
+        { name: 'fail-env', command: script, timeout: 5000 },
+        { rootDir: tmpDir, sessionId: SESSION_ID, projectDir: tmpDir }
+      )
+
+      const entries = readLogEntries(SESSION_ID)
+      assert.strictEqual(entries.length, 1)
+      assert.strictEqual(entries[0].status, 'FAIL')
+      assert.ok(entries[0].reason.includes('failed (exit 1)'))
+    })
+
+    it('logs FAIL when output is unparseable', () => {
+      const script = path.join(tmpDir, 'bad.sh')
+      fs.writeFileSync(script, '#!/usr/bin/env bash\necho "NOT_VALID"\n')
+      fs.chmodSync(script, 0o755)
+
+      runEnvTask(
+        { name: 'bad-env', command: script, timeout: 5000 },
+        { rootDir: tmpDir, sessionId: SESSION_ID, projectDir: tmpDir }
+      )
+
+      const entries = readLogEntries(SESSION_ID)
+      assert.strictEqual(entries.length, 1)
+      assert.strictEqual(entries[0].status, 'FAIL')
+      assert.ok(entries[0].reason.includes('failed to parse env output'))
+    })
   })
 })
 

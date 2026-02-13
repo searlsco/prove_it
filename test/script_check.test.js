@@ -41,9 +41,12 @@ describe('script check', () => {
 
   describe('runScriptCheck', () => {
     let tmpDir
+    let origProveItDir
 
     beforeEach(() => {
       tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_script_test_'))
+      origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
       spawnSync('git', ['init'], { cwd: tmpDir })
       spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
       spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
@@ -53,8 +56,19 @@ describe('script check', () => {
     })
 
     afterEach(() => {
+      if (origProveItDir === undefined) {
+        delete process.env.PROVE_IT_DIR
+      } else {
+        process.env.PROVE_IT_DIR = origProveItDir
+      }
       fs.rmSync(tmpDir, { recursive: true, force: true })
     })
+
+    function readLogEntries (sessionId) {
+      const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${sessionId}.jsonl`)
+      if (!fs.existsSync(logFile)) return []
+      return fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    }
 
     it('returns pass for exit 0 scripts', () => {
       const scriptPath = path.join(tmpDir, 'script', 'test')
@@ -189,6 +203,117 @@ describe('script check', () => {
       // Should actually run the script (exit 0) instead of using cache
       assert.strictEqual(result.pass, true)
       assert.strictEqual(result.skipped, false)
+    })
+
+    describe('logReview integration', () => {
+      const SESSION_ID = 'test-session-script-log'
+
+      it('logs PASS when script succeeds', () => {
+        const scriptPath = path.join(tmpDir, 'script', 'test')
+        fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
+        fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nexit 0\n')
+        fs.chmodSync(scriptPath, 0o755)
+
+        runScriptCheck(
+          { name: 'my-test', command: './script/test' },
+          { rootDir: tmpDir, projectDir: tmpDir, sessionId: SESSION_ID, localCfgPath: null, sources: null, maxChars: 12000 }
+        )
+
+        const entries = readLogEntries(SESSION_ID)
+        assert.strictEqual(entries.length, 1)
+        assert.strictEqual(entries[0].status, 'PASS')
+        assert.strictEqual(entries[0].reviewer, 'my-test')
+        assert.ok(entries[0].reason.includes('passed'))
+      })
+
+      it('logs FAIL when script fails', () => {
+        const scriptPath = path.join(tmpDir, 'script', 'test')
+        fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
+        fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nexit 1\n')
+        fs.chmodSync(scriptPath, 0o755)
+
+        runScriptCheck(
+          { name: 'my-test', command: './script/test' },
+          { rootDir: tmpDir, projectDir: tmpDir, sessionId: SESSION_ID, localCfgPath: null, sources: null, maxChars: 12000 }
+        )
+
+        const entries = readLogEntries(SESSION_ID)
+        assert.strictEqual(entries.length, 1)
+        assert.strictEqual(entries[0].status, 'FAIL')
+        assert.ok(entries[0].reason.includes('failed'))
+      })
+
+      it('logs FAIL when script not found', () => {
+        runScriptCheck(
+          { name: 'missing', command: './script/nope' },
+          { rootDir: tmpDir, projectDir: tmpDir, sessionId: SESSION_ID, localCfgPath: null, sources: null, maxChars: 12000 }
+        )
+
+        const entries = readLogEntries(SESSION_ID)
+        assert.strictEqual(entries.length, 1)
+        assert.strictEqual(entries[0].status, 'FAIL')
+        assert.ok(entries[0].reason.includes('Script not found'))
+      })
+
+      it('logs SKIP for cached pass', () => {
+        const scriptPath = path.join(tmpDir, 'script', 'test')
+        fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
+        fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nexit 0\n')
+        fs.chmodSync(scriptPath, 0o755)
+        spawnSync('git', ['add', 'script/test'], { cwd: tmpDir })
+        spawnSync('git', ['commit', '-m', 'add test'], { cwd: tmpDir })
+
+        const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+        fs.mkdirSync(path.dirname(localCfgPath), { recursive: true })
+        const runTime = Date.now()
+        fs.writeFileSync(localCfgPath, JSON.stringify({
+          runs: { 'my-test': { at: runTime, pass: true } }
+        }))
+
+        const past = new Date(runTime - 5000)
+        setAllTrackedMtimes(tmpDir, past)
+
+        runScriptCheck(
+          { name: 'my-test', command: './script/test' },
+          { rootDir: tmpDir, projectDir: tmpDir, sessionId: SESSION_ID, localCfgPath, sources: null, maxChars: 12000 }
+        )
+
+        const entries = readLogEntries(SESSION_ID)
+        assert.strictEqual(entries.length, 1)
+        assert.strictEqual(entries[0].status, 'SKIP')
+        assert.ok(entries[0].reason.includes('cached pass'))
+      })
+
+      it('logs FAIL for unknown builtin', () => {
+        runScriptCheck(
+          { name: 'bad-builtin', command: 'prove_it run_builtin nonexistent' },
+          { rootDir: tmpDir, projectDir: tmpDir, sessionId: SESSION_ID, localCfgPath: null, sources: null, maxChars: 12000 }
+        )
+
+        const entries = readLogEntries(SESSION_ID)
+        assert.strictEqual(entries.length, 1)
+        assert.strictEqual(entries[0].status, 'FAIL')
+        assert.ok(entries[0].reason.includes('Unknown builtin'))
+      })
+
+      it('does not log when sessionId and projectDir are both absent', () => {
+        const scriptPath = path.join(tmpDir, 'script', 'test')
+        fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
+        fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nexit 0\n')
+        fs.chmodSync(scriptPath, 0o755)
+
+        runScriptCheck(
+          { name: 'my-test', command: './script/test' },
+          { rootDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000 }
+        )
+
+        const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
+        const exists = fs.existsSync(sessionsDir)
+        if (exists) {
+          const files = fs.readdirSync(sessionsDir)
+          assert.strictEqual(files.length, 0, 'No log files should be created')
+        }
+      })
     })
   })
 })

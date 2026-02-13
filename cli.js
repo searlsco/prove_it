@@ -8,6 +8,7 @@
  *   init      - Initialize prove_it in current repository
  *   deinit    - Remove prove_it files from current repository
  *   doctor    - Check installation status and report issues
+ *   monitor   - Tail hook results in real time
  *   hook      - Run a hook dispatcher (claude:<Event> or git:<event>)
  *   run_builtin - Run a builtin check directly
  *   record    - Record a test run result for mtime caching
@@ -838,6 +839,20 @@ function cmdRunCheck () {
 }
 
 // ============================================================================
+// Monitor command
+// ============================================================================
+
+function cmdMonitor () {
+  const { monitor } = require('./lib/monitor')
+  const args = process.argv.slice(3)
+
+  const all = args.includes('--all')
+  const sessionId = args.find(a => !a.startsWith('--')) || null
+
+  monitor({ all, sessionId })
+}
+
+// ============================================================================
 // Main CLI
 // ============================================================================
 
@@ -854,11 +869,17 @@ Commands:
   deinit      Remove prove_it files from current repository
   reinit      Deinit and re-init current repository
   doctor      Check installation status and report issues
+  monitor     Tail hook results in real time (run in a separate terminal)
   hook        Run a hook dispatcher (claude:<Event> or git:<event>)
   run_builtin   Run a builtin check directly (e.g. prove_it run_builtin config:lock)
   record      Record a test run result for mtime caching
   help        Show this help message
   -v, --version  Show version number
+
+Monitor options:
+  prove_it monitor             Tail most recent session
+  prove_it monitor --all       Tail all sessions and project logs
+  prove_it monitor <id>        Tail a specific session (prefix match OK)
 
 Record options:
   --name <name>    Check name to record (must match hook config)
@@ -881,6 +902,7 @@ Examples:
   prove_it init --no-git-hooks             # Skip git hooks
   prove_it init --no-default-checks        # Base config only (no agents)
   prove_it doctor                          # Check installation status
+  prove_it monitor                         # Watch hook results in real time
   prove_it deinit                          # Remove prove_it from current repo
   prove_it uninstall                       # Remove global hooks
 `)
@@ -934,6 +956,9 @@ function main () {
       break
     case 'run_builtin':
       cmdRunCheck()
+      break
+    case 'monitor':
+      cmdMonitor()
       break
     case '-v':
     case '--version':
