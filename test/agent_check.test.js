@@ -173,6 +173,29 @@ describe('agent check', () => {
       `Expected --model haiku in reviewer output, got: ${result.reason}`)
   })
 
+  it('passes null command when check has no command (lets reviewer pick default)', () => {
+    // Create a 'codex' shim so the auto-switch for gpt- models works end-to-end
+    const shimDir = path.join(tmpDir, 'bin')
+    fs.mkdirSync(shimDir, { recursive: true })
+    const shimPath = path.join(shimDir, 'codex')
+    fs.writeFileSync(shimPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS: args=$*"\n')
+    fs.chmodSync(shimPath, 0o755)
+
+    const origPath = process.env.PATH
+    process.env.PATH = `${shimDir}:${origPath}`
+
+    const result = runAgentCheck(
+      { name: 'test-review', prompt: 'Review {{project_dir}}', model: 'gpt-5.3-codex' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '' }
+    )
+
+    process.env.PATH = origPath
+
+    assert.strictEqual(result.pass, true)
+    assert.ok(result.reason.includes('--model') && result.reason.includes('gpt-5.3-codex'),
+      `Expected codex auto-switch with --model, got: ${result.reason}`)
+  })
+
   it('allows session vars when sessionId is present', () => {
     const reviewerPath = path.join(tmpDir, 'pass_reviewer.sh')
     fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS"\n')

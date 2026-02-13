@@ -280,7 +280,7 @@ The `command` field accepts any CLI that reads a prompt from stdin and writes it
 
 ### Model selection
 
-Agent tasks accept a `model` field to control which model the reviewer uses. When `command` is `claude` (the default), prove_it appends `--model <model>` to the command automatically:
+Agent tasks accept a `model` field to control which model the reviewer uses. For Claude models, prove_it appends `--model <model>` to the `claude -p` command automatically:
 
 ```json
 {
@@ -291,7 +291,20 @@ Agent tasks accept a `model` field to control which model the reviewer uses. Whe
 }
 ```
 
-Use fast, cheap models (`haiku`) for Stop and PreToolUse reviewers where latency matters, and deeper models (`sonnet`) for pre-commit reviewers where thoroughness matters more. The default config uses these defaults. The `model` field is ignored for non-`claude` commands (e.g. `codex exec -`).
+For OpenAI/codex models (names starting with `gpt-`), prove_it auto-switches to `codex exec -` and appends `--model`:
+
+```json
+{
+  "name": "adversarial-review",
+  "type": "agent",
+  "prompt": "Review this code for bugs...\n\n{{staged_diff}}",
+  "model": "gpt-5.3-codex"
+}
+```
+
+This is equivalent to setting `"command": "codex exec -"` and `"model": "gpt-5.3-codex"` separately. An explicit `command` always takes precedence over auto-detection.
+
+Use fast, cheap models (`haiku`) for Stop and PreToolUse reviewers where latency matters, and deeper models (`sonnet`) for pre-commit reviewers where thoroughness matters more. The default config uses these defaults. The `model` field is ignored for commands that are neither `claude` nor `codex`.
 
 ## Builtins
 

@@ -3,7 +3,7 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 
-const { parseVerdict, runReviewer } = require('../lib/shared')
+const { isCodexModel, parseVerdict, runReviewer } = require('../lib/shared')
 
 const FIXTURES_DIR = path.join(__dirname, 'fixtures')
 
@@ -166,15 +166,32 @@ describe('runReviewer with fixture shims', () => {
       cleanup()
     })
 
-    it('does not append --model to non-claude commands', () => {
+    it('appends --model to codex commands', () => {
       setup()
-      // Create a shim named something other than 'claude'
       const shimPath = path.join(tmpDir, 'codex')
       fs.writeFileSync(shimPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
       fs.chmodSync(shimPath, 0o755)
 
       const review = runReviewer(tmpDir, {
         command: `${shimPath} exec -`,
+        model: 'gpt-5.3-codex'
+      }, 'test prompt')
+
+      assert.strictEqual(review.available, true)
+      assert.strictEqual(review.pass, true)
+      assert.ok(review.reason.includes('--model') && review.reason.includes('gpt-5.3-codex'),
+        `Expected --model gpt-5.3-codex in args, got: ${review.reason}`)
+      cleanup()
+    })
+
+    it('does not append --model to non-claude/non-codex commands', () => {
+      setup()
+      const shimPath = path.join(tmpDir, 'custom_reviewer')
+      fs.writeFileSync(shimPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
+      fs.chmodSync(shimPath, 0o755)
+
+      const review = runReviewer(tmpDir, {
+        command: shimPath,
         model: 'haiku'
       }, 'test prompt')
 
@@ -216,5 +233,94 @@ describe('runReviewer with fixture shims', () => {
       assert.strictEqual(review.pass, true)
       cleanup()
     })
+  })
+
+  describe('codex auto-switch', () => {
+    it('auto-selects codex exec when model starts with gpt-', () => {
+      setup()
+      // Create a 'codex' shim that echoes args
+      const shimDir = path.join(tmpDir, 'bin')
+      fs.mkdirSync(shimDir, { recursive: true })
+      const shimPath = path.join(shimDir, 'codex')
+      fs.writeFileSync(shimPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
+      fs.chmodSync(shimPath, 0o755)
+
+      // Prepend shimDir to PATH so 'codex' resolves
+      const origPath = process.env.PATH
+      process.env.PATH = `${shimDir}:${origPath}`
+
+      const review = runReviewer(tmpDir, {
+        model: 'gpt-5.3-codex'
+      }, 'test prompt')
+
+      process.env.PATH = origPath
+
+      assert.strictEqual(review.available, true)
+      assert.strictEqual(review.pass, true)
+      assert.ok(review.reason.includes('--model') && review.reason.includes('gpt-5.3-codex'),
+        `Expected --model gpt-5.3-codex in args, got: ${review.reason}`)
+      cleanup()
+    })
+
+    it('does not auto-select codex for non-gpt models', () => {
+      setup()
+      // Create a 'claude' shim that echoes args
+      const shimDir = path.join(tmpDir, 'bin')
+      fs.mkdirSync(shimDir, { recursive: true })
+      const shimPath = path.join(shimDir, 'claude')
+      fs.writeFileSync(shimPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
+      fs.chmodSync(shimPath, 0o755)
+
+      const origPath = process.env.PATH
+      process.env.PATH = `${shimDir}:${origPath}`
+
+      const review = runReviewer(tmpDir, {
+        model: 'haiku'
+      }, 'test prompt')
+
+      process.env.PATH = origPath
+
+      assert.strictEqual(review.available, true)
+      assert.strictEqual(review.pass, true)
+      assert.ok(review.reason.includes('--model') && review.reason.includes('haiku'),
+        `Expected --model haiku in args, got: ${review.reason}`)
+      cleanup()
+    })
+
+    it('does not override explicit command even with gpt model', () => {
+      setup()
+      process.env.FRAUDE_RESPONSE = 'PASS: custom command'
+      const review = runReviewer(tmpDir, {
+        command: `${fraudePath} -p`,
+        model: 'gpt-5.3-codex'
+      }, 'test prompt')
+
+      assert.strictEqual(review.available, true)
+      assert.strictEqual(review.pass, true)
+      assert.strictEqual(review.reason, 'custom command')
+      cleanup()
+    })
+  })
+})
+
+describe('isCodexModel', () => {
+  it('returns true for gpt- prefixed models', () => {
+    assert.strictEqual(isCodexModel('gpt-5.3-codex'), true)
+    assert.strictEqual(isCodexModel('gpt-4o'), true)
+  })
+
+  it('is case-insensitive', () => {
+    assert.strictEqual(isCodexModel('GPT-5.3-codex'), true)
+  })
+
+  it('returns false for non-gpt models', () => {
+    assert.strictEqual(isCodexModel('haiku'), false)
+    assert.strictEqual(isCodexModel('sonnet'), false)
+    assert.strictEqual(isCodexModel('claude-3-opus'), false)
+  })
+
+  it('returns false for null/undefined', () => {
+    assert.strictEqual(isCodexModel(null), false)
+    assert.strictEqual(isCodexModel(undefined), false)
   })
 })
