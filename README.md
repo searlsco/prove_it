@@ -304,7 +304,16 @@ For OpenAI/codex models (names starting with `gpt-`), prove_it auto-switches to 
 
 This is equivalent to setting `"command": "codex exec -"` and `"model": "gpt-5.3-codex"` separately. An explicit `command` always takes precedence over auto-detection.
 
-Use fast, cheap models (`haiku`) for Stop and PreToolUse reviewers where latency matters, and deeper models (`sonnet`) for pre-commit reviewers where thoroughness matters more. The default config uses these defaults. The `model` field is ignored for commands that are neither `claude` nor `codex`.
+When no `model` is set and no custom `command` is provided, prove_it applies sensible defaults based on the hook event:
+
+| Event | Default model | Rationale |
+|-------|--------------|-----------|
+| PreToolUse | `haiku` | Latency-sensitive gate check |
+| Stop | `haiku` | Latency-sensitive review |
+| pre-commit | `sonnet` | Thoroughness matters more |
+| pre-push | `sonnet` | Thoroughness matters more |
+
+An explicit `model` always wins. Setting a custom `command` disables default model selection entirely (prove_it won't append `--model` to unknown CLIs). The `--model` flag is appended only for `claude` and `codex` binaries.
 
 ## Builtins
 

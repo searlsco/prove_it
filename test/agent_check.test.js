@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
-const { runAgentCheck } = require('../lib/checks/agent')
+const { defaultModel, runAgentCheck } = require('../lib/checks/agent')
 
 describe('agent check', () => {
   let tmpDir
@@ -196,6 +196,44 @@ describe('agent check', () => {
       `Expected codex auto-switch with --model, got: ${result.reason}`)
   })
 
+  it('uses default model for hook event when no model or command set', () => {
+    // Create a 'claude' shim that echoes args so we can see --model
+    const shimDir = path.join(tmpDir, 'bin')
+    fs.mkdirSync(shimDir, { recursive: true })
+    const shimPath = path.join(shimDir, 'claude')
+    fs.writeFileSync(shimPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS: args=$*"\n')
+    fs.chmodSync(shimPath, 0o755)
+
+    const origPath = process.env.PATH
+    process.env.PATH = `${shimDir}:${origPath}`
+
+    const result = runAgentCheck(
+      { name: 'test-review', prompt: 'Review {{project_dir}}' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, hookEvent: 'Stop', testOutput: '' }
+    )
+
+    process.env.PATH = origPath
+
+    assert.strictEqual(result.pass, true)
+    assert.ok(result.reason.includes('--model') && result.reason.includes('haiku'),
+      `Expected default --model haiku for Stop, got: ${result.reason}`)
+  })
+
+  it('does not apply default model when explicit command is set', () => {
+    const reviewerPath = path.join(tmpDir, 'custom_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS: args=$*"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    const result = runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review {{project_dir}}' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, hookEvent: 'Stop', testOutput: '' }
+    )
+
+    assert.strictEqual(result.pass, true)
+    assert.ok(!result.reason.includes('--model'),
+      `Expected no --model with explicit command, got: ${result.reason}`)
+  })
+
   it('allows session vars when sessionId is present', () => {
     const reviewerPath = path.join(tmpDir, 'pass_reviewer.sh')
     fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS"\n')
@@ -206,5 +244,32 @@ describe('agent check', () => {
       { rootDir: tmpDir, projectDir: tmpDir, sessionId: 'test-session', toolInput: null, testOutput: '' }
     )
     assert.strictEqual(result.pass, true)
+  })
+})
+
+describe('defaultModel', () => {
+  it('returns haiku for PreToolUse', () => {
+    assert.strictEqual(defaultModel('PreToolUse', false), 'haiku')
+  })
+
+  it('returns haiku for Stop', () => {
+    assert.strictEqual(defaultModel('Stop', false), 'haiku')
+  })
+
+  it('returns sonnet for pre-commit', () => {
+    assert.strictEqual(defaultModel('pre-commit', false), 'sonnet')
+  })
+
+  it('returns sonnet for pre-push', () => {
+    assert.strictEqual(defaultModel('pre-push', false), 'sonnet')
+  })
+
+  it('returns null for unknown events', () => {
+    assert.strictEqual(defaultModel('SessionStart', false), null)
+  })
+
+  it('returns null when explicit command is set', () => {
+    assert.strictEqual(defaultModel('Stop', true), null)
+    assert.strictEqual(defaultModel('pre-commit', true), null)
   })
 })
