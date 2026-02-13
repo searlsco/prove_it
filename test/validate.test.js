@@ -347,6 +347,26 @@ describe('validateConfig', () => {
       assert.ok(warnings.some(w => w.includes('linesWrittenSinceLastRun') && w.includes('git')))
     })
 
+    it('passes sourcesModifiedSinceLastRun as valid when key', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'agent',
+        prompt: 'review this',
+        when: { sourcesModifiedSinceLastRun: true }
+      }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('errors when sourcesModifiedSinceLastRun is not a boolean', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { sourcesModifiedSinceLastRun: 'yes' }
+      }))
+      assert.ok(errors.some(e => e.includes('sourcesModifiedSinceLastRun must be a boolean')))
+    })
+
     it('passes agent with promptType reference and valid reference', () => {
       const { errors } = validateConfig(cfgWithTask({
         name: 'a', type: 'agent', prompt: 'review:commit_quality', promptType: 'reference'

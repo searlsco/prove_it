@@ -96,8 +96,11 @@ describe('claude dispatcher', () => {
       assert.strictEqual(evaluateWhen({ fileExists: 'package.json' }, { rootDir: process.cwd() }), true)
     })
 
-    it('checks fileExists — fails when file missing', () => {
-      assert.strictEqual(evaluateWhen({ fileExists: 'nonexistent-file-xyz.json' }, { rootDir: process.cwd() }), false)
+    it('checks fileExists — returns reason when file missing', () => {
+      const result = evaluateWhen({ fileExists: 'nonexistent-file-xyz.json' }, { rootDir: process.cwd() })
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('was not found'), `Expected 'was not found' reason, got: ${result}`)
+      assert.ok(result.includes('nonexistent-file-xyz.json'), `Expected path in reason, got: ${result}`)
     })
 
     it('checks envSet — passes when env var is set', () => {
@@ -109,9 +112,12 @@ describe('claude dispatcher', () => {
       }
     })
 
-    it('checks envSet — fails when env var is unset', () => {
+    it('checks envSet — returns reason when env var is unset', () => {
       delete process.env.PROVE_IT_FAKE_ENV_VAR
-      assert.strictEqual(evaluateWhen({ envSet: 'PROVE_IT_FAKE_ENV_VAR' }, { rootDir: '.' }), false)
+      const result = evaluateWhen({ envSet: 'PROVE_IT_FAKE_ENV_VAR' }, { rootDir: '.' })
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('was not set'), `Expected 'was not set' reason, got: ${result}`)
+      assert.ok(result.includes('$PROVE_IT_FAKE_ENV_VAR'), `Expected var name in reason, got: ${result}`)
     })
 
     it('checks envNotSet — passes when env var is unset', () => {
@@ -119,10 +125,13 @@ describe('claude dispatcher', () => {
       assert.strictEqual(evaluateWhen({ envNotSet: 'PROVE_IT_FAKE_ENV_VAR2' }, { rootDir: '.' }), true)
     })
 
-    it('checks envNotSet — fails when env var is set', () => {
+    it('checks envNotSet — returns reason when env var is set', () => {
       process.env.PROVE_IT_TEST_VAR2 = 'yes'
       try {
-        assert.strictEqual(evaluateWhen({ envNotSet: 'PROVE_IT_TEST_VAR2' }, { rootDir: '.' }), false)
+        const result = evaluateWhen({ envNotSet: 'PROVE_IT_TEST_VAR2' }, { rootDir: '.' })
+        assert.notStrictEqual(result, true)
+        assert.ok(result.includes('was set'), `Expected 'was set' reason, got: ${result}`)
+        assert.ok(result.includes('$PROVE_IT_TEST_VAR2'), `Expected var name in reason, got: ${result}`)
       } finally {
         delete process.env.PROVE_IT_TEST_VAR2
       }
@@ -157,28 +166,33 @@ describe('claude dispatcher', () => {
         assert.strictEqual(result, true)
       })
 
-      it('fails when variable resolves to empty (no staged changes)', () => {
+      it('returns reason when variable resolves to empty (no staged changes)', () => {
         const result = evaluateWhen(
           { variablesPresent: ['staged_diff'] },
           { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null }
         )
-        assert.strictEqual(result, false)
+        assert.notStrictEqual(result, true)
+        assert.ok(result.includes('staged_diff'), `Expected variable name in reason, got: ${result}`)
+        assert.ok(result.includes('was not present'), `Expected 'was not present' in reason, got: ${result}`)
       })
 
-      it('fails for session_diff when sessionId is null', () => {
+      it('returns reason for session_diff when sessionId is null', () => {
         const result = evaluateWhen(
           { variablesPresent: ['session_diff'] },
           { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null }
         )
-        assert.strictEqual(result, false)
+        assert.notStrictEqual(result, true)
+        assert.ok(result.includes('session_diff'), `Expected variable name in reason, got: ${result}`)
       })
 
-      it('fails for unknown variable name', () => {
+      it('returns reason for unknown variable name', () => {
         const result = evaluateWhen(
           { variablesPresent: ['nonexistent_var'] },
           { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null }
         )
-        assert.strictEqual(result, false)
+        assert.notStrictEqual(result, true)
+        assert.ok(result.includes('nonexistent_var'), `Expected variable name in reason, got: ${result}`)
+        assert.ok(result.includes('is not a known variable'), `Expected 'is not a known variable' in reason, got: ${result}`)
       })
 
       it('passes for empty array', () => {
@@ -210,7 +224,7 @@ describe('claude dispatcher', () => {
       fs.rmSync(tmpDir, { recursive: true, force: true })
     })
 
-    it('returns false when lines written is below threshold', () => {
+    it('returns reason when lines written is below threshold', () => {
       const sessionId = 'test-lwslr-1'
       recordWrite(sessionId, 100)
       const result = evaluateWhen(
@@ -218,7 +232,10 @@ describe('claude dispatcher', () => {
         { rootDir: '.', sessionId },
         'my-check'
       )
-      assert.strictEqual(result, false)
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('100'), `Expected written count in reason, got: ${result}`)
+      assert.ok(result.includes('500'), `Expected threshold in reason, got: ${result}`)
+      assert.ok(result.includes('lines written since last run'), `Expected human-readable message, got: ${result}`)
     })
 
     it('returns true when lines written meets threshold', () => {
@@ -252,7 +269,9 @@ describe('claude dispatcher', () => {
         { rootDir: '.', sessionId },
         'my-check'
       )
-      assert.strictEqual(result, false)
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('0'), `Expected 0 in reason, got: ${result}`)
+      assert.ok(result.includes('500'), `Expected 500 in reason, got: ${result}`)
     })
 
     it('fires again after accumulating more lines post-reset', () => {
@@ -268,13 +287,14 @@ describe('claude dispatcher', () => {
       assert.strictEqual(result, true)
     })
 
-    it('returns false when no session', () => {
+    it('returns reason when no session', () => {
       const result = evaluateWhen(
         { linesWrittenSinceLastRun: 500 },
         { rootDir: '.', sessionId: null },
         'my-check'
       )
-      assert.strictEqual(result, false)
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('lines written since last run'), `Expected reason, got: ${result}`)
     })
 
     it('resets budget on failure so agent can write tests (no deadlock)', () => {
@@ -295,7 +315,7 @@ describe('claude dispatcher', () => {
         { rootDir: '.', sessionId },
         'my-check'
       )
-      assert.strictEqual(result2, false)
+      assert.notStrictEqual(result2, true)
       // After writing 500+ more lines (hopefully tests), check fires again
       recordWrite(sessionId, 500)
       const result3 = evaluateWhen(
@@ -304,6 +324,95 @@ describe('claude dispatcher', () => {
         'my-check'
       )
       assert.strictEqual(result3, true)
+    })
+  })
+
+  describe('evaluateWhen — sourcesModifiedSinceLastRun', () => {
+    let tmpDir
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_smslr_'))
+      fs.mkdirSync(path.join(tmpDir, '.claude'), { recursive: true })
+    })
+
+    afterEach(() => {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('passes on first run (no prior run data)', () => {
+      // Create a source file so latestSourceMtime > 0
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'code\n')
+      const { getLatestMtime } = require('../lib/testing')
+      const result = evaluateWhen(
+        { sourcesModifiedSinceLastRun: true },
+        {
+          rootDir: tmpDir,
+          localCfgPath: path.join(tmpDir, '.claude', 'prove_it.local.json'),
+          latestSourceMtime: getLatestMtime(tmpDir, ['**/*.js'])
+        },
+        'my-task'
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('skips when sources have not changed since last run', () => {
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'code\n')
+      const { getLatestMtime, saveRunData } = require('../lib/testing')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const mtime = getLatestMtime(tmpDir, ['**/*.js'])
+      // Record a run after the source was last modified
+      saveRunData(localCfgPath, 'my-task', { at: mtime + 1000 })
+
+      const result = evaluateWhen(
+        { sourcesModifiedSinceLastRun: true },
+        { rootDir: tmpDir, localCfgPath, latestSourceMtime: mtime },
+        'my-task'
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('no sources were modified'), `Expected reason, got: ${result}`)
+    })
+
+    it('passes through cached failures (pass: false) even when sources unchanged', () => {
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'code\n')
+      const { getLatestMtime, saveRunData } = require('../lib/testing')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const mtime = getLatestMtime(tmpDir, ['**/*.js'])
+      // Record a failed run after the source was last modified
+      saveRunData(localCfgPath, 'my-task', { at: mtime + 1000, pass: false })
+
+      const result = evaluateWhen(
+        { sourcesModifiedSinceLastRun: true },
+        { rootDir: tmpDir, localCfgPath, latestSourceMtime: mtime },
+        'my-task'
+      )
+      assert.strictEqual(result, true, 'Should pass through so cached failure re-fires')
+    })
+
+    it('passes when sources are newer than last run', () => {
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'code\n')
+      const { getLatestMtime, saveRunData } = require('../lib/testing')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      // Record a run well in the past
+      saveRunData(localCfgPath, 'my-task', { at: 1000 })
+      const mtime = getLatestMtime(tmpDir, ['**/*.js'])
+
+      const result = evaluateWhen(
+        { sourcesModifiedSinceLastRun: true },
+        { rootDir: tmpDir, localCfgPath, latestSourceMtime: mtime },
+        'my-task'
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('skips when latestSourceMtime is 0 (no source files)', () => {
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const result = evaluateWhen(
+        { sourcesModifiedSinceLastRun: true },
+        { rootDir: tmpDir, localCfgPath, latestSourceMtime: 0 },
+        'my-task'
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('no source files were found'), `Expected reason, got: ${result}`)
     })
   })
 

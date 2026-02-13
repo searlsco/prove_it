@@ -220,6 +220,26 @@ describe('init/deinit', () => {
     assert.match(result.stdout, /\[ \] Commit changes/)
   })
 
+  it('init shows sources TODO when placeholder globs are present', () => {
+    const result = runCli(['init'], { cwd: tmpDir })
+    assert.strictEqual(result.exitCode, 0)
+    assert.match(result.stdout, /Replace the placeholder sources globs/)
+  })
+
+  it('init shows sources done when globs are customized', () => {
+    // Init first
+    runCli(['init'], { cwd: tmpDir })
+    // Customize sources
+    const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    cfg.sources = ['src/**/*.js', 'test/**/*.js']
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
+    // Re-run init
+    const result = runCli(['init'], { cwd: tmpDir })
+    assert.strictEqual(result.exitCode, 0)
+    assert.match(result.stdout, /\[x\] Sources globs configured/)
+  })
+
   it('init shows trap instructions when scripts lack prove_it record', () => {
     // Create customized scripts without prove_it record
     fs.mkdirSync(path.join(tmpDir, 'script'), { recursive: true })

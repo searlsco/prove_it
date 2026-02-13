@@ -362,5 +362,244 @@ describe('Config-driven hook behavior (v2)', () => {
         )
       }
     })
+
+    it('logs SKIP entry when when condition is not met', () => {
+      const sessionId = 'test-when-skip-log'
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            {
+              name: 'guarded-check',
+              type: 'script',
+              command: 'prove_it run_builtin config:lock',
+              when: { fileExists: '.nonexistent' }
+            }
+          ]
+        }
+      ]))
+
+      const env = isolatedEnv(tmpDir)
+      invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+
+      // Read the session log and verify SKIP was recorded
+      const logPath = path.join(env.PROVE_IT_DIR, 'sessions', `${sessionId}.jsonl`)
+      assert.ok(fs.existsSync(logPath), `Session log should exist at ${logPath}`)
+      const entries = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+      const skipEntry = entries.find(e => e.reviewer === 'guarded-check' && e.status === 'SKIP')
+      assert.ok(skipEntry, 'Should have a SKIP log entry for the guarded check')
+      assert.ok(skipEntry.reason.includes('was not found'),
+        `SKIP reason should mention 'was not found', got: ${skipEntry.reason}`)
+    })
+
+    it('logs SKIP for variablesPresent when variable is empty', () => {
+      const sessionId = 'test-when-vp-skip'
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            {
+              name: 'needs-diff',
+              type: 'script',
+              command: 'prove_it run_builtin config:lock',
+              when: { variablesPresent: ['staged_diff'] }
+            }
+          ]
+        }
+      ]))
+
+      const env = isolatedEnv(tmpDir)
+      invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+
+      const logPath = path.join(env.PROVE_IT_DIR, 'sessions', `${sessionId}.jsonl`)
+      assert.ok(fs.existsSync(logPath), `Session log should exist at ${logPath}`)
+      const entries = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+      const skipEntry = entries.find(e => e.reviewer === 'needs-diff' && e.status === 'SKIP')
+      assert.ok(skipEntry, 'Should have a SKIP log entry when variablesPresent fails')
+      assert.ok(skipEntry.reason.includes('staged_diff'),
+        `SKIP reason should name the empty variable, got: ${skipEntry.reason}`)
+      assert.ok(skipEntry.reason.includes('was not present'),
+        `SKIP reason should say 'was not present', got: ${skipEntry.reason}`)
+    })
+  })
+
+  // ──── sourcesModifiedSinceLastRun ────
+
+  describe('sourcesModifiedSinceLastRun', () => {
+    it('fires on first run, skips on second when no files changed, fires after source touch', () => {
+      const sessionId = 'test-smslr-integration'
+      // Create a source file
+      createFile(tmpDir, 'src/app.js', 'console.log("hello")\n')
+      // A passing script task gated by sourcesModifiedSinceLastRun
+      createFile(tmpDir, 'script/check', '#!/usr/bin/env bash\nexit 0\n')
+      fs.chmodSync(path.join(tmpDir, 'script', 'check'), 0o755)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            {
+              name: 'mtime-gate',
+              type: 'script',
+              command: './script/check',
+              when: { sourcesModifiedSinceLastRun: true }
+            }
+          ]
+        }
+      ], { sources: ['src/**/*.js'] }))
+
+      const env = isolatedEnv(tmpDir)
+
+      // First invocation: should fire (no prior run data)
+      const result1 = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+      assert.strictEqual(result1.exitCode, 0)
+      assert.ok(result1.output, 'First invocation should produce output (task ran)')
+      assert.strictEqual(result1.output.decision, 'approve')
+
+      // Second invocation: should skip (no source changes)
+      const result2 = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+      assert.strictEqual(result2.exitCode, 0)
+      // All tasks skipped → silent exit (no output) or pass output
+      const logPath = path.join(env.PROVE_IT_DIR, 'sessions', `${sessionId}.jsonl`)
+      assert.ok(fs.existsSync(logPath), 'Session log should exist')
+      const entries = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+      const skipEntries = entries.filter(e => e.reviewer === 'mtime-gate' && e.status === 'SKIP')
+      assert.ok(skipEntries.length >= 1, 'Should have a SKIP log entry on second invocation')
+      assert.ok(skipEntries[0].reason.includes('no sources were modified'),
+        `SKIP reason should mention no modifications, got: ${skipEntries[0].reason}`)
+
+      // Touch a source file and invoke again: should fire
+      // Ensure the mtime is strictly newer than what was recorded
+      const now = Date.now()
+      const srcPath = path.join(tmpDir, 'src', 'app.js')
+      fs.utimesSync(srcPath, new Date(now + 2000), new Date(now + 2000))
+
+      const result3 = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+      assert.strictEqual(result3.exitCode, 0)
+      assert.ok(result3.output, 'Third invocation should produce output after source touch')
+      assert.strictEqual(result3.output.decision, 'approve')
+    })
+
+    it('does not conflict with script mtime cache when task has mtime: true', () => {
+      const sessionId = 'test-smslr-mtime-compat'
+      createFile(tmpDir, 'src/app.js', 'code\n')
+      createFile(tmpDir, 'script/check', '#!/usr/bin/env bash\nexit 0\n')
+      fs.chmodSync(path.join(tmpDir, 'script', 'check'), 0o755)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            {
+              name: 'mtime-compat',
+              type: 'script',
+              command: './script/check',
+              mtime: true,
+              when: { sourcesModifiedSinceLastRun: true }
+            }
+          ]
+        }
+      ], { sources: ['src/**/*.js'] }))
+
+      const env = isolatedEnv(tmpDir)
+
+      // First run: should pass (script runs successfully)
+      const result1 = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+      assert.strictEqual(result1.exitCode, 0)
+      assert.ok(result1.output, 'First invocation should produce output')
+      assert.strictEqual(result1.output.decision, 'approve')
+
+      // Second run: should skip via sourcesModifiedSinceLastRun
+      // (script.js wrote { at, pass: true } which satisfies both caches)
+      const result2 = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+      assert.strictEqual(result2.exitCode, 0)
+    })
+
+    it('re-fires cached failure instead of silently skipping', () => {
+      const sessionId = 'test-smslr-failure-sticky'
+      createFile(tmpDir, 'src/app.js', 'code\n')
+      createFile(tmpDir, 'script/check', '#!/usr/bin/env bash\nexit 1\n')
+      fs.chmodSync(path.join(tmpDir, 'script', 'check'), 0o755)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            {
+              name: 'fail-gate',
+              type: 'script',
+              command: './script/check',
+              when: { sourcesModifiedSinceLastRun: true }
+            }
+          ]
+        }
+      ], { sources: ['src/**/*.js'] }))
+
+      const env = isolatedEnv(tmpDir)
+
+      // First run: task fails
+      const result1 = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+      assert.strictEqual(result1.exitCode, 0)
+      assert.ok(result1.output, 'First invocation should produce output')
+      assert.strictEqual(result1.output.decision, 'block', 'Should block on failure')
+
+      // Second run (no source changes): should re-fire with cached failure, NOT skip silently
+      const result2 = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+      assert.strictEqual(result2.exitCode, 0)
+      assert.ok(result2.output, 'Second invocation should still produce output (cached failure)')
+      assert.strictEqual(result2.output.decision, 'block', 'Cached failure should still block')
+
+      // Touch source and run again: should re-run the actual command (still fails)
+      const now = Date.now()
+      const srcPath = path.join(tmpDir, 'src', 'app.js')
+      fs.utimesSync(srcPath, new Date(now + 2000), new Date(now + 2000))
+
+      const result3 = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+      assert.strictEqual(result3.exitCode, 0)
+      assert.ok(result3.output, 'Third invocation should produce output after source touch')
+      assert.strictEqual(result3.output.decision, 'block', 'Should still block (script still fails)')
+    })
   })
 })

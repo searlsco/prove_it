@@ -147,7 +147,7 @@ describe('init', () => {
       assert.strictEqual(coverageReview.type, 'agent')
       assert.strictEqual(coverageReview.promptType, 'reference')
       assert.strictEqual(coverageReview.prompt, 'review:test_coverage')
-      assert.deepStrictEqual(coverageReview.when.variablesPresent, ['session_diff'])
+      assert.deepStrictEqual(coverageReview.when, { sourcesModifiedSinceLastRun: true })
     })
 
     it('ensure-tests uses type agent with promptType reference', () => {

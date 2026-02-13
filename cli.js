@@ -376,15 +376,29 @@ async function cmdInit () {
       })
     }
 
+    // Sources glob TODO — check the team config for placeholder globs
+    const teamCfg = loadJson(path.join(repoRoot, '.claude', 'prove_it.json'))
+    const teamSources = teamCfg?.sources
+    if (Array.isArray(teamSources) && teamSources.some(s => s.includes('replace/these/with/globs'))) {
+      todos.push({
+        done: false,
+        text: 'Replace the placeholder sources globs in .claude/prove_it.json\n' +
+          '        Sources controls which files trigger mtime-based reviewer gating\n' +
+          '        and write-budget tracking (e.g. ["src/**/*.*", "test/**/*.*"])'
+      })
+    } else if (Array.isArray(teamSources) && teamSources.length > 0) {
+      todos.push({ done: true, text: 'Sources globs configured' })
+    }
+
     if (results.teamConfig.upgraded || overwritten) {
       todos.push({
         done: false,
-        text: 'Review updated .claude/prove_it.json (source globs, check commands)'
+        text: 'Review updated .claude/prove_it.json (check commands)'
       })
     } else {
       todos.push({
         done: false,
-        text: 'Customize .claude/prove_it.json (source globs, check commands)'
+        text: 'Customize .claude/prove_it.json (check commands)'
       })
     }
 

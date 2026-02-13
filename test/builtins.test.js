@@ -89,8 +89,10 @@ describe('builtins', () => {
     it('has review:test_coverage prompt', () => {
       assert.strictEqual(typeof BUILTIN_PROMPTS['review:test_coverage'], 'string')
       assert.ok(BUILTIN_PROMPTS['review:test_coverage'].length > 0)
-      assert.ok(BUILTIN_PROMPTS['review:test_coverage'].includes('{{session_diff}}'),
-        'test_coverage prompt should contain {{session_diff}}')
+      assert.ok(BUILTIN_PROMPTS['review:test_coverage'].includes('{{recently_edited_files}}'),
+        'test_coverage prompt should contain {{recently_edited_files}}')
+      assert.ok(BUILTIN_PROMPTS['review:test_coverage'].includes('{{#session_diff}}'),
+        'test_coverage prompt should contain {{#session_diff}} conditional block')
       assert.ok(BUILTIN_PROMPTS['review:test_coverage'].includes('{{recent_commits}}'),
         'test_coverage prompt should contain {{recent_commits}}')
       assert.ok(BUILTIN_PROMPTS['review:test_coverage'].includes('{{git_status}}'),

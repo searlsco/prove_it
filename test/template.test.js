@@ -56,6 +56,44 @@ describe('template', () => {
     })
   })
 
+  describe('conditional blocks', () => {
+    it('includes block content when variable is non-empty', () => {
+      const context = { projectDir: '/proj', rootDir: '/root', sessionId: 'sess-1', toolInput: null }
+      const result = expandTemplate('before\n{{#session_id}}has session: {{session_id}}{{/session_id}}\nafter', context)
+      assert.ok(result.includes('has session: sess-1'), `Expected block content, got: ${result}`)
+      assert.ok(result.includes('before'))
+      assert.ok(result.includes('after'))
+    })
+
+    it('strips block when variable is empty', () => {
+      const context = { projectDir: '/proj', rootDir: '/root', sessionId: null, toolInput: null }
+      const result = expandTemplate('before\n{{#session_id}}has session: {{session_id}}{{/session_id}}\nafter', context)
+      assert.ok(!result.includes('has session'), `Expected block stripped, got: ${result}`)
+      assert.ok(result.includes('before'))
+      assert.ok(result.includes('after'))
+    })
+
+    it('expands inner variables inside block', () => {
+      const context = { projectDir: '/proj', rootDir: '/root', sessionId: 'sess-1', toolInput: null }
+      const result = expandTemplate('{{#project_dir}}dir={{project_dir}} id={{session_id}}{{/project_dir}}', context)
+      assert.strictEqual(result, 'dir=/proj id=sess-1')
+    })
+
+    it('strips block for unknown variable', () => {
+      const context = { projectDir: '/proj', rootDir: '/root', sessionId: null, toolInput: null }
+      const result = expandTemplate('a{{#bogus_var}}content{{/bogus_var}}b', context)
+      assert.strictEqual(result, 'ab')
+    })
+
+    it('handles block alongside regular variables', () => {
+      const context = { projectDir: '/proj', rootDir: '/root', sessionId: null, toolInput: null }
+      const result = expandTemplate('dir={{project_dir}}\n{{#session_id}}session={{session_id}}{{/session_id}}\ndone', context)
+      assert.ok(result.includes('dir=/proj'), `Expected project_dir expanded, got: ${result}`)
+      assert.ok(!result.includes('session='), `Expected session block stripped, got: ${result}`)
+      assert.ok(result.includes('done'))
+    })
+  })
+
   describe('KNOWN_VARS', () => {
     it('has all 16 expected keys', () => {
       const expected = [
@@ -108,6 +146,10 @@ describe('template', () => {
     it('deduplicates', () => {
       assert.deepStrictEqual(getSessionVars('{{session_diff}} {{session_diff}}'), ['session_diff'])
     })
+
+    it('finds session vars in conditional block tags', () => {
+      assert.deepStrictEqual(getSessionVars('{{#session_diff}}content{{/session_diff}}'), ['session_diff'])
+    })
   })
 
   describe('getUnknownVars', () => {
@@ -133,6 +175,14 @@ describe('template', () => {
 
     it('handles mix of known and unknown', () => {
       assert.deepStrictEqual(getUnknownVars('{{staged_diff}} {{typo}}'), ['typo'])
+    })
+
+    it('finds unknown vars in conditional block tags', () => {
+      assert.deepStrictEqual(getUnknownVars('{{#bogus}}content{{/bogus}}'), ['bogus'])
+    })
+
+    it('does not flag known vars in conditional block tags', () => {
+      assert.deepStrictEqual(getUnknownVars('{{#session_diff}}content{{/session_diff}}'), [])
     })
   })
 
