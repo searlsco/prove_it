@@ -405,6 +405,36 @@ describe('validateConfig', () => {
       assert.ok(warnings.some(w => w.includes('model only applies to agent tasks')))
     })
 
+    it('passes agent with ruleFile field', () => {
+      const { errors, warnings } = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'Review this', ruleFile: '.claude/rules/testing.md'
+      }))
+      assert.strictEqual(errors.length, 0)
+      assert.strictEqual(warnings.length, 0)
+    })
+
+    it('errors when ruleFile is empty string', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'Review this', ruleFile: ''
+      }))
+      assert.ok(errors.some(e => e.includes('ruleFile must be a non-empty string')))
+    })
+
+    it('errors when ruleFile is not a string', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'Review this', ruleFile: 42
+      }))
+      assert.ok(errors.some(e => e.includes('ruleFile must be a non-empty string')))
+    })
+
+    it('warns when ruleFile is used on non-agent task', () => {
+      const { errors, warnings } = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', ruleFile: '.claude/rules/testing.md'
+      }))
+      assert.strictEqual(errors.length, 0)
+      assert.ok(warnings.some(w => w.includes('ruleFile only applies to agent tasks')))
+    })
+
     it('passes variablesPresent as valid array', () => {
       const { errors } = validateConfig(cfgWithTask({
         name: 'a',

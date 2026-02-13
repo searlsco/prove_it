@@ -258,6 +258,24 @@ These expand in agent prompts:
 | `{{git_status}}` | `git status --short` (staged/modified/untracked files) |
 | `{{recent_commits}}` | `git log --oneline --stat -5` (last 5 commits with file stats) |
 
+### Rule files
+
+Agent tasks accept a `ruleFile` field that injects the contents of a project-specific rule file into the reviewer prompt. This lets you define testing standards (or other review criteria) once and apply them to every reviewer:
+
+```json
+{
+  "name": "coverage-review",
+  "type": "agent",
+  "prompt": "review:test_coverage",
+  "promptType": "reference",
+  "ruleFile": ".claude/rules/testing.md"
+}
+```
+
+The path is resolved relative to the project directory. If the file is missing, the task fails with a clear error — this is intentional so you don't silently run reviews without your rules.
+
+`prove_it init` generates a default `.claude/rules/testing.md` with starter rules and a TODO for you to customize. The three default agent tasks (`commit-review`, `coverage-review`, `ensure-tests`) all point to this file.
+
 ### Adversarial cross-platform review
 
 You can use a different AI for each reviewer, so the agent doing the work is checked by a competing model:

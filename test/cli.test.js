@@ -297,6 +297,24 @@ describe('init/deinit', () => {
     assert.ok(!fs.existsSync(path.join(tmpDir, 'script', 'test')))
     assert.ok(!fs.existsSync(path.join(tmpDir, 'script', 'test_fast')))
   })
+
+  it('deinit removes default rule file', () => {
+    runCli(['init'], { cwd: tmpDir })
+    assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'testing.md')))
+
+    runCli(['deinit'], { cwd: tmpDir })
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'testing.md')))
+  })
+
+  it('deinit preserves customized rule file', () => {
+    runCli(['init'], { cwd: tmpDir })
+    const rulePath = path.join(tmpDir, '.claude', 'rules', 'testing.md')
+    fs.writeFileSync(rulePath, '# My custom rules\n')
+
+    const result = runCli(['deinit'], { cwd: tmpDir })
+    assert.ok(fs.existsSync(rulePath), 'Customized rule file should be preserved')
+    assert.match(result.stdout, /customized/)
+  })
 })
 
 describe('install/uninstall', () => {

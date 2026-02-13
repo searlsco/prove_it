@@ -39,7 +39,8 @@
             "variablesPresent": [
               "session_diff"
             ]
-          }
+          },
+          "ruleFile": ".claude/rules/testing.md"
         }
       ]
     },
@@ -66,13 +67,15 @@
             "variablesPresent": [
               "staged_diff"
             ]
-          }
+          },
+          "ruleFile": ".claude/rules/testing.md"
         },
         {
           "name": "adversarial-review",
           "type": "agent",
           "command": "codex exec -",
-          "prompt": "Review staged changes to the calculator module as a second opinion. Look for issues the primary reviewer might miss:\n1. Subtle logic errors or off-by-one mistakes\n2. Unsafe type coercion or NaN propagation\n3. Missing boundary conditions in tests\n\n{{staged_diff}}"
+          "prompt": "Review staged changes to the calculator module as a second opinion. Look for issues the primary reviewer might miss:\n1. Subtle logic errors or off-by-one mistakes\n2. Unsafe type coercion or NaN propagation\n3. Missing boundary conditions in tests\n\n{{staged_diff}}",
+          "ruleFile": ".claude/rules/testing.md"
         }
       ]
     }

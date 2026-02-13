@@ -234,6 +234,53 @@ describe('agent check', () => {
       `Expected no --model with explicit command, got: ${result.reason}`)
   })
 
+  it('injects rule file contents into prompt', () => {
+    const capturePath = path.join(tmpDir, 'captured.txt')
+    const reviewerPath = path.join(tmpDir, 'capture_reviewer.sh')
+    fs.writeFileSync(reviewerPath, `#!/usr/bin/env bash\ncat > "${capturePath}"\necho "PASS"\n`)
+    fs.chmodSync(reviewerPath, 0o755)
+
+    const ruleDir = path.join(tmpDir, '.claude', 'rules')
+    fs.mkdirSync(ruleDir, { recursive: true })
+    fs.writeFileSync(path.join(ruleDir, 'testing.md'), 'All code must have tests.\n')
+
+    const result = runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this', ruleFile: '.claude/rules/testing.md' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '' }
+    )
+    assert.strictEqual(result.pass, true)
+    const captured = fs.readFileSync(capturePath, 'utf8')
+    assert.ok(captured.includes('--- Rules ---'), 'Should contain rules section header')
+    assert.ok(captured.includes('All code must have tests.'), 'Should contain rule file contents')
+    assert.ok(captured.includes('--- End Rules ---'), 'Should contain rules section footer')
+  })
+
+  it('fails when ruleFile is missing', () => {
+    const result = runAgentCheck(
+      { name: 'test-review', prompt: 'Review this', ruleFile: '.claude/rules/nonexistent.md' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '' }
+    )
+    assert.strictEqual(result.pass, false)
+    assert.ok(result.reason.includes('ruleFile not found'),
+      `Should mention ruleFile not found, got: ${result.reason}`)
+    assert.ok(result.reason.includes('.claude/rules/nonexistent.md'),
+      `Should include the path, got: ${result.reason}`)
+  })
+
+  it('prompt is unchanged when no ruleFile is set', () => {
+    const capturePath = path.join(tmpDir, 'captured.txt')
+    const reviewerPath = path.join(tmpDir, 'capture_reviewer.sh')
+    fs.writeFileSync(reviewerPath, `#!/usr/bin/env bash\ncat > "${capturePath}"\necho "PASS"\n`)
+    fs.chmodSync(reviewerPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '' }
+    )
+    const captured = fs.readFileSync(capturePath, 'utf8')
+    assert.ok(!captured.includes('--- Rules ---'), 'Should not contain rules section when no ruleFile')
+  })
+
   it('allows session vars when sessionId is present', () => {
     const reviewerPath = path.join(tmpDir, 'pass_reviewer.sh')
     fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS"\n')

@@ -37,7 +37,8 @@
             "variablesPresent": [
               "session_diff"
             ]
-          }
+          },
+          "ruleFile": ".claude/rules/testing.md"
         }
       ]
     },
@@ -60,7 +61,8 @@
             "variablesPresent": [
               "staged_diff"
             ]
-          }
+          },
+          "ruleFile": ".claude/rules/testing.md"
         }
       ]
     }

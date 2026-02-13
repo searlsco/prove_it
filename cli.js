@@ -303,6 +303,12 @@ async function cmdInit () {
       log(`  Exists:  ${results.localConfig.path}`)
     }
 
+    if (results.ruleFile.created) {
+      log(`  Created: ${results.ruleFile.path}`)
+    } else if (results.ruleFile.existed) {
+      log(`  Exists:  ${results.ruleFile.path}`)
+    }
+
     if (results.scriptTest.created) {
       log(`  Created: ${results.scriptTest.path} (stub)`)
     } else if (results.scriptTest.isStub) {
@@ -363,6 +369,13 @@ async function cmdInit () {
       }
     }
 
+    if (results.ruleFile.created) {
+      todos.push({
+        done: false,
+        text: "Customize .claude/rules/testing.md with your project's testing standards"
+      })
+    }
+
     if (results.teamConfig.upgraded || overwritten) {
       todos.push({
         done: false,
@@ -411,7 +424,7 @@ const PROVE_IT_PROJECT_FILES = [
 ]
 
 function cmdDeinit () {
-  const { isScriptTestStub, removeGitHookShim } = require('./lib/init')
+  const { isScriptTestStub, isDefaultRuleFile, removeGitHookShim } = require('./lib/init')
   const repoRoot = process.cwd()
   const removed = []
   const skipped = []
@@ -455,6 +468,25 @@ function cmdDeinit () {
       if (removeGitHookShim(repoRoot, gitEvent)) {
         removed.push(`.git/hooks/${gitEvent}`)
       }
+    }
+  }
+
+  // Clean up default rule file (only if unmodified)
+  const ruleFilePath = path.join(repoRoot, '.claude', 'rules', 'testing.md')
+  if (fs.existsSync(ruleFilePath)) {
+    if (isDefaultRuleFile(ruleFilePath)) {
+      rmIfExists(ruleFilePath)
+      removed.push('.claude/rules/testing.md')
+      // Remove rules/ directory if empty
+      const rulesDir = path.join(repoRoot, '.claude', 'rules')
+      try {
+        if (fs.existsSync(rulesDir) && fs.readdirSync(rulesDir).length === 0) {
+          fs.rmdirSync(rulesDir)
+          removed.push('.claude/rules/')
+        }
+      } catch {}
+    } else {
+      skipped.push('.claude/rules/testing.md (customized)')
     }
   }
 

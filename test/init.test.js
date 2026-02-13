@@ -17,6 +17,7 @@ const {
   hasProveItSection,
   hasExecLine,
   isProveItAfterExec,
+  isDefaultRuleFile,
   PROVE_IT_SHIM_MARKER
 } = require('../lib/init')
 
@@ -58,6 +59,25 @@ describe('init', () => {
 
     it('returns false for nonexistent file', () => {
       assert.ok(!isScriptTestStub(path.join(tmpDir, 'nonexistent')))
+    })
+  })
+
+  describe('isDefaultRuleFile', () => {
+    it('returns true for default rule file', () => {
+      initProject(tmpDir, { gitHooks: false, defaultChecks: true })
+      const rulePath = path.join(tmpDir, '.claude', 'rules', 'testing.md')
+      assert.ok(isDefaultRuleFile(rulePath))
+    })
+
+    it('returns false for customized rule file', () => {
+      const ruleDir = path.join(tmpDir, '.claude', 'rules')
+      fs.mkdirSync(ruleDir, { recursive: true })
+      fs.writeFileSync(path.join(ruleDir, 'testing.md'), '# Custom rules\n')
+      assert.ok(!isDefaultRuleFile(path.join(ruleDir, 'testing.md')))
+    })
+
+    it('returns false for nonexistent file', () => {
+      assert.ok(!isDefaultRuleFile(path.join(tmpDir, 'nonexistent')))
     })
   })
 
@@ -148,6 +168,17 @@ describe('init', () => {
       assert.ok(editEntry, 'Should have PreToolUse edit entry')
       const ensureTests = editEntry.tasks.find(t => t.name === 'ensure-tests')
       assert.ok(ensureTests, 'ensure-tests should be in PreToolUse edit entry')
+    })
+
+    it('all default agent tasks include ruleFile', () => {
+      const cfg = buildConfig()
+      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
+      const agentTasks = allTasks.filter(t => t.type === 'agent')
+      assert.ok(agentTasks.length >= 3, 'Should have at least 3 agent tasks')
+      for (const task of agentTasks) {
+        assert.strictEqual(task.ruleFile, '.claude/rules/testing.md',
+          `Agent task "${task.name}" should have ruleFile set`)
+      }
     })
 
     it('omits ensure-tests when defaultChecks is false', () => {
@@ -532,6 +563,37 @@ describe('init', () => {
 
       const content = fs.readFileSync(scriptPath, 'utf8')
       assert.ok(content.includes('npm run test:unit'), 'custom content should be preserved')
+    })
+
+    it('creates .claude/rules/testing.md when defaultChecks is true', () => {
+      const results = initProject(tmpDir, { gitHooks: false, defaultChecks: true })
+      assert.ok(results.ruleFile.created)
+      assert.ok(!results.ruleFile.existed)
+      const rulePath = path.join(tmpDir, '.claude', 'rules', 'testing.md')
+      assert.ok(fs.existsSync(rulePath))
+      const content = fs.readFileSync(rulePath, 'utf8')
+      assert.ok(content.includes('Testing Rules'))
+      assert.ok(content.includes('TODO'))
+    })
+
+    it('does not create rule file when defaultChecks is false', () => {
+      const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      assert.ok(!results.ruleFile.created)
+      assert.ok(!results.ruleFile.existed)
+      const rulePath = path.join(tmpDir, '.claude', 'rules', 'testing.md')
+      assert.ok(!fs.existsSync(rulePath))
+    })
+
+    it('preserves existing rule file', () => {
+      const ruleDir = path.join(tmpDir, '.claude', 'rules')
+      fs.mkdirSync(ruleDir, { recursive: true })
+      fs.writeFileSync(path.join(ruleDir, 'testing.md'), 'Custom rules\n')
+
+      const results = initProject(tmpDir, { gitHooks: false, defaultChecks: true })
+      assert.ok(!results.ruleFile.created)
+      assert.ok(results.ruleFile.existed)
+      const content = fs.readFileSync(path.join(ruleDir, 'testing.md'), 'utf8')
+      assert.strictEqual(content, 'Custom rules\n')
     })
 
     it('installs git hook shims when gitHooks is true', () => {

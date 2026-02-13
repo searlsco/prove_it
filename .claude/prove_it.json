@@ -8,9 +8,6 @@
     "script/**/*",
     "example/**/*.js"
   ],
-  "format": {
-    "maxOutputChars": 12000
-  },
   "hooks": [
     {
       "type": "claude",
@@ -21,6 +18,17 @@
           "name": "lock-config",
           "type": "script",
           "command": "prove_it run_builtin config:lock"
+        },
+        {
+          "name": "ensure-tests",
+          "type": "agent",
+          "promptType": "reference",
+          "prompt": "review:test_investment",
+          "model": "haiku",
+          "ruleFile": ".claude/rules/testing.md",
+          "when": {
+            "linesWrittenSinceLastRun": 500
+          }
         }
       ]
     },
@@ -38,6 +46,8 @@
           "type": "agent",
           "promptType": "reference",
           "prompt": "review:test_coverage",
+          "model": "haiku",
+          "ruleFile": ".claude/rules/testing.md",
           "when": {
             "variablesPresent": [
               "session_diff"
@@ -60,6 +70,8 @@
           "type": "agent",
           "promptType": "reference",
           "prompt": "review:commit_quality",
+          "model": "sonnet",
+          "ruleFile": ".claude/rules/testing.md",
           "when": {
             "variablesPresent": [
               "staged_diff"
@@ -68,5 +80,6 @@
         }
       ]
     }
-  ]
+  ],
+  "initSeed": "291fdd02adc0"
 }
