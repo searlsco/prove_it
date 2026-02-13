@@ -60,6 +60,26 @@ describe('parseVerdict', () => {
     })
   })
 
+  describe('verdict after preamble', () => {
+    it('finds PASS after conversational preamble', () => {
+      const result = parseVerdict('Perfect. Now I can review the changes.\nPASS: all tests cover new behavior')
+      assert.strictEqual(result.pass, true)
+      assert.strictEqual(result.reason, 'all tests cover new behavior')
+    })
+
+    it('finds FAIL after conversational preamble', () => {
+      const result = parseVerdict('Let me check the diff.\nFAIL: no tests for new function')
+      assert.strictEqual(result.pass, false)
+      assert.strictEqual(result.reason, 'no tests for new function')
+    })
+
+    it('finds verdict after multiple preamble lines', () => {
+      const result = parseVerdict('Perfect. There are several changes.\nLet me investigate.\n\nPASS: looks good')
+      assert.strictEqual(result.pass, true)
+      assert.strictEqual(result.reason, 'looks good')
+    })
+  })
+
   describe('unexpected responses', () => {
     it('returns error for unexpected output', () => {
       const result = parseVerdict('I think the code looks good')
