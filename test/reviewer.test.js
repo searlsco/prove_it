@@ -236,6 +236,42 @@ describe('runReviewer with fixture shims', () => {
     })
   })
 
+  describe('environment isolation', () => {
+    it('clears CLAUDECODE so reviewer is not rejected as a nested session', () => {
+      setup()
+      // Shim that fails if CLAUDECODE is set (mimics real claude behavior)
+      const shimPath = path.join(tmpDir, 'claude_env_check.sh')
+      fs.writeFileSync(shimPath, [
+        '#!/usr/bin/env bash',
+        'cat > /dev/null',
+        'if [ -n "$CLAUDECODE" ]; then',
+        '  echo "Error: Claude Code cannot be launched inside another Claude Code session." >&2',
+        '  exit 1',
+        'fi',
+        'echo "PASS: CLAUDECODE was cleared"'
+      ].join('\n'))
+      fs.chmodSync(shimPath, 0o755)
+
+      // Simulate being inside a Claude Code session
+      const origClaudeCode = process.env.CLAUDECODE
+      process.env.CLAUDECODE = '1'
+
+      const review = runReviewer(tmpDir, {
+        command: shimPath
+      }, 'test prompt')
+
+      if (origClaudeCode === undefined) {
+        delete process.env.CLAUDECODE
+      } else {
+        process.env.CLAUDECODE = origClaudeCode
+      }
+
+      assert.strictEqual(review.available, true)
+      assert.strictEqual(review.pass, true, `Expected PASS but got error: ${review.error || 'none'}`)
+      cleanup()
+    })
+  })
+
   describe('timeout from config', () => {
     it('uses timeout from reviewerCfg', () => {
       setup()
