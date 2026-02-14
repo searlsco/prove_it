@@ -11,6 +11,9 @@ const {
   saveSessionState,
   getLatestSnapshot,
   generateDiffsSince,
+  recordFileEdit,
+  getFileEdits,
+  resetTurnTracking,
   recordWrite,
   recordTaskRun,
   linesWrittenSince
@@ -522,6 +525,77 @@ describe('session state functions', () => {
 
     it('linesWrittenSince returns 0 when no writes recorded', () => {
       assert.strictEqual(linesWrittenSince(SESSION_ID, 'any-task'), 0)
+    })
+  })
+
+  describe('file edit tracking', () => {
+    it('recordFileEdit accumulates tools and files', () => {
+      recordFileEdit(SESSION_ID, 'Edit', 'src/app.js')
+      recordFileEdit(SESSION_ID, 'Write', 'src/utils.js')
+      const edits = getFileEdits(SESSION_ID)
+      assert.deepStrictEqual(edits.tools, ['Edit', 'Write'])
+      assert.deepStrictEqual(edits.files, ['src/app.js', 'src/utils.js'])
+    })
+
+    it('recordFileEdit deduplicates tools and files', () => {
+      recordFileEdit(SESSION_ID, 'Edit', 'src/app.js')
+      recordFileEdit(SESSION_ID, 'Edit', 'src/app.js')
+      recordFileEdit(SESSION_ID, 'Write', 'src/app.js')
+      const edits = getFileEdits(SESSION_ID)
+      assert.deepStrictEqual(edits.tools, ['Edit', 'Write'])
+      assert.deepStrictEqual(edits.files, ['src/app.js'])
+    })
+
+    it('getFileEdits returns null when no edits recorded', () => {
+      assert.strictEqual(getFileEdits('no-edits-session'), null)
+    })
+
+    it('getFileEdits returns null for null sessionId', () => {
+      assert.strictEqual(getFileEdits(null), null)
+    })
+
+    it('resetTurnTracking clears edits', () => {
+      recordFileEdit(SESSION_ID, 'Edit', 'src/app.js')
+      assert.notStrictEqual(getFileEdits(SESSION_ID), null)
+      resetTurnTracking(SESSION_ID)
+      assert.strictEqual(getFileEdits(SESSION_ID), null)
+    })
+
+    it('recordFileEdit ignores null sessionId', () => {
+      recordFileEdit(null, 'Edit', 'src/app.js')
+      assert.strictEqual(getFileEdits(null), null)
+    })
+
+    it('recordFileEdit ignores null toolName', () => {
+      recordFileEdit(SESSION_ID, null, 'src/app.js')
+      assert.strictEqual(getFileEdits(SESSION_ID), null)
+    })
+
+    it('recordFileEdit ignores null filePath', () => {
+      recordFileEdit(SESSION_ID, 'Edit', null)
+      assert.strictEqual(getFileEdits(SESSION_ID), null)
+    })
+
+    it('resetTurnTracking is safe with null sessionId', () => {
+      resetTurnTracking(null) // should not throw
+    })
+
+    it('edits accumulate across multiple calls', () => {
+      recordFileEdit(SESSION_ID, 'Edit', 'a.js')
+      recordFileEdit(SESSION_ID, 'Write', 'b.js')
+      recordFileEdit(SESSION_ID, 'XcodeEdit', 'c.swift')
+      const edits = getFileEdits(SESSION_ID)
+      assert.strictEqual(edits.tools.length, 3)
+      assert.strictEqual(edits.files.length, 3)
+    })
+
+    it('edits are isolated between sessions', () => {
+      recordFileEdit('session-X', 'Edit', 'x.js')
+      recordFileEdit('session-Y', 'Write', 'y.js')
+      const editsX = getFileEdits('session-X')
+      const editsY = getFileEdits('session-Y')
+      assert.deepStrictEqual(editsX.files, ['x.js'])
+      assert.deepStrictEqual(editsY.files, ['y.js'])
     })
   })
 

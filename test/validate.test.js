@@ -104,6 +104,21 @@ describe('validateConfig', () => {
       assert.ok(errors.some(e => e.includes('Top-level "checks" is not valid')))
     })
 
+    it('passes fileEditingTools as valid array', () => {
+      const { errors } = validateConfig(validConfig({ fileEditingTools: ['XcodeEdit', 'CustomMCPWrite'] }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('errors when fileEditingTools is not an array', () => {
+      const { errors } = validateConfig(validConfig({ fileEditingTools: 'XcodeEdit' }))
+      assert.ok(errors.some(e => e.includes('"fileEditingTools" must be an array')))
+    })
+
+    it('errors when fileEditingTools contains non-string', () => {
+      const { errors } = validateConfig(validConfig({ fileEditingTools: ['XcodeEdit', 42] }))
+      assert.ok(errors.some(e => e.includes('fileEditingTools[1] must be a string')))
+    })
+
     it('errors on unknown top-level keys', () => {
       const cfg = validConfig()
       cfg.customThing = true
@@ -453,6 +468,90 @@ describe('validateConfig', () => {
       }))
       assert.strictEqual(errors.length, 0)
       assert.ok(warnings.some(w => w.includes('ruleFile only applies to agent tasks')))
+    })
+
+    it('passes toolsUsed as valid array', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { toolsUsed: ['XcodeEdit', 'Edit'] }
+      }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('errors when toolsUsed is not an array', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { toolsUsed: 'Edit' }
+      }))
+      assert.ok(errors.some(e => e.includes('toolsUsed must be an array')))
+    })
+
+    it('errors when toolsUsed contains non-string', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { toolsUsed: ['Edit', 42] }
+      }))
+      assert.ok(errors.some(e => e.includes('toolsUsed[1] must be a string')))
+    })
+
+    it('warns when toolsUsed is used on a git hook', () => {
+      const { errors, warnings } = validateConfig(validConfig({
+        hooks: [{
+          type: 'git',
+          event: 'pre-commit',
+          tasks: [{
+            name: 'a',
+            type: 'script',
+            command: 'x',
+            when: { toolsUsed: ['Edit'] }
+          }]
+        }]
+      }))
+      assert.strictEqual(errors.length, 0)
+      assert.ok(warnings.some(w => w.includes('toolsUsed') && w.includes('git')))
+    })
+
+    it('passes sourceFilesEdited as valid boolean', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { sourceFilesEdited: true }
+      }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('errors when sourceFilesEdited is not a boolean', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { sourceFilesEdited: 'yes' }
+      }))
+      assert.ok(errors.some(e => e.includes('sourceFilesEdited must be a boolean')))
+    })
+
+    it('warns when sourceFilesEdited is used on a git hook', () => {
+      const { errors, warnings } = validateConfig(validConfig({
+        hooks: [{
+          type: 'git',
+          event: 'pre-commit',
+          tasks: [{
+            name: 'a',
+            type: 'script',
+            command: 'x',
+            when: { sourceFilesEdited: true }
+          }]
+        }]
+      }))
+      assert.strictEqual(errors.length, 0)
+      assert.ok(warnings.some(w => w.includes('sourceFilesEdited') && w.includes('git')))
     })
 
     it('passes variablesPresent as valid array', () => {

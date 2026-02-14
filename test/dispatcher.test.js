@@ -4,8 +4,8 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
-const { matchesHookEntry, evaluateWhen, computeWriteInfo, defaultConfig } = require('../lib/dispatcher/claude')
-const { recordWrite, recordTaskRun } = require('../lib/session')
+const { matchesHookEntry, evaluateWhen, computeWriteInfo, defaultConfig, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
+const { recordWrite, recordTaskRun, recordFileEdit, resetTurnTracking } = require('../lib/session')
 
 describe('claude dispatcher', () => {
   describe('matchesHookEntry', () => {
@@ -575,6 +575,211 @@ describe('claude dispatcher', () => {
       }
       const result = computeWriteInfo(input, ['**/*.js'], tmpDir)
       assert.strictEqual(result.lines, 0)
+    })
+  })
+
+  describe('evaluateWhen — toolsUsed', () => {
+    let tmpDir
+    let origProveItDir
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_tu_'))
+      origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+    })
+
+    afterEach(() => {
+      if (origProveItDir === undefined) {
+        delete process.env.PROVE_IT_DIR
+      } else {
+        process.env.PROVE_IT_DIR = origProveItDir
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('PreToolUse passes when toolName is in the list', () => {
+      const result = evaluateWhen(
+        { toolsUsed: ['XcodeEdit', 'Edit'] },
+        { rootDir: '.', hookEvent: 'PreToolUse', toolName: 'Edit', sessionId: null }
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('PreToolUse skips when toolName is not in the list', () => {
+      const result = evaluateWhen(
+        { toolsUsed: ['XcodeEdit'] },
+        { rootDir: '.', hookEvent: 'PreToolUse', toolName: 'Edit', sessionId: null }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('none of'), `Expected skip reason, got: ${result}`)
+    })
+
+    it('Stop passes when a listed tool was used', () => {
+      const sessionId = 'test-tu-stop-pass'
+      recordFileEdit(sessionId, 'XcodeEdit', 'src/app.swift')
+      const result = evaluateWhen(
+        { toolsUsed: ['XcodeEdit'] },
+        { rootDir: '.', hookEvent: 'Stop', sessionId }
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('Stop skips when no listed tool was used', () => {
+      const sessionId = 'test-tu-stop-skip'
+      recordFileEdit(sessionId, 'Edit', 'src/app.js')
+      const result = evaluateWhen(
+        { toolsUsed: ['XcodeEdit'] },
+        { rootDir: '.', hookEvent: 'Stop', sessionId }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('none of'), `Expected skip reason, got: ${result}`)
+    })
+
+    it('Stop skips when no edits recorded at all', () => {
+      const result = evaluateWhen(
+        { toolsUsed: ['Edit'] },
+        { rootDir: '.', hookEvent: 'Stop', sessionId: 'test-tu-no-edits' }
+      )
+      assert.notStrictEqual(result, true)
+    })
+
+    it('SessionStart always skips', () => {
+      const result = evaluateWhen(
+        { toolsUsed: ['Edit'] },
+        { rootDir: '.', hookEvent: 'SessionStart', sessionId: null }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('not applicable'), `Expected not applicable reason, got: ${result}`)
+    })
+  })
+
+  describe('evaluateWhen — sourceFilesEdited', () => {
+    let tmpDir
+    let origProveItDir
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_sfe_'))
+      origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+    })
+
+    afterEach(() => {
+      if (origProveItDir === undefined) {
+        delete process.env.PROVE_IT_DIR
+      } else {
+        process.env.PROVE_IT_DIR = origProveItDir
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('PreToolUse passes when tool is an edit tool and file matches sources', () => {
+      const result = evaluateWhen(
+        { sourceFilesEdited: true },
+        {
+          rootDir: tmpDir,
+          hookEvent: 'PreToolUse',
+          toolName: 'Edit',
+          toolInput: { file_path: 'src/app.js' },
+          sources: ['**/*.js'],
+          fileEditingTools: BUILTIN_EDIT_TOOLS,
+          sessionId: null
+        }
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('PreToolUse skips when tool is not an edit tool', () => {
+      const result = evaluateWhen(
+        { sourceFilesEdited: true },
+        {
+          rootDir: tmpDir,
+          hookEvent: 'PreToolUse',
+          toolName: 'Read',
+          toolInput: { file_path: 'src/app.js' },
+          sources: ['**/*.js'],
+          fileEditingTools: BUILTIN_EDIT_TOOLS,
+          sessionId: null
+        }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('no source files were edited'), `Expected skip reason, got: ${result}`)
+    })
+
+    it('PreToolUse skips when file is not a source file', () => {
+      const result = evaluateWhen(
+        { sourceFilesEdited: true },
+        {
+          rootDir: tmpDir,
+          hookEvent: 'PreToolUse',
+          toolName: 'Edit',
+          toolInput: { file_path: 'README.md' },
+          sources: ['**/*.js'],
+          fileEditingTools: BUILTIN_EDIT_TOOLS,
+          sessionId: null
+        }
+      )
+      assert.notStrictEqual(result, true)
+    })
+
+    it('PreToolUse passes for custom fileEditingTools', () => {
+      const result = evaluateWhen(
+        { sourceFilesEdited: true },
+        {
+          rootDir: tmpDir,
+          hookEvent: 'PreToolUse',
+          toolName: 'XcodeEdit',
+          toolInput: { file_path: 'src/app.swift' },
+          sources: ['**/*.swift'],
+          fileEditingTools: [...BUILTIN_EDIT_TOOLS, 'XcodeEdit'],
+          sessionId: null
+        }
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('Stop passes when session has file edits', () => {
+      const sessionId = 'test-sfe-stop-pass'
+      recordFileEdit(sessionId, 'Edit', 'src/app.js')
+      const result = evaluateWhen(
+        { sourceFilesEdited: true },
+        { rootDir: '.', hookEvent: 'Stop', sessionId }
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('Stop skips when session has no file edits', () => {
+      const result = evaluateWhen(
+        { sourceFilesEdited: true },
+        { rootDir: '.', hookEvent: 'Stop', sessionId: 'test-sfe-stop-empty' }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('no source files were edited'), `Expected skip reason, got: ${result}`)
+    })
+
+    it('Stop skips after turn tracking is reset', () => {
+      const sessionId = 'test-sfe-stop-reset'
+      recordFileEdit(sessionId, 'Edit', 'src/app.js')
+      resetTurnTracking(sessionId)
+      const result = evaluateWhen(
+        { sourceFilesEdited: true },
+        { rootDir: '.', hookEvent: 'Stop', sessionId }
+      )
+      assert.notStrictEqual(result, true)
+    })
+
+    it('SessionStart always skips', () => {
+      const result = evaluateWhen(
+        { sourceFilesEdited: true },
+        { rootDir: '.', hookEvent: 'SessionStart', sessionId: null }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('not applicable'), `Expected not applicable reason, got: ${result}`)
+    })
+  })
+
+  describe('BUILTIN_EDIT_TOOLS', () => {
+    it('contains Edit, Write, NotebookEdit', () => {
+      assert.deepStrictEqual(BUILTIN_EDIT_TOOLS, ['Edit', 'Write', 'NotebookEdit'])
     })
   })
 

@@ -602,4 +602,252 @@ describe('Config-driven hook behavior (v2)', () => {
       assert.strictEqual(result3.output.decision, 'block', 'Should still block (script still fails)')
     })
   })
+
+  // ──── sourceFilesEdited + toolsUsed when conditions ────
+
+  describe('sourceFilesEdited when condition', () => {
+    it('fires Stop after PreToolUse records source edits', () => {
+      const sessionId = 'test-sfe-integration'
+      createFile(tmpDir, 'src/app.js', 'console.log("hello")\n')
+      createFile(tmpDir, 'script/check', '#!/usr/bin/env bash\nexit 0\n')
+      fs.chmodSync(path.join(tmpDir, 'script', 'check'), 0o755)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Edit|Write',
+          tasks: [
+            { name: 'lock-config', type: 'script', command: 'true' }
+          ]
+        },
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            {
+              name: 'sfe-check',
+              type: 'script',
+              command: './script/check',
+              when: { sourceFilesEdited: true }
+            }
+          ]
+        }
+      ], { sources: ['src/**/*.js'] }))
+
+      const env = isolatedEnv(tmpDir)
+
+      // Stop without prior PreToolUse → should skip (no edits)
+      const result1 = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+      assert.strictEqual(result1.exitCode, 0)
+
+      const logPath = path.join(env.PROVE_IT_DIR, 'sessions', `${sessionId}.jsonl`)
+      assert.ok(fs.existsSync(logPath), 'Session log should exist')
+      const entries = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+      const skipEntry = entries.find(e => e.reviewer === 'sfe-check' && e.status === 'SKIP')
+      assert.ok(skipEntry, 'Should have SKIP entry when no edits recorded')
+
+      // Now simulate PreToolUse for Edit on source file
+      invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Edit',
+        tool_input: { file_path: path.join(tmpDir, 'src', 'app.js'), old_string: 'a', new_string: 'b' },
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+
+      // Stop should now fire
+      const result2 = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+      assert.strictEqual(result2.exitCode, 0)
+      assert.ok(result2.output, 'Stop should produce output after source edits')
+      assert.strictEqual(result2.output.decision, 'approve')
+    })
+
+    it('cross-session isolation: session B does not see session A edits', () => {
+      createFile(tmpDir, 'src/app.js', 'code\n')
+      createFile(tmpDir, 'script/check', '#!/usr/bin/env bash\nexit 0\n')
+      fs.chmodSync(path.join(tmpDir, 'script', 'check'), 0o755)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Edit|Write',
+          tasks: []
+        },
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            {
+              name: 'sfe-check',
+              type: 'script',
+              command: './script/check',
+              when: { sourceFilesEdited: true }
+            }
+          ]
+        }
+      ], { sources: ['src/**/*.js'] }))
+
+      const env = isolatedEnv(tmpDir)
+
+      // Session A records edits
+      invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Edit',
+        tool_input: { file_path: path.join(tmpDir, 'src', 'app.js'), old_string: 'a', new_string: 'b' },
+        session_id: 'session-A',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+
+      // Session B's Stop should skip (no edits in B)
+      const result = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: 'session-B',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+      assert.strictEqual(result.exitCode, 0)
+      const logPath = path.join(env.PROVE_IT_DIR, 'sessions', 'session-B.jsonl')
+      assert.ok(fs.existsSync(logPath), 'Session B log should exist')
+      const entries = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+      const skipEntry = entries.find(e => e.reviewer === 'sfe-check' && e.status === 'SKIP')
+      assert.ok(skipEntry, 'Session B should skip because it has no edits')
+    })
+
+    it('turn reset: after successful Stop, next Stop skips unless new edits', () => {
+      const sessionId = 'test-sfe-reset'
+      createFile(tmpDir, 'src/app.js', 'code\n')
+      createFile(tmpDir, 'script/check', '#!/usr/bin/env bash\nexit 0\n')
+      fs.chmodSync(path.join(tmpDir, 'script', 'check'), 0o755)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Edit|Write',
+          tasks: []
+        },
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            {
+              name: 'sfe-check',
+              type: 'script',
+              command: './script/check',
+              when: { sourceFilesEdited: true }
+            }
+          ]
+        }
+      ], { sources: ['src/**/*.js'] }))
+
+      const env = isolatedEnv(tmpDir)
+
+      // Record edit, then Stop
+      invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Edit',
+        tool_input: { file_path: path.join(tmpDir, 'src', 'app.js'), old_string: 'a', new_string: 'b' },
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+
+      const result1 = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+      assert.strictEqual(result1.exitCode, 0)
+      assert.ok(result1.output, 'First Stop should fire')
+      assert.strictEqual(result1.output.decision, 'approve')
+
+      // Second Stop without new edits → should skip
+      const result2 = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+      assert.strictEqual(result2.exitCode, 0)
+      const logPath = path.join(env.PROVE_IT_DIR, 'sessions', `${sessionId}.jsonl`)
+      const entries = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+      const skipEntries = entries.filter(e => e.reviewer === 'sfe-check' && e.status === 'SKIP')
+      assert.ok(skipEntries.length >= 1, 'Second Stop should have SKIP entry after turn reset')
+    })
+  })
+
+  describe('toolsUsed when condition', () => {
+    it('fires Stop only when specified tool was used', () => {
+      const sessionId = 'test-tu-integration'
+      createFile(tmpDir, 'src/app.swift', 'code\n')
+      createFile(tmpDir, 'script/check', '#!/usr/bin/env bash\nexit 0\n')
+      fs.chmodSync(path.join(tmpDir, 'script', 'check'), 0o755)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Edit|Write',
+          tasks: []
+        },
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            {
+              name: 'xcode-only-check',
+              type: 'script',
+              command: './script/check',
+              when: { toolsUsed: ['XcodeEdit'] }
+            }
+          ]
+        }
+      ], { sources: ['src/**/*.swift'], fileEditingTools: ['XcodeEdit'] }))
+
+      const env = isolatedEnv(tmpDir)
+
+      // Edit with Edit tool (not in toolsUsed list) → Stop should skip
+      invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Edit',
+        tool_input: { file_path: path.join(tmpDir, 'src', 'app.swift'), old_string: 'a', new_string: 'b' },
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+
+      const result1 = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+      assert.strictEqual(result1.exitCode, 0)
+      const logPath = path.join(env.PROVE_IT_DIR, 'sessions', `${sessionId}.jsonl`)
+      const entries = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+      const skipEntry = entries.find(e => e.reviewer === 'xcode-only-check' && e.status === 'SKIP')
+      assert.ok(skipEntry, 'Should skip when Edit was used but toolsUsed only has XcodeEdit')
+
+      // Now use XcodeEdit → Stop should fire
+      // First reset by simulating a successful stop (need fresh session for clean slate)
+      const sessionId2 = 'test-tu-integration-2'
+      invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'XcodeEdit',
+        tool_input: { file_path: path.join(tmpDir, 'src', 'app.swift') },
+        session_id: sessionId2,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+
+      const result2 = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId2,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+      assert.strictEqual(result2.exitCode, 0)
+      assert.ok(result2.output, 'Stop should fire when XcodeEdit was used')
+      assert.strictEqual(result2.output.decision, 'approve')
+    })
+  })
 })

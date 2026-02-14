@@ -5,6 +5,7 @@ const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
 const { expandTemplate, makeResolvers, KNOWN_VARS, SESSION_VARS, getUnknownVars, getSessionVars } = require('../lib/template')
+const { recordFileEdit, saveSessionState } = require('../lib/session')
 
 describe('template', () => {
   describe('expandTemplate', () => {
@@ -373,6 +374,110 @@ describe('template', () => {
         const resolvers = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null })
         const commits = resolvers.recent_commits()
         assert.ok(commits.includes('init'), `recent_commits should include 'init' commit, got: ${commits}`)
+      })
+    })
+
+    describe('session_diff git fallback', () => {
+      let tmpDir
+      let origProveItDir
+
+      beforeEach(() => {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_sdgf_'))
+        origProveItDir = process.env.PROVE_IT_DIR
+        process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
+
+        spawnSync('git', ['init'], { cwd: tmpDir })
+        spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
+        spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
+        fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true })
+        fs.writeFileSync(path.join(tmpDir, 'src', 'app.js'), 'original\n')
+        spawnSync('git', ['add', '.'], { cwd: tmpDir })
+        spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+      })
+
+      afterEach(() => {
+        if (origProveItDir === undefined) {
+          delete process.env.PROVE_IT_DIR
+        } else {
+          process.env.PROVE_IT_DIR = origProveItDir
+        }
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      })
+
+      it('produces git diff when file-history is empty but edits are tracked', () => {
+        const sessionId = 'test-sdgf-fallback'
+        const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
+        // Record session baseline with git head
+        saveSessionState(sessionId, 'git', { head })
+        // Track a file edit
+        recordFileEdit(sessionId, 'Edit', 'src/app.js')
+        // Modify the file on disk
+        fs.writeFileSync(path.join(tmpDir, 'src', 'app.js'), 'changed content\n')
+
+        const resolvers = makeResolvers({
+          rootDir: tmpDir,
+          projectDir: tmpDir,
+          sessionId,
+          toolInput: null
+        })
+        const diff = resolvers.session_diff()
+        assert.ok(diff.includes('Session changes (git diff)'), `Should use git fallback, got: ${diff}`)
+        assert.ok(diff.includes('changed content'), `Should include the change, got: ${diff}`)
+      })
+
+      it('returns empty when no edits tracked', () => {
+        const sessionId = 'test-sdgf-no-edits'
+        const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
+        saveSessionState(sessionId, 'git', { head })
+
+        const resolvers = makeResolvers({
+          rootDir: tmpDir,
+          projectDir: tmpDir,
+          sessionId,
+          toolInput: null
+        })
+        assert.strictEqual(resolvers.session_diff(), '')
+      })
+
+      it('uses last_stop_head over baseline when available', () => {
+        const sessionId = 'test-sdgf-checkpoint'
+        const initialHead = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
+        saveSessionState(sessionId, 'git', { head: initialHead })
+
+        // Make a commit to create a new HEAD
+        fs.writeFileSync(path.join(tmpDir, 'src', 'app.js'), 'mid-session change\n')
+        spawnSync('git', ['add', '.'], { cwd: tmpDir })
+        spawnSync('git', ['commit', '-m', 'mid-session'], { cwd: tmpDir })
+        const checkpointHead = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
+        saveSessionState(sessionId, 'last_stop_head', checkpointHead)
+
+        // Now make another change
+        fs.writeFileSync(path.join(tmpDir, 'src', 'app.js'), 'post-checkpoint change\n')
+        recordFileEdit(sessionId, 'Edit', 'src/app.js')
+
+        const resolvers = makeResolvers({
+          rootDir: tmpDir,
+          projectDir: tmpDir,
+          sessionId,
+          toolInput: null
+        })
+        const diff = resolvers.session_diff()
+        assert.ok(diff.includes('post-checkpoint'), `Should diff from checkpoint, got: ${diff}`)
+        assert.ok(!diff.includes('original'), `Should NOT include pre-checkpoint changes, got: ${diff}`)
+      })
+
+      it('returns empty when no baseHead available', () => {
+        const sessionId = 'test-sdgf-no-base'
+        recordFileEdit(sessionId, 'Edit', 'src/app.js')
+        fs.writeFileSync(path.join(tmpDir, 'src', 'app.js'), 'changed\n')
+
+        const resolvers = makeResolvers({
+          rootDir: tmpDir,
+          projectDir: tmpDir,
+          sessionId,
+          toolInput: null
+        })
+        assert.strictEqual(resolvers.session_diff(), '')
       })
     })
   })

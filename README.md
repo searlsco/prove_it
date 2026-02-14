@@ -191,7 +191,62 @@ PreToolUse hooks can filter by tool name and command patterns:
   "when": { "fileExists": ".config" } }
 ```
 
-Supported conditions: `fileExists`, `envSet`, `envNotSet`.
+Supported conditions:
+
+| Condition | Type | Description |
+|-----------|------|-------------|
+| `fileExists` | string | Passes when file exists relative to project root |
+| `envSet` | string | Passes when environment variable is set |
+| `envNotSet` | string | Passes when environment variable is not set |
+| `variablesPresent` | string[] | Passes when all listed template variables resolve to non-empty values |
+| `linesWrittenSinceLastRun` | number | Passes when at least N source lines have been written since the task last ran |
+| `sourcesModifiedSinceLastRun` | boolean | Passes when source file mtimes are newer than the last run |
+| `sourceFilesEdited` | boolean | Passes when source files were edited this turn (session-scoped, tool-agnostic) |
+| `toolsUsed` | string[] | Passes when any of the listed tools were used this turn |
+
+#### Session-scoped conditions
+
+`sourceFilesEdited` and `toolsUsed` are **session-scoped**: they track which tools and files each Claude Code session uses, per-turn. After a successful Stop, the tracking resets so the next Stop only fires if new edits occur.
+
+These conditions solve cross-session bleed — unlike `sourcesModifiedSinceLastRun` (which uses global file timestamps), session-scoped conditions ensure Session A's edits don't trigger Session B's reviewers.
+
+**`sourceFilesEdited: true`** — The recommended condition for gating reviewers on Stop:
+
+```json
+{
+  "name": "coverage-review",
+  "type": "agent",
+  "prompt": "review:test_coverage",
+  "promptType": "reference",
+  "when": { "sourceFilesEdited": true }
+}
+```
+
+**`toolsUsed: ["XcodeEdit", "Edit"]`** — Gates a task on specific tools being used:
+
+```json
+{
+  "name": "xcode-review",
+  "type": "agent",
+  "prompt": "Review Xcode changes...",
+  "when": { "toolsUsed": ["XcodeEdit"] }
+}
+```
+
+### Tracking MCP editing tools
+
+By default, prove_it tracks Claude's built-in editing tools (`Edit`, `Write`, `NotebookEdit`). If Claude edits files through MCP tools (e.g. Xcode MCP's `XcodeEdit`), add them to `fileEditingTools` so prove_it can track them:
+
+```json
+{
+  "configVersion": 3,
+  "fileEditingTools": ["XcodeEdit"],
+  "sources": ["**/*.swift", "**/*.m"],
+  "hooks": [...]
+}
+```
+
+Tools listed in `fileEditingTools` are tracked alongside the builtins — they participate in `sourceFilesEdited`, `toolsUsed`, and the `session_diff` git fallback.
 
 ## Env tasks
 
@@ -249,7 +304,7 @@ These expand in agent prompts:
 | `{{staged_files}}` | `git diff --cached --name-only` |
 | `{{working_diff}}` | `git diff` (unstaged changes) |
 | `{{changed_files}}` | `git diff --name-only HEAD` |
-| `{{session_diff}}` | All changes since session baseline |
+| `{{session_diff}}` | All changes since session baseline (uses Claude Code file-history, falls back to git diff scoped to tracked files) |
 | `{{test_output}}` | Output from the most recent script check |
 | `{{tool_command}}` | The command Claude is trying to run |
 | `{{file_path}}` | The file Claude is trying to edit |
@@ -442,14 +497,14 @@ prove_it doctor
 - **Hooks not firing** — Restart Claude Code after `prove_it install`
 - **Tests not running** — Check `./script/test` exists and is executable (`chmod +x`)
 - **Hooks running in wrong directories** — prove_it only activates in git repos
-- **coverage-review never fires** — The default `when` condition (`variablesPresent: ["session_diff"]`) requires Claude Code's built-in Edit tool to track file changes. If Claude is editing files through an MCP tool instead (e.g. Xcode MCP's `XcodeEdit`), `session_diff` will always be empty and the reviewer will never trigger. To fix this, switch the condition in `.claude/prove_it.json` to use file modification times instead:
+- **coverage-review never fires** — The default `when` condition is `sourceFilesEdited: true`, which tracks file edits per-session. If you use MCP tools that edit files (e.g. Xcode MCP's `XcodeEdit`), add them to `fileEditingTools` in your config so prove_it can track them:
   ```json
   {
-    "name": "coverage-review",
-    "when": { "sourcesModifiedSinceLastRun": true }
+    "fileEditingTools": ["XcodeEdit"],
+    "hooks": [...]
   }
   ```
-  Note: `sourcesModifiedSinceLastRun` uses global file timestamps, so concurrent Claude Code sessions on the same project may trigger each other's reviewers.
+  This also enables the `session_diff` git fallback — when Claude Code's built-in file-history is empty (because edits went through MCP tools), prove_it falls back to a git diff scoped to only the files tracked during the session.
 
 ## Examples
 
