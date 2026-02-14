@@ -237,6 +237,29 @@ describe('runReviewer with fixture shims', () => {
   })
 
   describe('environment isolation', () => {
+    it('sets LC_ALL=C so macOS sed handles non-UTF-8 bytes in diffs', () => {
+      setup()
+      const shimPath = path.join(tmpDir, 'lc_check.sh')
+      fs.writeFileSync(shimPath, [
+        '#!/usr/bin/env bash',
+        'cat > /dev/null',
+        'if [ "$LC_ALL" = "C" ]; then',
+        '  echo "PASS: LC_ALL is C"',
+        'else',
+        '  echo "FAIL: LC_ALL was not C"',
+        'fi'
+      ].join('\n'))
+      fs.chmodSync(shimPath, 0o755)
+
+      const review = runReviewer(tmpDir, {
+        command: shimPath
+      }, 'test prompt')
+
+      assert.strictEqual(review.available, true)
+      assert.strictEqual(review.pass, true, `Expected PASS but got: ${review.reason || review.error}`)
+      cleanup()
+    })
+
     it('clears CLAUDECODE so reviewer is not rejected as a nested session', () => {
       setup()
       // Shim that fails if CLAUDECODE is set (mimics real claude behavior)
