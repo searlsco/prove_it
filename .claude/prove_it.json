@@ -49,7 +49,9 @@
           "model": "haiku",
           "ruleFile": ".claude/rules/testing.md",
           "when": {
-            "sourcesModifiedSinceLastRun": true
+            "variablesPresent": [
+              "session_diff"
+            ]
           }
         }
       ]

@@ -34,7 +34,9 @@
           "promptType": "reference",
           "model": "haiku",
           "when": {
-            "sourcesModifiedSinceLastRun": true
+            "variablesPresent": [
+              "session_diff"
+            ]
           },
           "ruleFile": ".claude/rules/testing.md"
         }

@@ -442,6 +442,14 @@ prove_it doctor
 - **Hooks not firing** — Restart Claude Code after `prove_it install`
 - **Tests not running** — Check `./script/test` exists and is executable (`chmod +x`)
 - **Hooks running in wrong directories** — prove_it only activates in git repos
+- **coverage-review never fires** — The default `when` condition (`variablesPresent: ["session_diff"]`) requires Claude Code's built-in Edit tool to track file changes. If Claude is editing files through an MCP tool instead (e.g. Xcode MCP's `XcodeEdit`), `session_diff` will always be empty and the reviewer will never trigger. To fix this, switch the condition in `.claude/prove_it.json` to use file modification times instead:
+  ```json
+  {
+    "name": "coverage-review",
+    "when": { "sourcesModifiedSinceLastRun": true }
+  }
+  ```
+  Note: `sourcesModifiedSinceLastRun` uses global file timestamps, so concurrent Claude Code sessions on the same project may trigger each other's reviewers.
 
 ## Examples
 
