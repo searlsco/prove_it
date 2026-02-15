@@ -287,6 +287,20 @@ describe('validateConfig', () => {
       assert.ok(errors.some(e => e.includes('mtime must be a boolean')))
     })
 
+    it('accepts enabled as a boolean', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', enabled: false
+      }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('errors on non-boolean enabled', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', enabled: 'no'
+      }))
+      assert.ok(errors.some(e => e.includes('enabled must be a boolean')))
+    })
+
     it('errors on unknown task keys', () => {
       const { errors } = validateConfig(cfgWithTask({
         name: 'a', type: 'script', command: 'x', extraKey: true

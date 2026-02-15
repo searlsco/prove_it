@@ -363,6 +363,76 @@ describe('Config-driven hook behavior (v2)', () => {
       }
     })
 
+    it('skips task with enabled: false and logs SKIP with Disabled reason', () => {
+      const sessionId = 'test-enabled-false-skip'
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            {
+              name: 'disabled-check',
+              type: 'script',
+              command: 'exit 1',
+              enabled: false
+            }
+          ]
+        }
+      ]))
+
+      const env = isolatedEnv(tmpDir)
+      const result = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+
+      // Disabled task should not block — silent exit or pass
+      assert.strictEqual(result.exitCode, 0)
+      if (result.output) {
+        assert.notStrictEqual(result.output.decision, 'block',
+          'Disabled task should not block')
+      }
+
+      // Verify SKIP log entry with "Disabled" reason
+      const logPath = path.join(env.PROVE_IT_DIR, 'sessions', `${sessionId}.jsonl`)
+      assert.ok(fs.existsSync(logPath), `Session log should exist at ${logPath}`)
+      const entries = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+      const skipEntry = entries.find(e => e.reviewer === 'disabled-check' && e.status === 'SKIP')
+      assert.ok(skipEntry, 'Should have a SKIP log entry for the disabled task')
+      assert.strictEqual(skipEntry.reason, 'Disabled',
+        `SKIP reason should be 'Disabled', got: ${skipEntry.reason}`)
+    })
+
+    it('runs task with enabled: true', () => {
+      createFastTestScript(tmpDir, false)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            {
+              name: 'enabled-check',
+              type: 'script',
+              command: './script/test_fast',
+              enabled: true
+            }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: 'test-enabled-true-runs',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, 'Task with enabled: true should execute')
+      assert.strictEqual(result.output.decision, 'block',
+        'Failing task with enabled: true should block')
+    })
+
     it('logs SKIP entry when when condition is not met', () => {
       const sessionId = 'test-when-skip-log'
       writeConfig(tmpDir, makeConfig([

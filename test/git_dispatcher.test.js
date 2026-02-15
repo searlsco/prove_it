@@ -182,6 +182,31 @@ describe('git dispatcher', () => {
       assert.strictEqual(failure, null)
     })
 
+    it('skips task with enabled: false', () => {
+      const failScript = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
+      const entries = [{
+        type: 'git',
+        event: 'pre-commit',
+        tasks: [{ name: 'disabled-task', type: 'script', command: failScript, enabled: false }]
+      }]
+      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
+      const { failure } = runGitTasks(entries, context)
+      assert.strictEqual(failure, null, 'Disabled task should be skipped, not executed')
+    })
+
+    it('runs task with enabled: true', () => {
+      const failScript = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
+      const entries = [{
+        type: 'git',
+        event: 'pre-commit',
+        tasks: [{ name: 'enabled-task', type: 'script', command: failScript, enabled: true }]
+      }]
+      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
+      const { failure } = runGitTasks(entries, context)
+      assert.ok(failure, 'Task with enabled: true should execute and report failure')
+      assert.ok(failure.includes('enabled-task'), 'Failure should name the task')
+    })
+
     it('propagates test output between tasks', () => {
       const script = makeScript('output.sh', '#!/usr/bin/env bash\necho "test output here"\nexit 0\n')
       const entries = [{

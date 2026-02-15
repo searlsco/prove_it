@@ -168,6 +168,17 @@ Block Claude from editing config files:
 - **`agent`** — sends a prompt to an AI reviewer, expects PASS/FAIL response (see [Agent tasks](#agent-tasks))
 - **`env`** — runs a command that outputs environment variables, injected into Claude's session (SessionStart only, see [Env tasks](#env-tasks))
 
+### Disabling individual tasks
+
+Set `enabled: false` on a task to skip it without removing it from config:
+
+```json
+{ "name": "slow-review", "type": "agent", "prompt": "review:test_coverage",
+  "promptType": "reference", "enabled": false }
+```
+
+Omitting `enabled` (or setting it to `true`) runs the task normally. Disabled tasks are logged as SKIP with reason "Disabled".
+
 ### Matchers and triggers
 
 PreToolUse hooks can filter by tool name and command patterns:
