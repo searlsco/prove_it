@@ -197,6 +197,20 @@ describe('session state functions', () => {
       assert.strictEqual(lastEntry.status, 'FAIL')
       assert.strictEqual(lastEntry.reason, 'Missing tests for new function')
     })
+
+    it('includes durationMs when provided', () => {
+      logReview(SESSION_ID, '/project', 'fast-tests', 'PASS', 'OK', 1234)
+      const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${SESSION_ID}.jsonl`)
+      const entry = JSON.parse(fs.readFileSync(logFile, 'utf8').trim().split('\n').pop())
+      assert.strictEqual(entry.durationMs, 1234)
+    })
+
+    it('omits durationMs when not provided', () => {
+      logReview(SESSION_ID, '/project', 'fast-tests', 'PASS', 'OK')
+      const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${SESSION_ID}.jsonl`)
+      const entry = JSON.parse(fs.readFileSync(logFile, 'utf8').trim().split('\n').pop())
+      assert.strictEqual('durationMs' in entry, false)
+    })
   })
 
   describe('getLatestSnapshot', () => {

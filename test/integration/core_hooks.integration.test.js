@@ -1,5 +1,7 @@
 const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
+const fs = require('fs')
+const path = require('path')
 const { spawnSync } = require('child_process')
 
 const {
@@ -400,6 +402,132 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
       assert.strictEqual(result.exitCode, 0)
       assert.strictEqual(result.output, null)
+    })
+  })
+
+  describe('task duration logging', () => {
+    function readSessionLog (tmpDir, sessionId) {
+      const logFile = path.join(tmpDir, '.prove_it_test', 'sessions', `${sessionId}.jsonl`)
+      if (!fs.existsSync(logFile)) return []
+      return fs.readFileSync(logFile, 'utf8').trim().split('\n')
+        .filter(l => l).map(l => JSON.parse(l))
+    }
+
+    it('logs durationMs for passing claude Stop task', () => {
+      createFastTestScript(tmpDir, true)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+          ]
+        }
+      ]))
+
+      const sessionId = 'test-duration-pass'
+      invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      const entries = readSessionLog(tmpDir, sessionId)
+      const passEntry = entries.find(e => e.reviewer === 'fast-tests' && e.status === 'PASS')
+      assert.ok(passEntry, 'Should have a PASS log entry for fast-tests')
+      assert.strictEqual(typeof passEntry.durationMs, 'number',
+        `durationMs should be a number, got ${typeof passEntry.durationMs}`)
+      assert.ok(passEntry.durationMs >= 0,
+        `durationMs should be non-negative, got ${passEntry.durationMs}`)
+    })
+
+    it('logs durationMs for failing claude Stop task', () => {
+      createFastTestScript(tmpDir, false)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+          ]
+        }
+      ]))
+
+      const sessionId = 'test-duration-fail'
+      invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      const entries = readSessionLog(tmpDir, sessionId)
+      const failEntry = entries.find(e => e.reviewer === 'fast-tests' && e.status === 'FAIL')
+      assert.ok(failEntry, 'Should have a FAIL log entry for fast-tests')
+      assert.strictEqual(typeof failEntry.durationMs, 'number',
+        `durationMs should be a number, got ${typeof failEntry.durationMs}`)
+      assert.ok(failEntry.durationMs >= 0,
+        `durationMs should be non-negative, got ${failEntry.durationMs}`)
+    })
+
+    it('logs durationMs for git hook tasks', () => {
+      createTestScript(tmpDir, true)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'git',
+          event: 'pre-commit',
+          tasks: [
+            { name: 'full-tests', type: 'script', command: './script/test' }
+          ]
+        }
+      ]))
+
+      // Git hooks use project-level logs (no session_id), so read from PROVE_IT_DIR
+      const proveItDir = path.join(tmpDir, '.prove_it_test')
+      invokeHook('git:pre-commit', {}, {
+        projectDir: tmpDir,
+        cwd: tmpDir,
+        cleanEnv: true,
+        env: { PATH: process.env.PATH, ...isolatedEnv(tmpDir), CLAUDECODE: '1' }
+      })
+
+      const sessionsDir = path.join(proveItDir, 'sessions')
+      if (!fs.existsSync(sessionsDir)) return
+      const logFiles = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.jsonl'))
+      assert.ok(logFiles.length > 0, 'Should have at least one log file')
+
+      const entries = fs.readFileSync(path.join(sessionsDir, logFiles[0]), 'utf8')
+        .trim().split('\n').filter(l => l).map(l => JSON.parse(l))
+      const taskEntry = entries.find(e => e.reviewer === 'full-tests')
+      assert.ok(taskEntry, 'Should have a log entry for full-tests')
+      assert.strictEqual(typeof taskEntry.durationMs, 'number',
+        `durationMs should be a number, got ${typeof taskEntry.durationMs}`)
+      assert.ok(taskEntry.durationMs >= 0,
+        `durationMs should be non-negative, got ${taskEntry.durationMs}`)
+    })
+
+    it('does not log durationMs for skipped tasks', () => {
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'disabled-task', type: 'script', command: 'true', enabled: false }
+          ]
+        }
+      ]))
+
+      const sessionId = 'test-duration-skip'
+      invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sessionId,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      const entries = readSessionLog(tmpDir, sessionId)
+      const skipEntry = entries.find(e => e.reviewer === 'disabled-task' && e.status === 'SKIP')
+      assert.ok(skipEntry, 'Should have a SKIP log entry')
+      assert.strictEqual(skipEntry.durationMs, undefined,
+        'Skipped tasks should not have durationMs')
     })
   })
 

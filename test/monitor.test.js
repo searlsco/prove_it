@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 
-const { findLatestSession, formatEntry, formatTime } = require('../lib/monitor')
+const { findLatestSession, formatEntry, formatTime, formatDuration } = require('../lib/monitor')
 
 describe('monitor', () => {
   let tmpDir
@@ -201,6 +201,47 @@ describe('monitor', () => {
       const line = formatEntry(entry)
       assert.ok(line.includes('???'))
       assert.ok(line.includes('unknown'))
+    })
+
+    it('shows duration when durationMs is present', () => {
+      const entry = {
+        at: Date.now(),
+        reviewer: 'fast-tests',
+        status: 'PASS',
+        reason: 'OK',
+        durationMs: 3200
+      }
+      const line = formatEntry(entry)
+      assert.ok(line.includes('[3.2s]'), `Expected [3.2s] in: ${line}`)
+    })
+
+    it('omits duration bracket when durationMs is absent', () => {
+      const entry = {
+        at: Date.now(),
+        reviewer: 'fast-tests',
+        status: 'PASS',
+        reason: 'OK'
+      }
+      const line = formatEntry(entry)
+      assert.ok(!line.includes('['), `Should not have duration bracket in: ${line}`)
+    })
+  })
+
+  describe('formatDuration', () => {
+    it('formats sub-second as milliseconds', () => {
+      assert.strictEqual(formatDuration(450), '450ms')
+    })
+
+    it('formats seconds with one decimal', () => {
+      assert.strictEqual(formatDuration(3200), '3.2s')
+    })
+
+    it('returns empty string for null', () => {
+      assert.strictEqual(formatDuration(null), '')
+    })
+
+    it('returns empty string for undefined', () => {
+      assert.strictEqual(formatDuration(undefined), '')
     })
   })
 })
