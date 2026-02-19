@@ -129,15 +129,15 @@ echo '{
 }' | CLAUDE_PROJECT_DIR="$tmpdir" prove_it hook claude:PreToolUse
 ```
 
-**For threshold-based reviewers** (`linesWrittenSinceLastRun`), simulate
-enough Write events to cross the threshold. Each Write's line count is
-computed by `computeWriteInfo` from the tool_input — the dispatcher tracks
-this in session state automatically.
+**For threshold-based reviewers** (`linesWrittenSinceLastRun`), the dispatcher
+uses git refs to track churn. It runs `git diff --numstat <ref>..HEAD` filtered
+to the configured source globs and sums additions + deletions. To simulate
+enough churn, commit source file changes to the test repo between dispatches.
 
 **Observe the threshold building:**
-- First few writes: dispatcher allows (reviewer hasn't fired yet)
-- Check session state file to see `writtenLines` accumulating
-- Write that crosses threshold: dispatcher invokes the reviewer agent
+- First dispatch: bootstraps the ref at HEAD (0 churn, reviewer skipped)
+- Commit source changes to the test repo
+- Next dispatch: churn exceeds threshold, reviewer fires
 
 ### Phase 3: Design the test matrix
 
@@ -167,7 +167,7 @@ For each scenario, check:
    - Allow: `hookSpecificOutput.permissionDecision === "allow"`
    - Deny: `hookSpecificOutput.permissionDecision === "deny"`
 3. **Verdict text**: The reviewer's PASS/FAIL reason should be in the output
-4. **Session state**: Check that `writtenLines` and `taskRuns` updated correctly
+4. **Git refs**: Check that `refs/worktree/prove_it/<task-name>` advanced correctly after a pass
 
 ```javascript
 const output = JSON.parse(result.stdout)
@@ -193,9 +193,9 @@ you think you're proving.
 dispatcher, builtins, and all transitive `prove_it` calls resolve to your
 working tree. Without this, you're testing the installed Homebrew version.
 
-**Simulate real tool inputs.** Don't pass empty content — `computeWriteInfo`
-counts actual lines from `tool_input.content`. Use realistic file sizes so
-threshold-based reviewers accumulate naturally.
+**Simulate real git changes.** For threshold-based reviewers, commit actual
+source file changes to the test repo. The dispatcher counts churn via
+`git diff --numstat` filtered to source globs.
 
 **Test FAIL first.** A reviewer that always passes is useless. Prove it can
 deny before proving it can allow.
@@ -204,9 +204,9 @@ deny before proving it can allow.
 "zero tests." The hard part is catching "tests that exist but don't test
 anything."
 
-**Observe, don't assume.** Check session state files, parse dispatcher JSON
-output, verify exit codes. Don't trust that the reviewer fired — prove it
-by checking `taskRuns` in session state or by seeing the deny in stdout.
+**Observe, don't assume.** Parse dispatcher JSON output and verify exit codes.
+Don't trust that the reviewer fired — prove it by seeing the deny in stdout
+or checking git refs under `refs/worktree/prove_it/`.
 
 ## Reporting
 

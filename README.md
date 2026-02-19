@@ -210,10 +210,21 @@ Supported conditions:
 | `envSet` | string | Passes when environment variable is set |
 | `envNotSet` | string | Passes when environment variable is not set |
 | `variablesPresent` | string[] | Passes when all listed template variables resolve to non-empty values |
-| `linesWrittenSinceLastRun` | number | Passes when at least N source lines have been written since the task last ran |
+| `linesWrittenSinceLastRun` | number | Passes when at least N source lines have changed (additions + deletions) since the task last ran. Backed by git refs — works in both Claude hooks and git hooks. |
 | `sourcesModifiedSinceLastRun` | boolean | Passes when source file mtimes are newer than the last run |
 | `sourceFilesEdited` | boolean | Passes when source files were edited this turn (session-scoped, tool-agnostic) |
 | `toolsUsed` | string[] | Passes when any of the listed tools were used this turn |
+
+#### Git-based churn tracking (`linesWrittenSinceLastRun`)
+
+Each task using `linesWrittenSinceLastRun` stores a git ref at `refs/worktree/prove_it/<task-name>`. When the condition is evaluated, prove_it diffs the ref against the **working tree** (not just HEAD), filtered to your configured `sources` globs, summing additions and deletions. This means committed, staged, unstaged, and newly-created file changes all count — so Write/Edit tool calls trigger churn immediately without needing a commit. On first run the ref is created at HEAD (bootstrap — returns 0 if the working tree is clean). This is session-independent and worktree-safe. Refs are cleaned up by `prove_it deinit`.
+
+When a task passes or resets, the ref advances to a snapshot of the current working tree state (including untracked source files). This ensures all pending changes are captured — advancing to HEAD alone would be a no-op when churn comes from uncommitted Write/Edit operations.
+
+**`resetOnFail` behavior**: When a task fails, the ref advancement depends on the hook event:
+- **PreToolUse** (default `resetOnFail: true`): The ref advances on failure. Without this, the task deadlocks — it blocks every Write/Edit, including writes to test files that would fix the issue.
+- **Stop / git hooks** (default `resetOnFail: false`): The ref does NOT advance. The agent gets sent back to fix the issue, and the same accumulated churn keeps triggering the review.
+- You can override the default with an explicit `resetOnFail: true` or `resetOnFail: false` on the task.
 
 #### Session-scoped conditions
 

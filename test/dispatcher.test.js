@@ -4,8 +4,9 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
-const { matchesHookEntry, evaluateWhen, computeWriteInfo, defaultConfig, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
-const { recordWrite, recordTaskRun, recordFileEdit, resetTurnTracking } = require('../lib/session')
+const { matchesHookEntry, evaluateWhen, defaultConfig, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
+const { recordFileEdit, resetTurnTracking } = require('../lib/session')
+const { updateRef, churnSinceRef, sanitizeRefName } = require('../lib/git')
 
 describe('claude dispatcher', () => {
   describe('matchesHookEntry', () => {
@@ -205,125 +206,141 @@ describe('claude dispatcher', () => {
     })
   })
 
-  describe('evaluateWhen — linesWrittenSinceLastRun', () => {
+  describe('evaluateWhen — linesWrittenSinceLastRun (git-based)', () => {
     let tmpDir
-    let origProveItDir
 
     beforeEach(() => {
       tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_lwslr_'))
-      origProveItDir = process.env.PROVE_IT_DIR
-      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+      spawnSync('git', ['init'], { cwd: tmpDir })
+      spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
+      spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'initial\n')
+      spawnSync('git', ['add', '.'], { cwd: tmpDir })
+      spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
     })
 
     afterEach(() => {
-      if (origProveItDir === undefined) {
-        delete process.env.PROVE_IT_DIR
-      } else {
-        process.env.PROVE_IT_DIR = origProveItDir
-      }
       fs.rmSync(tmpDir, { recursive: true, force: true })
     })
 
-    it('returns reason when lines written is below threshold', () => {
-      const sessionId = 'test-lwslr-1'
-      recordWrite(sessionId, 100)
+    it('returns reason on bootstrap (0 churn)', () => {
       const result = evaluateWhen(
         { linesWrittenSinceLastRun: 500 },
-        { rootDir: '.', sessionId },
-        'my-check'
-      )
-      assert.notStrictEqual(result, true)
-      assert.ok(result.includes('100'), `Expected written count in reason, got: ${result}`)
-      assert.ok(result.includes('500'), `Expected threshold in reason, got: ${result}`)
-      assert.ok(result.includes('lines written since last run'), `Expected human-readable message, got: ${result}`)
-    })
-
-    it('returns true when lines written meets threshold', () => {
-      const sessionId = 'test-lwslr-2'
-      recordWrite(sessionId, 500)
-      const result = evaluateWhen(
-        { linesWrittenSinceLastRun: 500 },
-        { rootDir: '.', sessionId },
-        'my-check'
-      )
-      assert.strictEqual(result, true)
-    })
-
-    it('returns true when lines written exceeds threshold', () => {
-      const sessionId = 'test-lwslr-3'
-      recordWrite(sessionId, 700)
-      const result = evaluateWhen(
-        { linesWrittenSinceLastRun: 500 },
-        { rootDir: '.', sessionId },
-        'my-check'
-      )
-      assert.strictEqual(result, true)
-    })
-
-    it('resets after task run recording', () => {
-      const sessionId = 'test-lwslr-4'
-      recordWrite(sessionId, 600)
-      recordTaskRun(sessionId, 'my-check')
-      const result = evaluateWhen(
-        { linesWrittenSinceLastRun: 500 },
-        { rootDir: '.', sessionId },
+        { rootDir: tmpDir, sources: ['**/*.js'] },
         'my-check'
       )
       assert.notStrictEqual(result, true)
       assert.ok(result.includes('0'), `Expected 0 in reason, got: ${result}`)
-      assert.ok(result.includes('500'), `Expected 500 in reason, got: ${result}`)
+      assert.ok(result.includes('500'), `Expected threshold in reason, got: ${result}`)
+      assert.ok(result.includes('lines changed since last run'), `Expected reason, got: ${result}`)
     })
 
-    it('fires again after accumulating more lines post-reset', () => {
-      const sessionId = 'test-lwslr-5'
-      recordWrite(sessionId, 600)
-      recordTaskRun(sessionId, 'my-check')
-      recordWrite(sessionId, 500)
+    it('returns true when churn meets threshold', () => {
+      // Bootstrap ref
+      churnSinceRef(tmpDir, sanitizeRefName('my-check'), ['**/*.js'])
+
+      // Generate enough churn
+      const lines = Array.from({ length: 500 }, (_, i) => `line${i}`).join('\n') + '\n'
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), lines)
+      spawnSync('git', ['add', '.'], { cwd: tmpDir })
+      spawnSync('git', ['commit', '-m', 'add lines'], { cwd: tmpDir })
+
       const result = evaluateWhen(
         { linesWrittenSinceLastRun: 500 },
-        { rootDir: '.', sessionId },
+        { rootDir: tmpDir, sources: ['**/*.js'] },
         'my-check'
       )
       assert.strictEqual(result, true)
     })
 
-    it('returns reason when no session', () => {
+    it('returns reason when churn is below threshold', () => {
+      // Bootstrap ref
+      churnSinceRef(tmpDir, sanitizeRefName('my-check'), ['**/*.js'])
+
+      // Small change
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'initial\nsmall change\n')
+      spawnSync('git', ['add', '.'], { cwd: tmpDir })
+      spawnSync('git', ['commit', '-m', 'small'], { cwd: tmpDir })
+
       const result = evaluateWhen(
         { linesWrittenSinceLastRun: 500 },
-        { rootDir: '.', sessionId: null },
+        { rootDir: tmpDir, sources: ['**/*.js'] },
         'my-check'
       )
       assert.notStrictEqual(result, true)
-      assert.ok(result.includes('lines written since last run'), `Expected reason, got: ${result}`)
+      assert.ok(result.includes('500'), `Expected threshold in reason, got: ${result}`)
     })
 
-    it('resets budget on failure so agent can write tests (no deadlock)', () => {
-      const sessionId = 'test-lwslr-no-deadlock'
-      recordWrite(sessionId, 600)
-      // Task fires (600 >= 500), fails — dispatcher records task run anyway
+    it('resets after ref is advanced (simulating pass)', () => {
+      churnSinceRef(tmpDir, sanitizeRefName('my-check'), ['**/*.js'])
+
+      // Generate churn
+      const lines = Array.from({ length: 600 }, (_, i) => `line${i}`).join('\n') + '\n'
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), lines)
+      spawnSync('git', ['add', '.'], { cwd: tmpDir })
+      spawnSync('git', ['commit', '-m', 'big change'], { cwd: tmpDir })
+
+      // Fires
       const result = evaluateWhen(
         { linesWrittenSinceLastRun: 500 },
-        { rootDir: '.', sessionId },
+        { rootDir: tmpDir, sources: ['**/*.js'] },
         'my-check'
       )
       assert.strictEqual(result, true)
-      // Dispatcher records the run on failure (budget reset)
-      recordTaskRun(sessionId, 'my-check')
-      // Next write: counter reset, agent has a fresh budget to write tests
+
+      // Advance ref (what dispatcher does on pass)
+      const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
+      updateRef(tmpDir, sanitizeRefName('my-check'), head)
+
+      // Should not fire anymore
       const result2 = evaluateWhen(
         { linesWrittenSinceLastRun: 500 },
-        { rootDir: '.', sessionId },
+        { rootDir: tmpDir, sources: ['**/*.js'] },
         'my-check'
       )
       assert.notStrictEqual(result2, true)
-      // After writing 500+ more lines (hopefully tests), check fires again
-      recordWrite(sessionId, 500)
-      const result3 = evaluateWhen(
+    })
+
+    it('fires again after more churn post-reset', () => {
+      churnSinceRef(tmpDir, sanitizeRefName('my-check'), ['**/*.js'])
+
+      // First round of churn
+      const lines = Array.from({ length: 600 }, (_, i) => `line${i}`).join('\n') + '\n'
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), lines)
+      spawnSync('git', ['add', '.'], { cwd: tmpDir })
+      spawnSync('git', ['commit', '-m', 'round 1'], { cwd: tmpDir })
+
+      // Advance ref (pass)
+      const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
+      updateRef(tmpDir, sanitizeRefName('my-check'), head)
+
+      // Second round of churn
+      const lines2 = Array.from({ length: 500 }, (_, i) => `new_line${i}`).join('\n') + '\n'
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), lines2)
+      spawnSync('git', ['add', '.'], { cwd: tmpDir })
+      spawnSync('git', ['commit', '-m', 'round 2'], { cwd: tmpDir })
+
+      const result = evaluateWhen(
         { linesWrittenSinceLastRun: 500 },
-        { rootDir: '.', sessionId },
+        { rootDir: tmpDir, sources: ['**/*.js'] },
         'my-check'
       )
-      assert.strictEqual(result3, true)
+      assert.strictEqual(result, true)
+    })
+
+    it('returns reason in non-git directory (0 churn)', () => {
+      const nonGitDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_nogit_'))
+      try {
+        const result = evaluateWhen(
+          { linesWrittenSinceLastRun: 500 },
+          { rootDir: nonGitDir, sources: ['**/*.js'] },
+          'my-check'
+        )
+        assert.notStrictEqual(result, true)
+        assert.ok(result.includes('0'), `Expected 0 in reason, got: ${result}`)
+      } finally {
+        fs.rmSync(nonGitDir, { recursive: true, force: true })
+      }
     })
   })
 
@@ -413,168 +430,6 @@ describe('claude dispatcher', () => {
       )
       assert.notStrictEqual(result, true)
       assert.ok(result.includes('no source files were found'), `Expected reason, got: ${result}`)
-    })
-  })
-
-  describe('computeWriteInfo', () => {
-    let tmpDir
-
-    beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_cwi_'))
-    })
-
-    afterEach(() => {
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    })
-
-    it('counts lines for Write tool (new file)', () => {
-      const input = {
-        tool_name: 'Write',
-        tool_input: {
-          file_path: path.join(tmpDir, 'new.js'),
-          content: 'line1\nline2\nline3\n'
-        }
-      }
-      const result = computeWriteInfo(input, ['**/*.js'], tmpDir)
-      assert.strictEqual(result.lines, 4)
-    })
-
-    it('counts net new lines for Write tool (existing file)', () => {
-      const filePath = path.join(tmpDir, 'existing.js')
-      fs.writeFileSync(filePath, 'old\n')
-      const input = {
-        tool_name: 'Write',
-        tool_input: {
-          file_path: filePath,
-          content: 'new1\nnew2\nnew3\n'
-        }
-      }
-      const result = computeWriteInfo(input, ['**/*.js'], tmpDir)
-      assert.strictEqual(result.lines, 2) // 4 - 2 = 2
-    })
-
-    it('clamps to zero for Write (shrinking file)', () => {
-      const filePath = path.join(tmpDir, 'shrink.js')
-      fs.writeFileSync(filePath, 'a\nb\nc\nd\ne\n')
-      const input = {
-        tool_name: 'Write',
-        tool_input: {
-          file_path: filePath,
-          content: 'a\n'
-        }
-      }
-      const result = computeWriteInfo(input, ['**/*.js'], tmpDir)
-      assert.strictEqual(result.lines, 0)
-    })
-
-    it('counts positive delta for Edit tool', () => {
-      const input = {
-        tool_name: 'Edit',
-        tool_input: {
-          file_path: path.join(tmpDir, 'file.js'),
-          old_string: 'one line',
-          new_string: 'line1\nline2\nline3'
-        }
-      }
-      const result = computeWriteInfo(input, ['**/*.js'], tmpDir)
-      assert.strictEqual(result.lines, 2) // 3 - 1 = 2
-    })
-
-    it('counts single occurrence delta for Edit with replace_all', () => {
-      const input = {
-        tool_name: 'Edit',
-        tool_input: {
-          file_path: path.join(tmpDir, 'file.js'),
-          old_string: 'x',
-          new_string: 'a\nb\nc',
-          replace_all: true
-        }
-      }
-      // replace_all may apply to N occurrences but we only see the delta once
-      // (intentional approximation — we don't know occurrence count)
-      const result = computeWriteInfo(input, ['**/*.js'], tmpDir)
-      assert.strictEqual(result.lines, 2) // 3 - 1 = 2
-    })
-
-    it('clamps to zero for Edit (shrinking)', () => {
-      const input = {
-        tool_name: 'Edit',
-        tool_input: {
-          file_path: path.join(tmpDir, 'file.js'),
-          old_string: 'a\nb\nc',
-          new_string: 'a'
-        }
-      }
-      const result = computeWriteInfo(input, ['**/*.js'], tmpDir)
-      assert.strictEqual(result.lines, 0)
-    })
-
-    it('counts lines for NotebookEdit insert', () => {
-      const input = {
-        tool_name: 'NotebookEdit',
-        tool_input: {
-          notebook_path: path.join(tmpDir, 'nb.ipynb'),
-          edit_mode: 'insert',
-          new_source: 'import numpy\nprint("hi")'
-        }
-      }
-      const result = computeWriteInfo(input, ['**/*.ipynb'], tmpDir)
-      assert.strictEqual(result.lines, 2)
-    })
-
-    it('returns 0 for NotebookEdit replace', () => {
-      const input = {
-        tool_name: 'NotebookEdit',
-        tool_input: {
-          notebook_path: path.join(tmpDir, 'nb.ipynb'),
-          edit_mode: 'replace',
-          new_source: 'stuff'
-        }
-      }
-      const result = computeWriteInfo(input, ['**/*.ipynb'], tmpDir)
-      assert.strictEqual(result.lines, 0)
-    })
-
-    it('returns 0 for non-source files', () => {
-      const input = {
-        tool_name: 'Write',
-        tool_input: {
-          file_path: path.join(tmpDir, 'README.md'),
-          content: 'lots\nof\nlines\n'
-        }
-      }
-      const result = computeWriteInfo(input, ['**/*.js'], tmpDir)
-      assert.strictEqual(result.lines, 0)
-    })
-
-    it('returns 0 for Bash tool', () => {
-      const input = {
-        tool_name: 'Bash',
-        tool_input: { command: 'echo hello' }
-      }
-      const result = computeWriteInfo(input, ['**/*.js'], tmpDir)
-      assert.strictEqual(result.lines, 0)
-    })
-
-    it('returns 0 for Read tool', () => {
-      const input = {
-        tool_name: 'Read',
-        tool_input: { file_path: path.join(tmpDir, 'file.js') }
-      }
-      const result = computeWriteInfo(input, ['**/*.js'], tmpDir)
-      assert.strictEqual(result.lines, 0)
-    })
-
-    it('returns 0 for files outside repo', () => {
-      const input = {
-        tool_name: 'Write',
-        tool_input: {
-          file_path: '/tmp/outside/file.js',
-          content: 'lines\n'
-        }
-      }
-      const result = computeWriteInfo(input, ['**/*.js'], tmpDir)
-      assert.strictEqual(result.lines, 0)
     })
   })
 

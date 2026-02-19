@@ -13,10 +13,7 @@ const {
   generateDiffsSince,
   recordFileEdit,
   getFileEdits,
-  resetTurnTracking,
-  recordWrite,
-  recordTaskRun,
-  linesWrittenSince
+  resetTurnTracking
 } = require('../lib/session')
 const { recordSessionBaseline } = require('../lib/dispatcher/claude')
 
@@ -483,62 +480,6 @@ describe('session state functions', () => {
       const entry = JSON.parse(fs.readFileSync(projectLog, 'utf8').trim())
       assert.strictEqual(entry.sessionId, null)
       assert.strictEqual(entry.projectDir, '/test')
-    })
-  })
-
-  describe('write tracking', () => {
-    it('recordWrite accumulates line counts', () => {
-      recordWrite(SESSION_ID, 10)
-      recordWrite(SESSION_ID, 20)
-      assert.strictEqual(loadSessionState(SESSION_ID, 'writtenLines'), 30)
-    })
-
-    it('recordWrite ignores zero and negative counts', () => {
-      recordWrite(SESSION_ID, 5)
-      recordWrite(SESSION_ID, 0)
-      recordWrite(SESSION_ID, -3)
-      assert.strictEqual(loadSessionState(SESSION_ID, 'writtenLines'), 5)
-    })
-
-    it('recordWrite ignores null sessionId', () => {
-      recordWrite(null, 10)
-      assert.strictEqual(loadSessionState(null, 'writtenLines'), null)
-    })
-
-    it('recordTaskRun snapshots current writtenLines', () => {
-      recordWrite(SESSION_ID, 100)
-      recordTaskRun(SESSION_ID, 'my-task')
-      const runs = loadSessionState(SESSION_ID, 'taskRuns')
-      assert.strictEqual(runs['my-task'], 100)
-    })
-
-    it('recordTaskRun updates on subsequent calls', () => {
-      recordWrite(SESSION_ID, 50)
-      recordTaskRun(SESSION_ID, 'my-task')
-      recordWrite(SESSION_ID, 75)
-      recordTaskRun(SESSION_ID, 'my-task')
-      const runs = loadSessionState(SESSION_ID, 'taskRuns')
-      assert.strictEqual(runs['my-task'], 125)
-    })
-
-    it('linesWrittenSince returns difference', () => {
-      recordWrite(SESSION_ID, 100)
-      recordTaskRun(SESSION_ID, 'checker')
-      recordWrite(SESSION_ID, 42)
-      assert.strictEqual(linesWrittenSince(SESSION_ID, 'checker'), 42)
-    })
-
-    it('linesWrittenSince returns total if task never ran', () => {
-      recordWrite(SESSION_ID, 200)
-      assert.strictEqual(linesWrittenSince(SESSION_ID, 'never-ran'), 200)
-    })
-
-    it('linesWrittenSince returns 0 for null sessionId', () => {
-      assert.strictEqual(linesWrittenSince(null, 'any-task'), 0)
-    })
-
-    it('linesWrittenSince returns 0 when no writes recorded', () => {
-      assert.strictEqual(linesWrittenSince(SESSION_ID, 'any-task'), 0)
     })
   })
 

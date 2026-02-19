@@ -429,7 +429,7 @@ async function cmdInit () {
         done: false,
         text: 'Replace the placeholder sources globs in .claude/prove_it.json\n' +
           '        Sources controls which files trigger mtime-based reviewer gating\n' +
-          '        and write-budget tracking (e.g. ["src/**/*.*", "test/**/*.*"])'
+          '        and git-based churn tracking (e.g. ["src/**/*.*", "test/**/*.*"])'
       })
     } else if (Array.isArray(teamSources) && teamSources.length > 0) {
       todos.push({ done: true, text: 'Sources globs configured' })
@@ -527,6 +527,15 @@ function cmdDeinit () {
       if (removeGitHookShim(repoRoot, gitEvent)) {
         removed.push(`.git/hooks/${gitEvent}`)
       }
+    }
+  }
+
+  // Clean up prove_it git refs (churn tracking)
+  if (fs.existsSync(path.join(repoRoot, '.git'))) {
+    const { deleteAllRefs } = require('./lib/git')
+    const refCount = deleteAllRefs(repoRoot)
+    if (refCount > 0) {
+      removed.push(`refs/worktree/prove_it/* (${refCount} refs)`)
     }
   }
 

@@ -5,6 +5,7 @@ const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
 const { defaultConfig, matchGitEntries, runGitTasks } = require('../lib/dispatcher/git')
+const { readRef, churnSinceRef, sanitizeRefName } = require('../lib/git')
 
 describe('git dispatcher', () => {
   describe('defaultConfig', () => {
@@ -78,6 +79,7 @@ describe('git dispatcher', () => {
       spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
       spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
       fs.writeFileSync(path.join(tmpDir, '.gitkeep'), '')
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'initial\n')
       spawnSync('git', ['add', '.'], { cwd: tmpDir })
       spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
     })
@@ -219,6 +221,131 @@ describe('git dispatcher', () => {
       const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
       runGitTasks(entries, context)
       assert.ok(context.testOutput.includes('test output'))
+    })
+
+    it('advances churn ref on pass for linesWrittenSinceLastRun task', () => {
+      // Bootstrap the ref
+      churnSinceRef(tmpDir, sanitizeRefName('churn-check'), ['**/*.js'])
+
+      // Create enough churn
+      const lines = Array.from({ length: 10 }, (_, i) => `line${i}`).join('\n') + '\n'
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), lines)
+      spawnSync('git', ['add', '.'], { cwd: tmpDir })
+      spawnSync('git', ['commit', '-m', 'add code'], { cwd: tmpDir })
+
+      const headBefore = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
+      const passScript = makeScript('pass.sh', '#!/usr/bin/env bash\nexit 0\n')
+      const entries = [{
+        type: 'git',
+        event: 'pre-commit',
+        tasks: [{
+          name: 'churn-check',
+          type: 'script',
+          command: passScript,
+          when: { linesWrittenSinceLastRun: 5 }
+        }]
+      }]
+      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, hookEvent: 'pre-commit', localCfgPath: null, sources: ['**/*.js'], maxChars: 12000, testOutput: '' }
+      const { failure } = runGitTasks(entries, context)
+      assert.strictEqual(failure, null, 'Task should pass')
+
+      // Ref should now be at HEAD
+      const ref = readRef(tmpDir, sanitizeRefName('churn-check'))
+      assert.strictEqual(ref, headBefore, 'Ref should be advanced to HEAD after pass')
+
+      // Running again with no new churn should skip
+      const { failure: failure2 } = runGitTasks(entries, context)
+      assert.strictEqual(failure2, null, 'Should pass (task skipped due to 0 churn)')
+    })
+
+    it('does NOT advance churn ref on failure by default (git hooks)', () => {
+      churnSinceRef(tmpDir, sanitizeRefName('sticky-check'), ['**/*.js'])
+
+      const lines = Array.from({ length: 10 }, (_, i) => `line${i}`).join('\n') + '\n'
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), lines)
+      spawnSync('git', ['add', '.'], { cwd: tmpDir })
+      spawnSync('git', ['commit', '-m', 'add code'], { cwd: tmpDir })
+
+      const refBefore = readRef(tmpDir, sanitizeRefName('sticky-check'))
+      const failScript = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
+      const entries = [{
+        type: 'git',
+        event: 'pre-commit',
+        tasks: [{
+          name: 'sticky-check',
+          type: 'script',
+          command: failScript,
+          when: { linesWrittenSinceLastRun: 5 }
+        }]
+      }]
+      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, hookEvent: 'pre-commit', localCfgPath: null, sources: ['**/*.js'], maxChars: 12000, testOutput: '' }
+      const { failure } = runGitTasks(entries, context)
+      assert.ok(failure, 'Task should fail')
+
+      // Ref should NOT have advanced
+      const refAfter = readRef(tmpDir, sanitizeRefName('sticky-check'))
+      assert.strictEqual(refAfter, refBefore, 'Ref should NOT advance on failure (git hook default)')
+    })
+
+    it('advances churn ref on failure when resetOnFail: true', () => {
+      churnSinceRef(tmpDir, sanitizeRefName('reset-check'), ['**/*.js'])
+
+      const lines = Array.from({ length: 10 }, (_, i) => `line${i}`).join('\n') + '\n'
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), lines)
+      spawnSync('git', ['add', '.'], { cwd: tmpDir })
+      spawnSync('git', ['commit', '-m', 'add code'], { cwd: tmpDir })
+
+      const failScript = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
+      const entries = [{
+        type: 'git',
+        event: 'pre-commit',
+        tasks: [{
+          name: 'reset-check',
+          type: 'script',
+          command: failScript,
+          when: { linesWrittenSinceLastRun: 5 },
+          resetOnFail: true
+        }]
+      }]
+      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, hookEvent: 'pre-commit', localCfgPath: null, sources: ['**/*.js'], maxChars: 12000, testOutput: '' }
+      const { failure } = runGitTasks(entries, context)
+      assert.ok(failure, 'Task should fail')
+
+      // Ref should be advanced — re-running with no new churn should skip
+      const { failure: failure2 } = runGitTasks(entries, context)
+      assert.strictEqual(failure2, null, 'Should skip after resetOnFail advanced ref')
+    })
+
+    it('resetOnFail resets churn for uncommitted changes (deadlock fix)', () => {
+      // Bootstrap
+      churnSinceRef(tmpDir, sanitizeRefName('deadlock-check'), ['**/*.js'])
+
+      // Simulate agent Write — uncommitted changes (no commit!)
+      const lines = Array.from({ length: 10 }, (_, i) => `line${i}`).join('\n') + '\n'
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), lines)
+
+      const failScript = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
+      const entries = [{
+        type: 'git',
+        event: 'pre-commit',
+        tasks: [{
+          name: 'deadlock-check',
+          type: 'script',
+          command: failScript,
+          when: { linesWrittenSinceLastRun: 5 },
+          resetOnFail: true
+        }]
+      }]
+      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, hookEvent: 'pre-commit', localCfgPath: null, sources: ['**/*.js'], maxChars: 12000, testOutput: '' }
+
+      // First run: fires and fails, resetOnFail should snapshot working tree
+      const { failure } = runGitTasks(entries, context)
+      assert.ok(failure, 'Task should fail')
+
+      // Second run: if snapshot worked, churn is 0 and task is skipped (no deadlock)
+      const { failure: failure2 } = runGitTasks(entries, context)
+      assert.strictEqual(failure2, null,
+        'Should skip after resetOnFail — ref should capture working tree, not just HEAD')
     })
   })
 })

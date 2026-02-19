@@ -387,7 +387,7 @@ describe('validateConfig', () => {
       assert.ok(errors.some(e => e.includes('linesWrittenSinceLastRun must be a positive number')))
     })
 
-    it('warns when linesWrittenSinceLastRun is used on a git hook', () => {
+    it('no warning when linesWrittenSinceLastRun is used on a git hook (git-based now)', () => {
       const { errors, warnings } = validateConfig(validConfig({
         hooks: [{
           type: 'git',
@@ -401,7 +401,8 @@ describe('validateConfig', () => {
         }]
       }))
       assert.strictEqual(errors.length, 0)
-      assert.ok(warnings.some(w => w.includes('linesWrittenSinceLastRun') && w.includes('git')))
+      assert.ok(!warnings.some(w => w.includes('linesWrittenSinceLastRun')),
+        'Should NOT warn about linesWrittenSinceLastRun on git hooks anymore')
     })
 
     it('passes sourcesModifiedSinceLastRun as valid when key', () => {
@@ -510,6 +511,27 @@ describe('validateConfig', () => {
       }))
       assert.strictEqual(errors.length, 0)
       assert.ok(warnings.some(w => w.includes('ruleFile only applies to agent tasks')))
+    })
+
+    it('accepts resetOnFail as a boolean', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', resetOnFail: true
+      }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('accepts resetOnFail: false', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', resetOnFail: false
+      }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('errors when resetOnFail is not a boolean', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', resetOnFail: 'yes'
+      }))
+      assert.ok(errors.some(e => e.includes('resetOnFail must be a boolean')))
     })
 
     it('passes toolsUsed as valid array', () => {
