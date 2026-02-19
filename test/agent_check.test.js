@@ -196,6 +196,52 @@ describe('agent check', () => {
       `Expected codex auto-switch with --model, got: ${result.reason}`)
   })
 
+  it('uses context.configModel when task has no model', () => {
+    const shimDir = path.join(tmpDir, 'bin')
+    fs.mkdirSync(shimDir, { recursive: true })
+    const shimPath = path.join(shimDir, 'claude')
+    fs.writeFileSync(shimPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS: args=$*"\n')
+    fs.chmodSync(shimPath, 0o755)
+
+    const origPath = process.env.PATH
+    process.env.PATH = `${shimDir}:${origPath}`
+
+    const result = runAgentCheck(
+      { name: 'test-review', prompt: 'Review {{project_dir}}' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, hookEvent: 'Stop', testOutput: '', configModel: 'custom-model' }
+    )
+
+    process.env.PATH = origPath
+
+    assert.strictEqual(result.pass, true)
+    assert.ok(result.reason.includes('--model') && result.reason.includes('custom-model'),
+      `Expected --model custom-model from configModel, got: ${result.reason}`)
+  })
+
+  it('task-level model overrides context.configModel', () => {
+    const shimDir = path.join(tmpDir, 'bin')
+    fs.mkdirSync(shimDir, { recursive: true })
+    const shimPath = path.join(shimDir, 'claude')
+    fs.writeFileSync(shimPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS: args=$*"\n')
+    fs.chmodSync(shimPath, 0o755)
+
+    const origPath = process.env.PATH
+    process.env.PATH = `${shimDir}:${origPath}`
+
+    const result = runAgentCheck(
+      { name: 'test-review', prompt: 'Review {{project_dir}}', model: 'haiku' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, hookEvent: 'Stop', testOutput: '', configModel: 'custom-model' }
+    )
+
+    process.env.PATH = origPath
+
+    assert.strictEqual(result.pass, true)
+    assert.ok(result.reason.includes('--model') && result.reason.includes('haiku'),
+      `Expected task-level --model haiku to win over configModel, got: ${result.reason}`)
+    assert.ok(!result.reason.includes('custom-model'),
+      `configModel should not appear when task-level model is set, got: ${result.reason}`)
+  })
+
   it('uses default model for hook event when no model or command set', () => {
     // Create a 'claude' shim that echoes args so we can see --model
     const shimDir = path.join(tmpDir, 'bin')
@@ -291,6 +337,26 @@ describe('agent check', () => {
       { rootDir: tmpDir, projectDir: tmpDir, sessionId: 'test-session', toolInput: null, testOutput: '' }
     )
     assert.strictEqual(result.pass, true)
+  })
+
+  it('passes configEnv through to reviewer subprocess', () => {
+    const reviewerPath = path.join(tmpDir, 'env_reviewer.sh')
+    fs.writeFileSync(reviewerPath, [
+      '#!/usr/bin/env bash',
+      'cat > /dev/null',
+      'if [ "$MY_CUSTOM_VAR" = "hello" ]; then',
+      '  echo "PASS: MY_CUSTOM_VAR is set"',
+      'else',
+      '  echo "FAIL: MY_CUSTOM_VAR was not set"',
+      'fi'
+    ].join('\n'))
+    fs.chmodSync(reviewerPath, 0o755)
+
+    const result = runAgentCheck(
+      { name: 'env-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '', configEnv: { MY_CUSTOM_VAR: 'hello' } }
+    )
+    assert.strictEqual(result.pass, true, `Expected configEnv to reach reviewer, got: ${result.reason || result.error}`)
   })
 })
 

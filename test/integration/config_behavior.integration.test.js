@@ -503,6 +503,147 @@ describe('Config-driven hook behavior (v2)', () => {
     })
   })
 
+  // ──── top-level env ────
+
+  describe('top-level env config', () => {
+    it('script task sees config env vars', () => {
+      createFile(tmpDir, 'script/env_check', [
+        '#!/usr/bin/env bash',
+        'if [ "$TURBOCOMMIT_DISABLED" = "1" ]; then',
+        '  exit 0',
+        'else',
+        '  echo "TURBOCOMMIT_DISABLED was not set" >&2',
+        '  exit 1',
+        'fi'
+      ].join('\n'))
+      fs.chmodSync(path.join(tmpDir, 'script', 'env_check'), 0o755)
+
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'env-check', type: 'script', command: './script/env_check' }
+          ]
+        }
+      ], { env: { TURBOCOMMIT_DISABLED: '1' } }))
+
+      const result = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: 'test-config-env',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, 'Hook should produce JSON output')
+      assert.strictEqual(result.output.decision, 'approve',
+        'Script should pass when config env var is present')
+    })
+
+    it('script task fails without config env var', () => {
+      createFile(tmpDir, 'script/env_check', [
+        '#!/usr/bin/env bash',
+        'if [ "$TURBOCOMMIT_DISABLED" = "1" ]; then',
+        '  exit 0',
+        'else',
+        '  echo "TURBOCOMMIT_DISABLED was not set" >&2',
+        '  exit 1',
+        'fi'
+      ].join('\n'))
+      fs.chmodSync(path.join(tmpDir, 'script', 'env_check'), 0o755)
+
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'env-check', type: 'script', command: './script/env_check' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: 'test-config-env-absent',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, 'Hook should produce JSON output')
+      assert.strictEqual(result.output.decision, 'block',
+        'Script should fail when config env var is absent')
+    })
+
+    it('empty env object does not break dispatch', () => {
+      createFastTestScript(tmpDir, true)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+          ]
+        }
+      ], { env: {} }))
+
+      const result = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: 'test-config-env-empty',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, 'Hook should produce JSON output')
+      assert.strictEqual(result.output.decision, 'approve')
+    })
+  })
+
+  // ──── top-level model ────
+
+  describe('top-level model config', () => {
+    it('agent task uses top-level model when task has no model', () => {
+      // Put a fake 'claude' shim that captures args on PATH
+      const shimDir = path.join(tmpDir, 'shims')
+      const capturePath = path.join(tmpDir, 'captured_args.txt')
+      fs.mkdirSync(shimDir, { recursive: true })
+      createFile(tmpDir, 'shims/claude', [
+        '#!/usr/bin/env bash',
+        `echo "$*" > "${capturePath}"`,
+        'cat > /dev/null',
+        'echo "PASS: ok"'
+      ].join('\n'))
+      fs.chmodSync(path.join(shimDir, 'claude'), 0o755)
+
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'model-test', type: 'agent', prompt: 'Review this' }
+          ]
+        }
+      ], { model: 'custom-model' }))
+
+      const env = isolatedEnv(tmpDir)
+      env.PATH = `${shimDir}:${process.env.PATH}`
+
+      const result = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: 'test-top-level-model',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, 'Hook should produce JSON output')
+      assert.strictEqual(result.output.decision, 'approve')
+
+      // Verify --model was passed through
+      const capturedArgs = fs.readFileSync(capturePath, 'utf8')
+      assert.ok(capturedArgs.includes('--model') && capturedArgs.includes('custom-model'),
+        `Expected --model custom-model in reviewer args, got: ${capturedArgs}`)
+    })
+  })
+
   // ──── sourcesModifiedSinceLastRun ────
 
   describe('sourcesModifiedSinceLastRun', () => {

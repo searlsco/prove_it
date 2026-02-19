@@ -205,6 +205,71 @@ describe('script check', () => {
       assert.strictEqual(result.skipped, false)
     })
 
+    describe('configEnv', () => {
+      it('passes config env vars to script subprocess', () => {
+        const scriptPath = path.join(tmpDir, 'script', 'env_check')
+        fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
+        fs.writeFileSync(scriptPath, [
+          '#!/usr/bin/env bash',
+          'if [ "$MY_CUSTOM_VAR" = "hello" ]; then',
+          '  exit 0',
+          'else',
+          '  echo "MY_CUSTOM_VAR was not set" >&2',
+          '  exit 1',
+          'fi'
+        ].join('\n'))
+        fs.chmodSync(scriptPath, 0o755)
+
+        const result = runScriptCheck(
+          { name: 'env-test', command: './script/env_check' },
+          { rootDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, configEnv: { MY_CUSTOM_VAR: 'hello' } }
+        )
+        assert.strictEqual(result.pass, true)
+      })
+
+      it('does not let configEnv override PROVE_IT_DISABLED', () => {
+        const scriptPath = path.join(tmpDir, 'script', 'forced_check')
+        fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
+        fs.writeFileSync(scriptPath, [
+          '#!/usr/bin/env bash',
+          'if [ "$PROVE_IT_DISABLED" = "1" ]; then',
+          '  exit 0',
+          'else',
+          '  echo "PROVE_IT_DISABLED was overridden" >&2',
+          '  exit 1',
+          'fi'
+        ].join('\n'))
+        fs.chmodSync(scriptPath, 0o755)
+
+        const result = runScriptCheck(
+          { name: 'forced-test', command: './script/forced_check' },
+          { rootDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, configEnv: { PROVE_IT_DISABLED: '0' } }
+        )
+        assert.strictEqual(result.pass, true, `Expected forced var to win, got: ${result.reason}`)
+      })
+
+      it('applies forced vars even when configEnv is null', () => {
+        const scriptPath = path.join(tmpDir, 'script', 'forced_null')
+        fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
+        fs.writeFileSync(scriptPath, [
+          '#!/usr/bin/env bash',
+          'if [ "$PROVE_IT_DISABLED" = "1" ]; then',
+          '  exit 0',
+          'else',
+          '  echo "PROVE_IT_DISABLED was not forced" >&2',
+          '  exit 1',
+          'fi'
+        ].join('\n'))
+        fs.chmodSync(scriptPath, 0o755)
+
+        const result = runScriptCheck(
+          { name: 'forced-null', command: './script/forced_null' },
+          { rootDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, configEnv: null }
+        )
+        assert.strictEqual(result.pass, true, `Expected forced vars even with null configEnv, got: ${result.reason}`)
+      })
+    })
+
     describe('logReview integration', () => {
       const SESSION_ID = 'test-session-script-log'
 

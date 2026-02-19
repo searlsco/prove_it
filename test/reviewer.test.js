@@ -295,6 +295,93 @@ describe('runReviewer with fixture shims', () => {
     })
   })
 
+  describe('configEnv merging', () => {
+    it('makes config env vars available in subprocess', () => {
+      setup()
+      const shimPath = path.join(tmpDir, 'env_check.sh')
+      fs.writeFileSync(shimPath, [
+        '#!/usr/bin/env bash',
+        'cat > /dev/null',
+        'if [ "$TURBOCOMMIT_DISABLED" = "1" ]; then',
+        '  echo "PASS: TURBOCOMMIT_DISABLED is set"',
+        'else',
+        '  echo "FAIL: TURBOCOMMIT_DISABLED was not set"',
+        'fi'
+      ].join('\n'))
+      fs.chmodSync(shimPath, 0o755)
+
+      const review = runReviewer(tmpDir, {
+        command: shimPath,
+        configEnv: { TURBOCOMMIT_DISABLED: '1' }
+      }, 'test prompt')
+
+      assert.strictEqual(review.available, true)
+      assert.strictEqual(review.pass, true, `Expected PASS but got: ${review.reason || review.error}`)
+      cleanup()
+    })
+
+    it('does not let configEnv override PROVE_IT_DISABLED', () => {
+      setup()
+      const shimPath = path.join(tmpDir, 'forced_check.sh')
+      fs.writeFileSync(shimPath, [
+        '#!/usr/bin/env bash',
+        'cat > /dev/null',
+        'if [ "$PROVE_IT_DISABLED" = "1" ]; then',
+        '  echo "PASS: PROVE_IT_DISABLED is still 1"',
+        'else',
+        '  echo "FAIL: PROVE_IT_DISABLED was overridden to $PROVE_IT_DISABLED"',
+        'fi'
+      ].join('\n'))
+      fs.chmodSync(shimPath, 0o755)
+
+      const review = runReviewer(tmpDir, {
+        command: shimPath,
+        configEnv: { PROVE_IT_DISABLED: '0' }
+      }, 'test prompt')
+
+      assert.strictEqual(review.available, true)
+      assert.strictEqual(review.pass, true, `Expected PASS but got: ${review.reason || review.error}`)
+      cleanup()
+    })
+
+    it('does not let configEnv override CLAUDECODE', () => {
+      setup()
+      const shimPath = path.join(tmpDir, 'claude_check.sh')
+      fs.writeFileSync(shimPath, [
+        '#!/usr/bin/env bash',
+        'cat > /dev/null',
+        'if [ -z "$CLAUDECODE" ]; then',
+        '  echo "PASS: CLAUDECODE was cleared"',
+        'else',
+        '  echo "FAIL: CLAUDECODE was set to $CLAUDECODE"',
+        'fi'
+      ].join('\n'))
+      fs.chmodSync(shimPath, 0o755)
+
+      const review = runReviewer(tmpDir, {
+        command: shimPath,
+        configEnv: { CLAUDECODE: 'should-be-overridden' }
+      }, 'test prompt')
+
+      assert.strictEqual(review.available, true)
+      assert.strictEqual(review.pass, true, `Expected PASS but got: ${review.reason || review.error}`)
+      cleanup()
+    })
+
+    it('produces same behavior when configEnv is null', () => {
+      setup()
+      process.env.FRAUDE_RESPONSE = 'PASS: no configEnv'
+      const review = runReviewer(tmpDir, {
+        command: `${fraudePath} -p`,
+        configEnv: null
+      }, 'test prompt')
+
+      assert.strictEqual(review.available, true)
+      assert.strictEqual(review.pass, true)
+      cleanup()
+    })
+  })
+
   describe('timeout from config', () => {
     it('uses timeout from reviewerCfg', () => {
       setup()

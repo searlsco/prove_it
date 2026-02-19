@@ -373,12 +373,31 @@ describe('install/uninstall', () => {
       'prove_it.md rules file should not exist in v2')
   })
 
-  it('install does not create global config (v2 is project-only)', () => {
+  it('install creates global config with default env vars', () => {
     runCli(['install'], { env: { ...process.env, HOME: tmpDir } })
 
     const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
-    assert.ok(!fs.existsSync(configPath),
-      'Global config should not exist in v2')
+    assert.ok(fs.existsSync(configPath), 'Global config should exist')
+    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    assert.strictEqual(cfg.env.TURBOCOMMIT_DISABLED, '1',
+      'Should set TURBOCOMMIT_DISABLED=1')
+  })
+
+  it('install preserves existing global config fields', () => {
+    const configDir = path.join(tmpDir, '.claude', 'prove_it')
+    fs.mkdirSync(configDir, { recursive: true })
+    fs.writeFileSync(path.join(configDir, 'config.json'),
+      JSON.stringify({ ignoredPaths: ['~/tmp'], env: { MY_VAR: 'keep' } }, null, 2))
+
+    runCli(['install'], { env: { ...process.env, HOME: tmpDir } })
+
+    const cfg = JSON.parse(fs.readFileSync(path.join(configDir, 'config.json'), 'utf8'))
+    assert.deepStrictEqual(cfg.ignoredPaths, ['~/tmp'],
+      'Should preserve ignoredPaths')
+    assert.strictEqual(cfg.env.MY_VAR, 'keep',
+      'Should preserve existing env vars')
+    assert.strictEqual(cfg.env.TURBOCOMMIT_DISABLED, '1',
+      'Should add default env vars')
   })
 
   it('install is idempotent', () => {
@@ -407,6 +426,26 @@ describe('install/uninstall', () => {
     assert.match(result.stdout, /already up to date/)
     assert.ok(!result.stdout.includes('Restart Claude Code'),
       'Should not show restart banner when already up to date')
+  })
+
+  it('install detects outdated global config env', () => {
+    const env = { ...process.env, HOME: tmpDir }
+    runCli(['install'], { env })
+
+    // Remove the default env var from global config
+    const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    delete cfg.env.TURBOCOMMIT_DISABLED
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n')
+
+    // Re-install should detect it and update (not report "up to date")
+    const result = runCli(['install'], { env })
+    assert.strictEqual(result.exitCode, 0)
+    assert.match(result.stdout, /prove_it installed/)
+
+    const updated = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    assert.strictEqual(updated.env.TURBOCOMMIT_DISABLED, '1',
+      'Should restore default env var')
   })
 
   it('install updates outdated hooks', () => {

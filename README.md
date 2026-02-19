@@ -291,6 +291,27 @@ export DEBUG="true"
 
 Multiple env tasks merge in order — later tasks override earlier ones for the same key. If the command fails or output can't be parsed, the error is reported and execution continues.
 
+## Subprocess environment
+
+When prove_it spawns reviewer subagents or runs script tasks, other hooks installed in your environment (like [turbocommit](https://github.com/Siege/turbocommit)) may fire inside those subprocesses. Use the top-level `env` field to set environment variables across all prove_it subprocesses:
+
+```json
+{
+  "configVersion": 3,
+  "env": {
+    "TURBOCOMMIT_DISABLED": "1"
+  },
+  "hooks": [...]
+}
+```
+
+These variables are merged into the environment of both script tasks and agent reviewer subprocesses. prove_it forces `PROVE_IT_DISABLED` and `PROVE_IT_SKIP_NOTIFY` in all subprocesses to prevent recursion — these cannot be overridden by `env`. Reviewer subprocesses additionally force `CLAUDECODE` and `LC_ALL`.
+
+**Merge order** (last wins):
+1. `process.env` — inherited base environment
+2. `env` — your config values
+3. prove_it forced vars — recursion prevention, always win
+
 ## Agent tasks
 
 Agent tasks spawn a separate AI process to review Claude's work with an independent PASS/FAIL verdict. This is useful because the reviewing agent has no stake in the code it's judging.

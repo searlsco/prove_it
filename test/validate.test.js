@@ -119,6 +119,34 @@ describe('validateConfig', () => {
       assert.ok(errors.some(e => e.includes('fileEditingTools[1] must be a string')))
     })
 
+    it('accepts top-level model as valid string', () => {
+      const { errors } = validateConfig(validConfig({
+        model: 'gpt-4.1',
+        hooks: [{
+          type: 'claude',
+          event: 'Stop',
+          tasks: [{ name: 'a', type: 'agent', prompt: 'Review this' }]
+        }]
+      }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('errors when top-level model is not a string', () => {
+      const { errors } = validateConfig(validConfig({ model: 42 }))
+      assert.ok(errors.some(e => e.includes('"model" must be a non-empty string')))
+    })
+
+    it('errors when top-level model is empty string', () => {
+      const { errors } = validateConfig(validConfig({ model: '' }))
+      assert.ok(errors.some(e => e.includes('"model" must be a non-empty string')))
+    })
+
+    it('warns when top-level model is set but no agent tasks exist', () => {
+      const { errors, warnings } = validateConfig(validConfig({ model: 'gpt-4.1' }))
+      assert.strictEqual(errors.length, 0)
+      assert.ok(warnings.some(w => w.includes('model') && w.includes('no agent tasks')))
+    })
+
     it('errors on unknown top-level keys', () => {
       const cfg = validConfig()
       cfg.customThing = true
@@ -596,6 +624,70 @@ describe('validateConfig', () => {
         when: { variablesPresent: ['bogus_var'] }
       }))
       assert.ok(errors.some(e => e.includes('unknown variable "bogus_var"')))
+    })
+  })
+
+  describe('top-level env validation', () => {
+    it('passes env as object with string values', () => {
+      const { errors } = validateConfig(validConfig({ env: { TURBOCOMMIT_DISABLED: '1', MY_VAR: 'hello' } }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('passes empty env object', () => {
+      const { errors } = validateConfig(validConfig({ env: {} }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('passes when env is omitted', () => {
+      const cfg = validConfig()
+      delete cfg.env
+      const { errors } = validateConfig(cfg)
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('errors when env is a string', () => {
+      const { errors } = validateConfig(validConfig({ env: 'FOO=bar' }))
+      assert.ok(errors.some(e => e.includes('"env" must be an object')))
+    })
+
+    it('errors when env is an array', () => {
+      const { errors } = validateConfig(validConfig({ env: ['FOO=bar'] }))
+      assert.ok(errors.some(e => e.includes('"env" must be an object')))
+    })
+
+    it('errors when env is null', () => {
+      const { errors } = validateConfig(validConfig({ env: null }))
+      assert.ok(errors.some(e => e.includes('"env" must be an object')))
+    })
+
+    it('errors when env value is a number', () => {
+      const { errors } = validateConfig(validConfig({ env: { PORT: 3000 } }))
+      assert.ok(errors.some(e => e.includes('env["PORT"] must be a string')))
+    })
+
+    it('errors when env value is a boolean', () => {
+      const { errors } = validateConfig(validConfig({ env: { DEBUG: true } }))
+      assert.ok(errors.some(e => e.includes('env["DEBUG"] must be a string')))
+    })
+
+    it('errors when env value is an object', () => {
+      const { errors } = validateConfig(validConfig({ env: { NESTED: { a: 1 } } }))
+      assert.ok(errors.some(e => e.includes('env["NESTED"] must be a string')))
+    })
+
+    it('errors when env key starts with a digit', () => {
+      const { errors } = validateConfig(validConfig({ env: { '3PO': 'droid' } }))
+      assert.ok(errors.some(e => e.includes('env key "3PO" is not a valid environment variable name')))
+    })
+
+    it('errors when env key has spaces', () => {
+      const { errors } = validateConfig(validConfig({ env: { 'MY VAR': 'val' } }))
+      assert.ok(errors.some(e => e.includes('env key "MY VAR" is not a valid environment variable name')))
+    })
+
+    it('passes env key starting with underscore', () => {
+      const { errors } = validateConfig(validConfig({ env: { _INTERNAL: 'val' } }))
+      assert.strictEqual(errors.length, 0)
     })
   })
 

@@ -328,6 +328,45 @@ describe('v2 dispatcher: core hook behaviors', () => {
     })
   })
 
+  describe('git hook env propagation', () => {
+    it('git pre-commit script task sees config env vars', () => {
+      const fs = require('fs')
+      const path = require('path')
+      createFile(tmpDir, 'script/test', [
+        '#!/usr/bin/env bash',
+        'if [ "$TURBOCOMMIT_DISABLED" = "1" ]; then',
+        '  exit 0',
+        'else',
+        '  echo "TURBOCOMMIT_DISABLED was not set" >&2',
+        '  exit 1',
+        'fi'
+      ].join('\n'))
+      fs.chmodSync(path.join(tmpDir, 'script', 'test'), 0o755)
+
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'git',
+          event: 'pre-commit',
+          tasks: [
+            { name: 'full-tests', type: 'script', command: './script/test' }
+          ]
+        }
+      ], { env: { TURBOCOMMIT_DISABLED: '1' } }))
+
+      const result = invokeHook('git:pre-commit', {}, {
+        projectDir: tmpDir,
+        cwd: tmpDir,
+        cleanEnv: true,
+        env: { PATH: process.env.PATH, ...isolatedEnv(tmpDir), CLAUDECODE: '1' }
+      })
+
+      assert.strictEqual(result.exitCode, 0,
+        `Git hook should pass when config env var is set, stderr: ${result.stderr}`)
+      assert.ok(result.stderr.includes('all checks passed'),
+        `Stderr should confirm pass, got: ${result.stderr}`)
+    })
+  })
+
   describe('disabled hooks', () => {
     it('exits silently when enabled: false', () => {
       writeConfig(tmpDir, makeConfig([], { enabled: false }))

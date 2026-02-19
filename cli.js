@@ -17,7 +17,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const readline = require('readline')
-const { loadJson, writeJson } = require('./lib/shared')
+const { loadJson, writeJson, getProveItDir } = require('./lib/shared')
 
 function rmIfExists (p) {
   try {
@@ -90,6 +90,24 @@ function buildHookGroups () {
   ]
 }
 
+/**
+ * Default env vars shipped in the global config.
+ * Prevents sister tools from firing inside prove_it subprocesses.
+ */
+const DEFAULT_GLOBAL_ENV = {
+  TURBOCOMMIT_DISABLED: '1'
+}
+
+function isGlobalConfigCurrent () {
+  const cfgPath = path.join(getProveItDir(), 'config.json')
+  const cfg = loadJson(cfgPath)
+  if (!cfg || !cfg.env) return false
+  for (const [k, v] of Object.entries(DEFAULT_GLOBAL_ENV)) {
+    if (cfg.env[k] !== v) return false
+  }
+  return true
+}
+
 function isInstallCurrent (settings) {
   if (!settings || !settings.hooks) return false
   const expected = buildHookGroups()
@@ -97,6 +115,7 @@ function isInstallCurrent (settings) {
     const found = findProveItGroup(settings, event)
     if (!found || JSON.stringify(found) !== JSON.stringify(group)) return false
   }
+  if (!isGlobalConfigCurrent()) return false
   return true
 }
 
@@ -136,6 +155,13 @@ function cmdInstall () {
 
   writeJson(settingsPath, settings)
 
+  // Ensure global config has default env vars
+  const globalCfgPath = path.join(getProveItDir(), 'config.json')
+  const globalCfg = loadJson(globalCfgPath) || {}
+  if (!globalCfg.env) globalCfg.env = {}
+  Object.assign(globalCfg.env, DEFAULT_GLOBAL_ENV)
+  writeJson(globalCfgPath, globalCfg)
+
   // Install /prove skill
   const skillDir = path.join(claudeDir, 'skills', 'prove')
   fs.mkdirSync(skillDir, { recursive: true })
@@ -146,6 +172,7 @@ function cmdInstall () {
 
   log('prove_it installed.')
   log(`  Settings: ${settingsPath}`)
+  log(`  Config:   ${globalCfgPath}`)
   log(`  Skill:    ${path.join(skillDir, 'SKILL.md')}`)
   log('')
   log('════════════════════════════════════════════════════════════════════')
