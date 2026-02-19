@@ -505,8 +505,8 @@ describe('Config-driven hook behavior (v2)', () => {
 
   // ──── top-level env ────
 
-  describe('top-level env config', () => {
-    it('script task sees config env vars', () => {
+  describe('top-level taskEnv config', () => {
+    it('script task sees config taskEnv vars', () => {
       createFile(tmpDir, 'script/env_check', [
         '#!/usr/bin/env bash',
         'if [ "$TURBOCOMMIT_DISABLED" = "1" ]; then',
@@ -526,7 +526,7 @@ describe('Config-driven hook behavior (v2)', () => {
             { name: 'env-check', type: 'script', command: './script/env_check' }
           ]
         }
-      ], { env: { TURBOCOMMIT_DISABLED: '1' } }))
+      ], { taskEnv: { TURBOCOMMIT_DISABLED: '1' } }))
 
       const result = invokeHook('claude:Stop', {
         hook_event_name: 'Stop',
@@ -537,10 +537,10 @@ describe('Config-driven hook behavior (v2)', () => {
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'Hook should produce JSON output')
       assert.strictEqual(result.output.decision, 'approve',
-        'Script should pass when config env var is present')
+        'Script should pass when config taskEnv var is present')
     })
 
-    it('script task fails without config env var', () => {
+    it('script task fails without config taskEnv var', () => {
       createFile(tmpDir, 'script/env_check', [
         '#!/usr/bin/env bash',
         'if [ "$TURBOCOMMIT_DISABLED" = "1" ]; then',
@@ -571,10 +571,10 @@ describe('Config-driven hook behavior (v2)', () => {
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'Hook should produce JSON output')
       assert.strictEqual(result.output.decision, 'block',
-        'Script should fail when config env var is absent')
+        'Script should fail when config taskEnv var is absent')
     })
 
-    it('empty env object does not break dispatch', () => {
+    it('empty taskEnv object does not break dispatch', () => {
       createFastTestScript(tmpDir, true)
       writeConfig(tmpDir, makeConfig([
         {
@@ -584,7 +584,7 @@ describe('Config-driven hook behavior (v2)', () => {
             { name: 'fast-tests', type: 'script', command: './script/test_fast' }
           ]
         }
-      ], { env: {} }))
+      ], { taskEnv: {} }))
 
       const result = invokeHook('claude:Stop', {
         hook_event_name: 'Stop',

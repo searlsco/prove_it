@@ -100,11 +100,11 @@ function isGlobalConfigCurrent () {
     const fresh = buildGlobalConfig()
     return contentHash === configHash(fresh)
   }
-  // Edited — current if all default env keys are present
+  // Edited — current if all default taskEnv keys are present
   const defaults = buildGlobalConfig()
-  if (!cfg.env) return false
-  for (const [k, v] of Object.entries(defaults.env)) {
-    if (cfg.env[k] !== v) return false
+  if (!cfg.taskEnv) return false
+  for (const [k, v] of Object.entries(defaults.taskEnv)) {
+    if (cfg.taskEnv[k] !== v) return false
   }
   return true
 }
@@ -173,10 +173,10 @@ function cmdInstall () {
       writeJson(globalCfgPath, fresh)
     }
   } else {
-    // Edited or legacy (no initSeed) — preserve user config, ensure env defaults
+    // Edited or legacy (no initSeed) — preserve user config, ensure taskEnv defaults
     const defaults = buildGlobalConfig()
-    if (!existingGlobal.env) existingGlobal.env = {}
-    Object.assign(existingGlobal.env, defaults.env)
+    if (!existingGlobal.taskEnv) existingGlobal.taskEnv = {}
+    Object.assign(existingGlobal.taskEnv, defaults.taskEnv)
     writeJson(globalCfgPath, existingGlobal)
   }
 

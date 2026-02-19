@@ -627,66 +627,66 @@ describe('validateConfig', () => {
     })
   })
 
-  describe('top-level env validation', () => {
-    it('passes env as object with string values', () => {
-      const { errors } = validateConfig(validConfig({ env: { TURBOCOMMIT_DISABLED: '1', MY_VAR: 'hello' } }))
+  describe('top-level taskEnv validation', () => {
+    it('passes taskEnv as object with string values', () => {
+      const { errors } = validateConfig(validConfig({ taskEnv: { TURBOCOMMIT_DISABLED: '1', MY_VAR: 'hello' } }))
       assert.strictEqual(errors.length, 0)
     })
 
-    it('passes empty env object', () => {
-      const { errors } = validateConfig(validConfig({ env: {} }))
+    it('passes empty taskEnv object', () => {
+      const { errors } = validateConfig(validConfig({ taskEnv: {} }))
       assert.strictEqual(errors.length, 0)
     })
 
-    it('passes when env is omitted', () => {
+    it('passes when taskEnv is omitted', () => {
       const cfg = validConfig()
-      delete cfg.env
+      delete cfg.taskEnv
       const { errors } = validateConfig(cfg)
       assert.strictEqual(errors.length, 0)
     })
 
-    it('errors when env is a string', () => {
-      const { errors } = validateConfig(validConfig({ env: 'FOO=bar' }))
-      assert.ok(errors.some(e => e.includes('"env" must be an object')))
+    it('errors when taskEnv is a string', () => {
+      const { errors } = validateConfig(validConfig({ taskEnv: 'FOO=bar' }))
+      assert.ok(errors.some(e => e.includes('"taskEnv" must be an object')))
     })
 
-    it('errors when env is an array', () => {
-      const { errors } = validateConfig(validConfig({ env: ['FOO=bar'] }))
-      assert.ok(errors.some(e => e.includes('"env" must be an object')))
+    it('errors when taskEnv is an array', () => {
+      const { errors } = validateConfig(validConfig({ taskEnv: ['FOO=bar'] }))
+      assert.ok(errors.some(e => e.includes('"taskEnv" must be an object')))
     })
 
-    it('errors when env is null', () => {
-      const { errors } = validateConfig(validConfig({ env: null }))
-      assert.ok(errors.some(e => e.includes('"env" must be an object')))
+    it('errors when taskEnv is null', () => {
+      const { errors } = validateConfig(validConfig({ taskEnv: null }))
+      assert.ok(errors.some(e => e.includes('"taskEnv" must be an object')))
     })
 
-    it('errors when env value is a number', () => {
-      const { errors } = validateConfig(validConfig({ env: { PORT: 3000 } }))
-      assert.ok(errors.some(e => e.includes('env["PORT"] must be a string')))
+    it('errors when taskEnv value is a number', () => {
+      const { errors } = validateConfig(validConfig({ taskEnv: { PORT: 3000 } }))
+      assert.ok(errors.some(e => e.includes('taskEnv["PORT"] must be a string')))
     })
 
-    it('errors when env value is a boolean', () => {
-      const { errors } = validateConfig(validConfig({ env: { DEBUG: true } }))
-      assert.ok(errors.some(e => e.includes('env["DEBUG"] must be a string')))
+    it('errors when taskEnv value is a boolean', () => {
+      const { errors } = validateConfig(validConfig({ taskEnv: { DEBUG: true } }))
+      assert.ok(errors.some(e => e.includes('taskEnv["DEBUG"] must be a string')))
     })
 
-    it('errors when env value is an object', () => {
-      const { errors } = validateConfig(validConfig({ env: { NESTED: { a: 1 } } }))
-      assert.ok(errors.some(e => e.includes('env["NESTED"] must be a string')))
+    it('errors when taskEnv value is an object', () => {
+      const { errors } = validateConfig(validConfig({ taskEnv: { NESTED: { a: 1 } } }))
+      assert.ok(errors.some(e => e.includes('taskEnv["NESTED"] must be a string')))
     })
 
-    it('errors when env key starts with a digit', () => {
-      const { errors } = validateConfig(validConfig({ env: { '3PO': 'droid' } }))
-      assert.ok(errors.some(e => e.includes('env key "3PO" is not a valid environment variable name')))
+    it('errors when taskEnv key starts with a digit', () => {
+      const { errors } = validateConfig(validConfig({ taskEnv: { '3PO': 'droid' } }))
+      assert.ok(errors.some(e => e.includes('taskEnv key "3PO" is not a valid environment variable name')))
     })
 
-    it('errors when env key has spaces', () => {
-      const { errors } = validateConfig(validConfig({ env: { 'MY VAR': 'val' } }))
-      assert.ok(errors.some(e => e.includes('env key "MY VAR" is not a valid environment variable name')))
+    it('errors when taskEnv key has spaces', () => {
+      const { errors } = validateConfig(validConfig({ taskEnv: { 'MY VAR': 'val' } }))
+      assert.ok(errors.some(e => e.includes('taskEnv key "MY VAR" is not a valid environment variable name')))
     })
 
-    it('passes env key starting with underscore', () => {
-      const { errors } = validateConfig(validConfig({ env: { _INTERNAL: 'val' } }))
+    it('passes taskEnv key starting with underscore', () => {
+      const { errors } = validateConfig(validConfig({ taskEnv: { _INTERNAL: 'val' } }))
       assert.strictEqual(errors.length, 0)
     })
   })

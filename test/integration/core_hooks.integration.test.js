@@ -330,8 +330,8 @@ describe('v2 dispatcher: core hook behaviors', () => {
     })
   })
 
-  describe('git hook env propagation', () => {
-    it('git pre-commit script task sees config env vars', () => {
+  describe('git hook taskEnv propagation', () => {
+    it('git pre-commit script task sees config taskEnv vars', () => {
       const fs = require('fs')
       const path = require('path')
       createFile(tmpDir, 'script/test', [
@@ -353,7 +353,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
             { name: 'full-tests', type: 'script', command: './script/test' }
           ]
         }
-      ], { env: { TURBOCOMMIT_DISABLED: '1' } }))
+      ], { taskEnv: { TURBOCOMMIT_DISABLED: '1' } }))
 
       const result = invokeHook('git:pre-commit', {}, {
         projectDir: tmpDir,
@@ -363,7 +363,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
       })
 
       assert.strictEqual(result.exitCode, 0,
-        `Git hook should pass when config env var is set, stderr: ${result.stderr}`)
+        `Git hook should pass when config taskEnv var is set, stderr: ${result.stderr}`)
       assert.ok(result.stderr.includes('all checks passed'),
         `Stderr should confirm pass, got: ${result.stderr}`)
     })

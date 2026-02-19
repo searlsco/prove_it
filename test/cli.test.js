@@ -373,13 +373,13 @@ describe('install/uninstall', () => {
       'prove_it.md rules file should not exist in v2')
   })
 
-  it('install creates global config with default env vars', () => {
+  it('install creates global config with default taskEnv vars', () => {
     runCli(['install'], { env: { ...process.env, HOME: tmpDir } })
 
     const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
     assert.ok(fs.existsSync(configPath), 'Global config should exist')
     const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-    assert.strictEqual(cfg.env.TURBOCOMMIT_DISABLED, '1',
+    assert.strictEqual(cfg.taskEnv.TURBOCOMMIT_DISABLED, '1',
       'Should set TURBOCOMMIT_DISABLED=1')
   })
 
@@ -387,17 +387,17 @@ describe('install/uninstall', () => {
     const configDir = path.join(tmpDir, '.claude', 'prove_it')
     fs.mkdirSync(configDir, { recursive: true })
     fs.writeFileSync(path.join(configDir, 'config.json'),
-      JSON.stringify({ ignoredPaths: ['~/tmp'], env: { MY_VAR: 'keep' } }, null, 2))
+      JSON.stringify({ ignoredPaths: ['~/tmp'], taskEnv: { MY_VAR: 'keep' } }, null, 2))
 
     runCli(['install'], { env: { ...process.env, HOME: tmpDir } })
 
     const cfg = JSON.parse(fs.readFileSync(path.join(configDir, 'config.json'), 'utf8'))
     assert.deepStrictEqual(cfg.ignoredPaths, ['~/tmp'],
       'Should preserve ignoredPaths')
-    assert.strictEqual(cfg.env.MY_VAR, 'keep',
-      'Should preserve existing env vars')
-    assert.strictEqual(cfg.env.TURBOCOMMIT_DISABLED, '1',
-      'Should add default env vars')
+    assert.strictEqual(cfg.taskEnv.MY_VAR, 'keep',
+      'Should preserve existing taskEnv vars')
+    assert.strictEqual(cfg.taskEnv.TURBOCOMMIT_DISABLED, '1',
+      'Should add default taskEnv vars')
   })
 
   it('install is idempotent', () => {
@@ -428,14 +428,14 @@ describe('install/uninstall', () => {
       'Should not show restart banner when already up to date')
   })
 
-  it('install detects outdated global config env', () => {
+  it('install detects outdated global config taskEnv', () => {
     const env = { ...process.env, HOME: tmpDir }
     runCli(['install'], { env })
 
-    // Remove the default env var from global config
+    // Remove the default taskEnv var from global config
     const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
     const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-    delete cfg.env.TURBOCOMMIT_DISABLED
+    delete cfg.taskEnv.TURBOCOMMIT_DISABLED
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n')
 
     // Re-install should detect it and update (not report "up to date")
@@ -444,8 +444,8 @@ describe('install/uninstall', () => {
     assert.match(result.stdout, /prove_it installed/)
 
     const updated = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-    assert.strictEqual(updated.env.TURBOCOMMIT_DISABLED, '1',
-      'Should restore default env var')
+    assert.strictEqual(updated.taskEnv.TURBOCOMMIT_DISABLED, '1',
+      'Should restore default taskEnv var')
   })
 
   it('install updates outdated hooks', () => {
@@ -568,7 +568,7 @@ describe('install/uninstall', () => {
 
     // Write an old-style global config that is self-consistent (hash matches seed)
     const { configHash } = require('../lib/config')
-    const oldConfig = { configVersion: 2, env: { OLD_VAR: '1' } }
+    const oldConfig = { configVersion: 2, taskEnv: { OLD_VAR: '1' } }
     oldConfig.initSeed = configHash(oldConfig)
     fs.mkdirSync(path.dirname(configPath), { recursive: true })
     fs.writeFileSync(configPath, JSON.stringify(oldConfig, null, 2) + '\n')
@@ -578,8 +578,8 @@ describe('install/uninstall', () => {
 
     const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
     assert.strictEqual(cfg.configVersion, 3, 'Should be upgraded to v3')
-    assert.strictEqual(cfg.env.TURBOCOMMIT_DISABLED, '1', 'Should have current defaults')
-    assert.ok(!cfg.env.OLD_VAR, 'Old env should be replaced')
+    assert.strictEqual(cfg.taskEnv.TURBOCOMMIT_DISABLED, '1', 'Should have current defaults')
+    assert.ok(!cfg.taskEnv.OLD_VAR, 'Old taskEnv should be replaced')
     assert.strictEqual(cfg.initSeed, configHash(cfg), 'initSeed should match content')
   })
 
@@ -593,7 +593,7 @@ describe('install/uninstall', () => {
     // Edit the config (hash will no longer match seed)
     const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
     cfg.ignoredPaths = ['~/my-project']
-    delete cfg.env.TURBOCOMMIT_DISABLED
+    delete cfg.taskEnv.TURBOCOMMIT_DISABLED
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n')
 
     // Re-install
@@ -602,8 +602,8 @@ describe('install/uninstall', () => {
     const updated = JSON.parse(fs.readFileSync(configPath, 'utf8'))
     assert.deepStrictEqual(updated.ignoredPaths, ['~/my-project'],
       'Should preserve custom fields')
-    assert.strictEqual(updated.env.TURBOCOMMIT_DISABLED, '1',
-      'Should restore default env vars')
+    assert.strictEqual(updated.taskEnv.TURBOCOMMIT_DISABLED, '1',
+      'Should restore default taskEnv vars')
   })
 
   it('install treats legacy global config as edited', () => {
@@ -614,7 +614,7 @@ describe('install/uninstall', () => {
     fs.mkdirSync(path.dirname(configPath), { recursive: true })
     fs.writeFileSync(configPath, JSON.stringify({
       ignoredPaths: ['~/legacy'],
-      env: { CUSTOM: 'yes' }
+      taskEnv: { CUSTOM: 'yes' }
     }, null, 2) + '\n')
 
     runCli(['install'], { env })
@@ -622,10 +622,10 @@ describe('install/uninstall', () => {
     const updated = JSON.parse(fs.readFileSync(configPath, 'utf8'))
     assert.deepStrictEqual(updated.ignoredPaths, ['~/legacy'],
       'Should preserve custom fields')
-    assert.strictEqual(updated.env.CUSTOM, 'yes',
-      'Should preserve custom env vars')
-    assert.strictEqual(updated.env.TURBOCOMMIT_DISABLED, '1',
-      'Should add default env vars')
+    assert.strictEqual(updated.taskEnv.CUSTOM, 'yes',
+      'Should preserve custom taskEnv vars')
+    assert.strictEqual(updated.taskEnv.TURBOCOMMIT_DISABLED, '1',
+      'Should add default taskEnv vars')
     assert.ok(!updated.initSeed,
       'Should not inject initSeed into edited config')
   })
