@@ -551,6 +551,84 @@ describe('install/uninstall', () => {
     runCli(['uninstall'], { env })
     assert.ok(!fs.existsSync(skillDir), 'Skill dir should be removed after uninstall')
   })
+
+  it('install creates global config with configVersion and initSeed', () => {
+    runCli(['install'], { env: { ...process.env, HOME: tmpDir } })
+
+    const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    assert.strictEqual(cfg.configVersion, 3, 'Should have configVersion 3')
+    assert.ok(cfg.initSeed, 'Should have initSeed')
+    assert.strictEqual(cfg.initSeed.length, 12, 'initSeed should be 12-char hex')
+  })
+
+  it('install auto-upgrades unedited global config when defaults change', () => {
+    const env = { ...process.env, HOME: tmpDir }
+    const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+
+    // Write an old-style global config that is self-consistent (hash matches seed)
+    const { configHash } = require('../lib/config')
+    const oldConfig = { configVersion: 2, env: { OLD_VAR: '1' } }
+    oldConfig.initSeed = configHash(oldConfig)
+    fs.mkdirSync(path.dirname(configPath), { recursive: true })
+    fs.writeFileSync(configPath, JSON.stringify(oldConfig, null, 2) + '\n')
+
+    // Also need settings.json for install to not short-circuit
+    runCli(['install'], { env })
+
+    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    assert.strictEqual(cfg.configVersion, 3, 'Should be upgraded to v3')
+    assert.strictEqual(cfg.env.TURBOCOMMIT_DISABLED, '1', 'Should have current defaults')
+    assert.ok(!cfg.env.OLD_VAR, 'Old env should be replaced')
+    assert.strictEqual(cfg.initSeed, configHash(cfg), 'initSeed should match content')
+  })
+
+  it('install preserves edited global config but ensures env defaults', () => {
+    const env = { ...process.env, HOME: tmpDir }
+    const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+
+    // Install to get a seeded config
+    runCli(['install'], { env })
+
+    // Edit the config (hash will no longer match seed)
+    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    cfg.ignoredPaths = ['~/my-project']
+    delete cfg.env.TURBOCOMMIT_DISABLED
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n')
+
+    // Re-install
+    runCli(['install'], { env })
+
+    const updated = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    assert.deepStrictEqual(updated.ignoredPaths, ['~/my-project'],
+      'Should preserve custom fields')
+    assert.strictEqual(updated.env.TURBOCOMMIT_DISABLED, '1',
+      'Should restore default env vars')
+  })
+
+  it('install treats legacy global config as edited', () => {
+    const env = { ...process.env, HOME: tmpDir }
+    const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+
+    // Write a legacy config (no initSeed)
+    fs.mkdirSync(path.dirname(configPath), { recursive: true })
+    fs.writeFileSync(configPath, JSON.stringify({
+      ignoredPaths: ['~/legacy'],
+      env: { CUSTOM: 'yes' }
+    }, null, 2) + '\n')
+
+    runCli(['install'], { env })
+
+    const updated = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    assert.deepStrictEqual(updated.ignoredPaths, ['~/legacy'],
+      'Should preserve custom fields')
+    assert.strictEqual(updated.env.CUSTOM, 'yes',
+      'Should preserve custom env vars')
+    assert.strictEqual(updated.env.TURBOCOMMIT_DISABLED, '1',
+      'Should add default env vars')
+    assert.ok(!updated.initSeed,
+      'Should not inject initSeed into edited config')
+  })
 })
 
 describe('skill source', () => {

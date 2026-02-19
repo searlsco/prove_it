@@ -17,7 +17,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const readline = require('readline')
-const { loadJson, writeJson, getProveItDir } = require('./lib/shared')
+const { loadJson, writeJson, getProveItDir, buildGlobalConfig, configHash } = require('./lib/shared')
 
 function rmIfExists (p) {
   try {
@@ -90,19 +90,20 @@ function buildHookGroups () {
   ]
 }
 
-/**
- * Default env vars shipped in the global config.
- * Prevents sister tools from firing inside prove_it subprocesses.
- */
-const DEFAULT_GLOBAL_ENV = {
-  TURBOCOMMIT_DISABLED: '1'
-}
-
 function isGlobalConfigCurrent () {
   const cfgPath = path.join(getProveItDir(), 'config.json')
   const cfg = loadJson(cfgPath)
-  if (!cfg || !cfg.env) return false
-  for (const [k, v] of Object.entries(DEFAULT_GLOBAL_ENV)) {
+  if (!cfg || !cfg.initSeed) return false
+  const contentHash = configHash(cfg)
+  if (contentHash === cfg.initSeed) {
+    // Unedited — current only if it matches fresh defaults
+    const fresh = buildGlobalConfig()
+    return contentHash === configHash(fresh)
+  }
+  // Edited — current if all default env keys are present
+  const defaults = buildGlobalConfig()
+  if (!cfg.env) return false
+  for (const [k, v] of Object.entries(defaults.env)) {
     if (cfg.env[k] !== v) return false
   }
   return true
@@ -155,12 +156,29 @@ function cmdInstall () {
 
   writeJson(settingsPath, settings)
 
-  // Ensure global config has default env vars
+  // Global config — seed-based 3-way merge (same pattern as project config)
   const globalCfgPath = path.join(getProveItDir(), 'config.json')
-  const globalCfg = loadJson(globalCfgPath) || {}
-  if (!globalCfg.env) globalCfg.env = {}
-  Object.assign(globalCfg.env, DEFAULT_GLOBAL_ENV)
-  writeJson(globalCfgPath, globalCfg)
+  const existingGlobal = loadJson(globalCfgPath)
+  if (!existingGlobal) {
+    // No config — write fresh with initSeed
+    const fresh = buildGlobalConfig()
+    fresh.initSeed = configHash(fresh)
+    writeJson(globalCfgPath, fresh)
+  } else if (existingGlobal.initSeed && configHash(existingGlobal) === existingGlobal.initSeed) {
+    // Unedited — auto-upgrade if defaults changed
+    const fresh = buildGlobalConfig()
+    const freshHash = configHash(fresh)
+    if (configHash(existingGlobal) !== freshHash) {
+      fresh.initSeed = freshHash
+      writeJson(globalCfgPath, fresh)
+    }
+  } else {
+    // Edited or legacy (no initSeed) — preserve user config, ensure env defaults
+    const defaults = buildGlobalConfig()
+    if (!existingGlobal.env) existingGlobal.env = {}
+    Object.assign(existingGlobal.env, defaults.env)
+    writeJson(globalCfgPath, existingGlobal)
+  }
 
   // Install /prove skill
   const skillDir = path.join(claudeDir, 'skills', 'prove')
