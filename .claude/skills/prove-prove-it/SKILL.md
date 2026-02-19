@@ -130,9 +130,11 @@ echo '{
 ```
 
 **For threshold-based reviewers** (`linesWrittenSinceLastRun`), the dispatcher
-uses git refs to track churn. It runs `git diff --numstat <ref>..HEAD` filtered
-to the configured source globs and sums additions + deletions. To simulate
-enough churn, commit source file changes to the test repo between dispatches.
+uses git refs to track churn. It runs `git diff --numstat <ref>` filtered
+to the configured source globs and sums additions + deletions. This diffs the
+ref against the working tree, so it captures both committed and uncommitted
+changes. To simulate enough churn, either commit source file changes to the
+test repo between dispatches or leave them uncommitted.
 
 **Observe the threshold building:**
 - First dispatch: bootstraps the ref at HEAD (0 churn, reviewer skipped)
