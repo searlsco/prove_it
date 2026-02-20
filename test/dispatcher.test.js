@@ -496,6 +496,53 @@ describe('claude dispatcher', () => {
       assert.strictEqual(result, true)
     })
 
+    it('passes through result: skip even when sources unchanged', () => {
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'code\n')
+      const { getLatestMtime, saveRunData } = require('../lib/testing')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const mtime = getLatestMtime(tmpDir, ['**/*.js'])
+      // New format: result: 'skip'
+      saveRunData(localCfgPath, 'my-task', { at: mtime + 1000, result: 'skip' })
+
+      const result = evaluateWhen(
+        { sourcesModifiedSinceLastRun: true },
+        { rootDir: tmpDir, localCfgPath, latestSourceMtime: mtime },
+        'my-task'
+      )
+      assert.strictEqual(result, true, 'Should re-fire on skip result (not suppress)')
+    })
+
+    it('suppresses re-run for result: pass (new format)', () => {
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'code\n')
+      const { getLatestMtime, saveRunData } = require('../lib/testing')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const mtime = getLatestMtime(tmpDir, ['**/*.js'])
+      saveRunData(localCfgPath, 'my-task', { at: mtime + 1000, result: 'pass' })
+
+      const result = evaluateWhen(
+        { sourcesModifiedSinceLastRun: true },
+        { rootDir: tmpDir, localCfgPath, latestSourceMtime: mtime },
+        'my-task'
+      )
+      assert.notStrictEqual(result, true, 'Should suppress re-run on pass result')
+    })
+
+    it('backward compat: pass: true (old format) still suppresses re-run', () => {
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'code\n')
+      const { getLatestMtime, saveRunData } = require('../lib/testing')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const mtime = getLatestMtime(tmpDir, ['**/*.js'])
+      // Old format
+      saveRunData(localCfgPath, 'my-task', { at: mtime + 1000, pass: true })
+
+      const result = evaluateWhen(
+        { sourcesModifiedSinceLastRun: true },
+        { rootDir: tmpDir, localCfgPath, latestSourceMtime: mtime },
+        'my-task'
+      )
+      assert.notStrictEqual(result, true, 'Old format pass: true should still suppress')
+    })
+
     it('skips when latestSourceMtime is 0 (no source files)', () => {
       const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
       const result = evaluateWhen(

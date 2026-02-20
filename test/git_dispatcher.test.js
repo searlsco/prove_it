@@ -316,6 +316,38 @@ describe('git dispatcher', () => {
       assert.strictEqual(failure2, null, 'Should skip after resetOnFail advanced ref')
     })
 
+    it('does NOT advance churn ref on agent SKIP', () => {
+      churnSinceRef(tmpDir, sanitizeRefName('skip-check'), ['**/*.js'])
+
+      const lines = Array.from({ length: 10 }, (_, i) => `line${i}`).join('\n') + '\n'
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), lines)
+      spawnSync('git', ['add', '.'], { cwd: tmpDir })
+      spawnSync('git', ['commit', '-m', 'add code'], { cwd: tmpDir })
+
+      const refBefore = readRef(tmpDir, sanitizeRefName('skip-check'))
+
+      // Create a reviewer shim that returns SKIP
+      const skipReviewer = makeScript('skip_reviewer.sh', '#!/usr/bin/env bash\ncat > /dev/null\necho "SKIP: mid-refactor"\n')
+      const entries = [{
+        type: 'git',
+        event: 'pre-commit',
+        tasks: [{
+          name: 'skip-check',
+          type: 'agent',
+          prompt: 'Review {{project_dir}}',
+          command: skipReviewer,
+          when: { linesChanged: 5 }
+        }]
+      }]
+      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, hookEvent: 'pre-commit', localCfgPath: null, sources: ['**/*.js'], maxChars: 12000, testOutput: '' }
+      const { failure } = runGitTasks(entries, context)
+      assert.strictEqual(failure, null, 'SKIP should not cause failure')
+
+      // Ref should NOT have advanced
+      const refAfter = readRef(tmpDir, sanitizeRefName('skip-check'))
+      assert.strictEqual(refAfter, refBefore, 'Ref should NOT advance on SKIP')
+    })
+
     it('resetOnFail resets churn for uncommitted changes (deadlock fix)', () => {
       // Bootstrap
       churnSinceRef(tmpDir, sanitizeRefName('deadlock-check'), ['**/*.js'])

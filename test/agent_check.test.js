@@ -66,6 +66,20 @@ describe('agent check', () => {
     assert.strictEqual(result.skipped, true)
   })
 
+  it('returns skipped when reviewer returns SKIP', () => {
+    const reviewerPath = path.join(tmpDir, 'skip_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "SKIP: changes are unrelated"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    const result = runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review {{project_dir}}' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '' }
+    )
+    assert.strictEqual(result.pass, true)
+    assert.strictEqual(result.skipped, true)
+    assert.strictEqual(result.reason, 'changes are unrelated')
+  })
+
   it('expands template variables in prompt', () => {
     const capturePath = path.join(tmpDir, 'captured.txt')
     const reviewerPath = path.join(tmpDir, 'capture_reviewer.sh')

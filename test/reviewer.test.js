@@ -80,6 +80,31 @@ describe('parseVerdict', () => {
     })
   })
 
+  describe('SKIP responses', () => {
+    it("parses bare 'SKIP' with fallback rationale", () => {
+      const result = parseVerdict('SKIP')
+      assert.strictEqual(result.skip, true)
+      assert.strictEqual(result.reason, '<<Reviewer provided no rationale>>')
+    })
+
+    it("parses 'SKIP: mid-refactor'", () => {
+      const result = parseVerdict('SKIP: mid-refactor')
+      assert.strictEqual(result.skip, true)
+      assert.strictEqual(result.reason, 'mid-refactor')
+    })
+
+    it('finds SKIP after preamble text', () => {
+      const result = parseVerdict('Let me review the changes.\nSKIP: changes are unrelated to test coverage')
+      assert.strictEqual(result.skip, true)
+      assert.strictEqual(result.reason, 'changes are unrelated to test coverage')
+    })
+
+    it('SKIP has no pass field', () => {
+      const result = parseVerdict('SKIP: reason')
+      assert.strictEqual(result.pass, undefined)
+    })
+  })
+
   describe('unexpected responses', () => {
     it('returns error for unexpected output', () => {
       const result = parseVerdict('I think the code looks good')

@@ -37,7 +37,7 @@ describe('record command', () => {
     assert.match(result.stderr, /recorded foo pass/)
 
     const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.local.json'), 'utf8'))
-    assert.strictEqual(data.runs.foo.pass, true)
+    assert.strictEqual(data.runs.foo.result, 'pass')
     assert.ok(typeof data.runs.foo.at === 'number')
   })
 
@@ -47,7 +47,7 @@ describe('record command', () => {
     assert.match(result.stderr, /recorded foo fail/)
 
     const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.local.json'), 'utf8'))
-    assert.strictEqual(data.runs.foo.pass, false)
+    assert.strictEqual(data.runs.foo.result, 'fail')
   })
 
   it('sanitizes name to match script.js behavior', () => {
@@ -83,7 +83,7 @@ describe('record command', () => {
       assert.match(result.stderr, /recorded foo pass/)
 
       const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.local.json'), 'utf8'))
-      assert.strictEqual(data.runs.foo.pass, true)
+      assert.strictEqual(data.runs.foo.result, 'pass')
     })
 
     it('--result 1 records fail and exits 1', () => {
@@ -92,7 +92,7 @@ describe('record command', () => {
       assert.match(result.stderr, /recorded foo fail/)
 
       const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.local.json'), 'utf8'))
-      assert.strictEqual(data.runs.foo.pass, false)
+      assert.strictEqual(data.runs.foo.result, 'fail')
     })
 
     it('--result 42 records fail and exits 42', () => {
@@ -101,7 +101,7 @@ describe('record command', () => {
       assert.match(result.stderr, /recorded foo fail/)
 
       const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.local.json'), 'utf8'))
-      assert.strictEqual(data.runs.foo.pass, false)
+      assert.strictEqual(data.runs.foo.result, 'fail')
     })
 
     it('--result + --pass is an error', () => {
@@ -139,7 +139,7 @@ describe('record command', () => {
       assert.notStrictEqual(result.status, 0, 'script should exit non-zero')
 
       const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.local.json'), 'utf8'))
-      assert.strictEqual(data.runs.traptest.pass, false, 'should record fail')
+      assert.strictEqual(data.runs.traptest.result, 'fail', 'should record fail')
     })
   })
 
@@ -151,6 +151,6 @@ describe('record command', () => {
 
     const data = JSON.parse(fs.readFileSync(localPath, 'utf8'))
     assert.strictEqual(data.runs.existing.pass, true, 'existing run data preserved')
-    assert.strictEqual(data.runs['new-check'].pass, true, 'new run data added')
+    assert.strictEqual(data.runs['new-check'].result, 'pass', 'new run data added')
   })
 })

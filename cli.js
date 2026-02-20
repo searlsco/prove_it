@@ -725,9 +725,9 @@ function cmdDoctor () {
     log('  [x] Local config exists: .claude/prove_it.local.json')
     const localConfig = loadJson(localConfigPath)
     if (localConfig?.runs) {
+      const { runResult } = require('./lib/testing')
       for (const [key, run] of Object.entries(localConfig.runs)) {
-        const status = run.pass ? 'passed' : 'failed'
-        log(`      Last ${key}: ${status} at ${new Date(run.at).toISOString()}`)
+        log(`      Last ${key}: ${runResult(run)} at ${new Date(run.at).toISOString()}`)
       }
     }
   } else {
@@ -887,12 +887,13 @@ function cmdRecord () {
 
   const pass = hasResult ? resultCode === 0 : hasPass
   const exitCode = hasResult ? resultCode : (pass ? 0 : 1)
+  const result = pass ? 'pass' : 'fail'
 
   const localCfgPath = path.join(process.cwd(), '.claude', 'prove_it.local.json')
   const runKey = name.replace(/[^a-zA-Z0-9_-]/g, '_')
-  saveRunData(localCfgPath, runKey, { at: Date.now(), pass })
+  saveRunData(localCfgPath, runKey, { at: Date.now(), result })
 
-  console.error(`prove_it: recorded ${runKey} ${pass ? 'pass' : 'fail'}`)
+  console.error(`prove_it: recorded ${runKey} ${result}`)
   process.exit(exitCode)
 }
 
