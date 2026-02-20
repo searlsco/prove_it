@@ -468,10 +468,10 @@ describe('advanceChurnRef', () => {
   }
 
   function task (overrides) {
-    return { name: 'my-task', when: { linesWrittenSinceLastRun: 5 }, ...overrides }
+    return { name: 'my-task', when: { linesChangedSinceLastRun: 5 }, ...overrides }
   }
 
-  it('does nothing when task has no linesWrittenSinceLastRun', () => {
+  it('does nothing when task has no linesChangedSinceLastRun', () => {
     const refBefore = readRef(tmpDir, sanitizeRefName('no-churn'))
     advanceChurnRef({ name: 'no-churn', when: { fileExists: 'x' } }, true, 'PreToolUse', tmpDir, ['**/*.js'])
     assert.strictEqual(readRef(tmpDir, sanitizeRefName('no-churn')), refBefore)
@@ -540,9 +540,9 @@ describe('advanceChurnRef', () => {
       'Explicit resetOnFail: true should reset churn even on Stop')
   })
 
-  it('advances gross snapshot on pass for linesChangedSinceLastRun tasks', () => {
+  it('advances gross snapshot on pass for linesWrittenSinceLastRun tasks', () => {
     incrementGross(tmpDir, 100)
-    const grossTask = { name: 'gross-task', when: { linesChangedSinceLastRun: 50 } }
+    const grossTask = { name: 'gross-task', when: { linesWrittenSinceLastRun: 50 } }
     // Bootstrap the snapshot
     grossChurnSince(tmpDir, sanitizeRefName('gross-task'))
     // Add more gross churn
@@ -557,7 +557,7 @@ describe('advanceChurnRef', () => {
 
   it('does NOT advance gross snapshot on Stop fail (default resetOnFail: false)', () => {
     incrementGross(tmpDir, 100)
-    const grossTask = { name: 'gross-fail', when: { linesChangedSinceLastRun: 50 } }
+    const grossTask = { name: 'gross-fail', when: { linesWrittenSinceLastRun: 50 } }
     grossChurnSince(tmpDir, sanitizeRefName('gross-fail'))
     incrementGross(tmpDir, 200)
     const before = grossChurnSince(tmpDir, sanitizeRefName('gross-fail'))
@@ -579,7 +579,7 @@ describe('advanceChurnRef', () => {
     grossChurnSince(tmpDir, sanitizeRefName('dual-task'))
     incrementGross(tmpDir, 200)
 
-    const dualTask = { name: 'dual-task', when: { linesWrittenSinceLastRun: 5, linesChangedSinceLastRun: 50 } }
+    const dualTask = { name: 'dual-task', when: { linesChangedSinceLastRun: 5, linesWrittenSinceLastRun: 50 } }
     advanceChurnRef(dualTask, true, 'Stop', tmpDir, ['**/*.js'])
 
     assert.strictEqual(churnSinceRef(tmpDir, sanitizeRefName('dual-task'), ['**/*.js']), 0,

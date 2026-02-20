@@ -223,7 +223,7 @@ describe('git dispatcher', () => {
       assert.ok(context.testOutput.includes('test output'))
     })
 
-    it('advances churn ref on pass for linesWrittenSinceLastRun task', () => {
+    it('advances churn ref on pass for linesChangedSinceLastRun task', () => {
       // Bootstrap the ref
       churnSinceRef(tmpDir, sanitizeRefName('churn-check'), ['**/*.js'])
 
@@ -242,7 +242,7 @@ describe('git dispatcher', () => {
           name: 'churn-check',
           type: 'script',
           command: passScript,
-          when: { linesWrittenSinceLastRun: 5 }
+          when: { linesChangedSinceLastRun: 5 }
         }]
       }]
       const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, hookEvent: 'pre-commit', localCfgPath: null, sources: ['**/*.js'], maxChars: 12000, testOutput: '' }
@@ -275,7 +275,7 @@ describe('git dispatcher', () => {
           name: 'sticky-check',
           type: 'script',
           command: failScript,
-          when: { linesWrittenSinceLastRun: 5 }
+          when: { linesChangedSinceLastRun: 5 }
         }]
       }]
       const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, hookEvent: 'pre-commit', localCfgPath: null, sources: ['**/*.js'], maxChars: 12000, testOutput: '' }
@@ -303,7 +303,7 @@ describe('git dispatcher', () => {
           name: 'reset-check',
           type: 'script',
           command: failScript,
-          when: { linesWrittenSinceLastRun: 5 },
+          when: { linesChangedSinceLastRun: 5 },
           resetOnFail: true
         }]
       }]
@@ -332,7 +332,7 @@ describe('git dispatcher', () => {
           name: 'deadlock-check',
           type: 'script',
           command: failScript,
-          when: { linesWrittenSinceLastRun: 5 },
+          when: { linesChangedSinceLastRun: 5 },
           resetOnFail: true
         }]
       }]

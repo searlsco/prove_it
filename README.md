@@ -210,13 +210,13 @@ Supported conditions:
 | `envSet` | prerequisite | string | Passes when environment variable is set |
 | `envNotSet` | prerequisite | string | Passes when environment variable is not set |
 | `variablesPresent` | prerequisite | string[] | Passes when all listed template variables resolve to non-empty values |
-| `linesWrittenSinceLastRun` | trigger | number | Passes when at least N source lines have changed (additions + deletions) since the task last ran. Backed by git refs — works in both Claude hooks and git hooks. |
-| `linesChangedSinceLastRun` | trigger | number | Passes when at least N gross lines have been written by the agent since the task last ran. Tracks cumulative Write/Edit/NotebookEdit activity — catches thrashing (back-and-forth edits that net to zero). Claude Code sessions only. |
+| `linesChangedSinceLastRun` | trigger | number | Passes when at least N source lines have changed (additions + deletions) since the task last ran. Backed by git refs — works in both Claude hooks and git hooks. |
+| `linesWrittenSinceLastRun` | trigger | number | Passes when at least N gross lines have been written by the agent since the task last ran. Tracks cumulative Write/Edit/NotebookEdit activity — catches thrashing (back-and-forth edits that net to zero). Claude Code sessions only. |
 | `sourcesModifiedSinceLastRun` | trigger | boolean | Passes when source file mtimes are newer than the last run |
 | `sourceFilesEdited` | trigger | boolean | Passes when source files were edited this turn (session-scoped, tool-agnostic) |
 | `toolsUsed` | trigger | string[] | Passes when any of the listed tools were used this turn |
 
-**Prerequisites** are environmental gates — all must pass (AND). **Triggers** are activity signals — any one passing is enough to fire the task (OR). Prerequisites are checked first; if any fails, the task is skipped regardless of triggers. When no triggers are present, prerequisites alone decide. This means you can combine a prerequisite like `envSet` with multiple triggers like `linesWrittenSinceLastRun` and `linesChangedSinceLastRun` — the env var must be set, but either churn threshold will fire the review:
+**Prerequisites** are environmental gates — all must pass (AND). **Triggers** are activity signals — any one passing is enough to fire the task (OR). Prerequisites are checked first; if any fails, the task is skipped regardless of triggers. When no triggers are present, prerequisites alone decide. This means you can combine a prerequisite like `envSet` with multiple triggers like `linesChangedSinceLastRun` and `linesWrittenSinceLastRun` — the env var must be set, but either churn threshold will fire the review:
 
 ```json
 {
@@ -226,15 +226,15 @@ Supported conditions:
   "promptType": "reference",
   "when": {
     "envSet": "CLAUDECODE",
-    "linesWrittenSinceLastRun": 500,
-    "linesChangedSinceLastRun": 1000
+    "linesChangedSinceLastRun": 500,
+    "linesWrittenSinceLastRun": 1000
   }
 }
 ```
 
-#### Git-based churn tracking (`linesWrittenSinceLastRun`)
+#### Git-based churn tracking (`linesChangedSinceLastRun`)
 
-Each task using `linesWrittenSinceLastRun` stores a git ref at `refs/worktree/prove_it/<task-name>`. When the condition is evaluated, prove_it diffs the ref against the **working tree** (not just HEAD), filtered to your configured `sources` globs, summing additions and deletions. This means committed, staged, unstaged, and newly-created file changes all count — so Write/Edit tool calls trigger churn immediately without needing a commit. On first run the ref is created at HEAD (bootstrap — returns 0 if the working tree is clean). This is session-independent and worktree-safe. Refs are cleaned up by `prove_it deinit`.
+Each task using `linesChangedSinceLastRun` stores a git ref at `refs/worktree/prove_it/<task-name>`. When the condition is evaluated, prove_it diffs the ref against the **working tree** (not just HEAD), filtered to your configured `sources` globs, summing additions and deletions. This means committed, staged, unstaged, and newly-created file changes all count — so Write/Edit tool calls trigger churn immediately without needing a commit. On first run the ref is created at HEAD (bootstrap — returns 0 if the working tree is clean). This is session-independent and worktree-safe. Refs are cleaned up by `prove_it deinit`.
 
 When a task passes or resets, the ref advances to a snapshot of the current working tree state (including untracked source files). This ensures all pending changes are captured — advancing to HEAD alone would be a no-op when churn comes from uncommitted Write/Edit operations.
 
@@ -243,13 +243,13 @@ When a task passes or resets, the ref advances to a snapshot of the current work
 - **Stop / git hooks** (default `resetOnFail: false`): The ref does NOT advance. The agent gets sent back to fix the issue, and the same accumulated churn keeps triggering the review.
 - You can override the default with an explicit `resetOnFail: true` or `resetOnFail: false` on the task.
 
-#### Gross churn tracking (`linesChangedSinceLastRun`)
+#### Gross churn tracking (`linesWrittenSinceLastRun`)
 
-While `linesWrittenSinceLastRun` measures **net** drift (git diff: what changed on disk), `linesChangedSinceLastRun` measures **gross** activity (total lines the agent has written). This catches a different failure mode: thrashing. An agent that writes 500 lines, deletes them, rewrites them differently, and deletes again has written 2000 gross lines but may show 0 net churn. The gross counter catches this.
+While `linesChangedSinceLastRun` measures **net** drift (git diff: what changed on disk), `linesWrittenSinceLastRun` measures **gross** activity (total lines the agent has written). This catches a different failure mode: thrashing. An agent that writes 500 lines, deletes them, rewrites them differently, and deletes again has written 2000 gross lines but may show 0 net churn. The gross counter catches this.
 
 Gross churn accumulates on every successful PreToolUse for Write/Edit/NotebookEdit to source files. Lines are counted from the tool input (no file I/O needed). The counter is stored as a git blob under `refs/worktree/prove_it/__gross_lines`, with per-task snapshots under `<task>.__gross_lines`. Increment uses compare-and-swap for multi-agent safety — concurrent agents can't lose each other's counts.
 
-`resetOnFail` follows the same rules as `linesWrittenSinceLastRun`.
+`resetOnFail` follows the same rules as `linesChangedSinceLastRun`.
 
 #### Session-scoped conditions
 
@@ -292,7 +292,7 @@ By default, prove_it tracks Claude's built-in editing tools (`Edit`, `Write`, `N
 }
 ```
 
-Tools listed in `fileEditingTools` are tracked alongside the builtins — they participate in `sourceFilesEdited`, `toolsUsed`, gross churn (`linesChangedSinceLastRun`), and the `session_diff` git fallback. For gross churn, line counts are estimated from the longest string value in the tool input.
+Tools listed in `fileEditingTools` are tracked alongside the builtins — they participate in `sourceFilesEdited`, `toolsUsed`, gross churn (`linesWrittenSinceLastRun`), and the `session_diff` git fallback. For gross churn, line counts are estimated from the longest string value in the tool input.
 
 ## Env tasks
 
@@ -566,7 +566,7 @@ prove_it doctor
 - **Hooks not firing** — Restart Claude Code after `prove_it install`
 - **Tests not running** — Check `./script/test` exists and is executable (`chmod +x`)
 - **Hooks running in wrong directories** — prove_it only activates in git repos
-- **Reviews never fire** — The default `when` conditions use churn thresholds (`linesWrittenSinceLastRun`, `linesChangedSinceLastRun`). Reviews only trigger after enough code has been written. Check `prove_it monitor` to see skip reasons with current/threshold counts. If you use MCP tools that edit files (e.g. Xcode MCP's `XcodeEdit`), add them to `fileEditingTools` so all churn tracking works for those tools:
+- **Reviews never fire** — The default `when` conditions use churn thresholds (`linesChangedSinceLastRun`, `linesWrittenSinceLastRun`). Reviews only trigger after enough code has been written. Check `prove_it monitor` to see skip reasons with current/threshold counts. If you use MCP tools that edit files (e.g. Xcode MCP's `XcodeEdit`), add them to `fileEditingTools` so all churn tracking works for those tools:
   ```json
   {
     "fileEditingTools": ["XcodeEdit"],

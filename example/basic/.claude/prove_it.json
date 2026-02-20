@@ -34,7 +34,7 @@
           "promptType": "reference",
           "model": "haiku",
           "when": {
-            "linesChangedSinceLastRun": 733
+            "linesWrittenSinceLastRun": 733
           },
           "ruleFile": ".claude/rules/testing.md"
         },
@@ -45,7 +45,7 @@
           "promptType": "reference",
           "model": "haiku",
           "when": {
-            "linesWrittenSinceLastRun": 541
+            "linesChangedSinceLastRun": 541
           },
           "ruleFile": ".claude/rules/testing.md"
         }

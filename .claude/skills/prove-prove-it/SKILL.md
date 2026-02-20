@@ -28,7 +28,7 @@ The dispatcher pipeline has multiple stages. Each can fail independently:
 hook event (stdin JSON)
   → config loading
     → hook entry matching (event + matcher)
-      → when-condition evaluation (linesWrittenSinceLastRun, variablesPresent, etc.)
+      → when-condition evaluation (linesChangedSinceLastRun, variablesPresent, etc.)
         → template variable expansion (recently_edited_files, session_diff, etc.)
           → agent check invocation (claude -p with expanded prompt)
             → verdict parsing (PASS/FAIL)
@@ -78,7 +78,7 @@ focused config that isolates the reviewer you're testing:
       "type": "agent",
       "promptType": "reference",
       "prompt": "review:test_investment",
-      "when": { "linesWrittenSinceLastRun": 500 }
+      "when": { "linesChangedSinceLastRun": 500 }
     }]
   }]
 }
@@ -129,7 +129,7 @@ echo '{
 }' | CLAUDE_PROJECT_DIR="$tmpdir" prove_it hook claude:PreToolUse
 ```
 
-**For threshold-based reviewers** (`linesWrittenSinceLastRun`), the dispatcher
+**For threshold-based reviewers** (`linesChangedSinceLastRun`), the dispatcher
 uses git refs to track churn. It runs `git diff --numstat <ref>` filtered
 to the configured source globs and sums additions + deletions. This diffs the
 ref against the working tree, so it captures both committed and uncommitted

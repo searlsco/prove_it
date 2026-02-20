@@ -27,7 +27,7 @@
           "model": "haiku",
           "ruleFile": ".claude/rules/testing.md",
           "when": {
-            "linesWrittenSinceLastRun": 500
+            "linesChangedSinceLastRun": 500
           }
         }
       ]
