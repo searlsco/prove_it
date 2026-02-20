@@ -346,88 +346,88 @@ describe('validateConfig', () => {
       assert.strictEqual(errors.length, 0)
     })
 
-    it('passes linesChangedSinceLastRun as valid when key', () => {
+    it('passes linesChanged as valid when key', () => {
       const { errors } = validateConfig(cfgWithTask({
         name: 'a',
         type: 'agent',
         prompt: 'review this',
         command: 'prove_it run_builtin review:test_investment',
-        when: { linesChangedSinceLastRun: 500 }
+        when: { linesChanged: 500 }
       }))
       assert.strictEqual(errors.length, 0)
     })
 
-    it('errors when linesChangedSinceLastRun is not a number', () => {
+    it('errors when linesChanged is not a number', () => {
       const { errors } = validateConfig(cfgWithTask({
         name: 'a',
         type: 'script',
         command: 'x',
-        when: { linesChangedSinceLastRun: '500' }
+        when: { linesChanged: '500' }
       }))
-      assert.ok(errors.some(e => e.includes('linesChangedSinceLastRun must be a positive number')))
+      assert.ok(errors.some(e => e.includes('linesChanged must be a positive number')))
     })
 
-    it('errors when linesChangedSinceLastRun is zero', () => {
+    it('errors when linesChanged is zero', () => {
       const { errors } = validateConfig(cfgWithTask({
         name: 'a',
         type: 'script',
         command: 'x',
-        when: { linesChangedSinceLastRun: 0 }
+        when: { linesChanged: 0 }
       }))
-      assert.ok(errors.some(e => e.includes('linesChangedSinceLastRun must be a positive number')))
+      assert.ok(errors.some(e => e.includes('linesChanged must be a positive number')))
     })
 
-    it('errors when linesChangedSinceLastRun is negative', () => {
+    it('errors when linesChanged is negative', () => {
       const { errors } = validateConfig(cfgWithTask({
         name: 'a',
         type: 'script',
         command: 'x',
-        when: { linesChangedSinceLastRun: -10 }
+        when: { linesChanged: -10 }
       }))
-      assert.ok(errors.some(e => e.includes('linesChangedSinceLastRun must be a positive number')))
+      assert.ok(errors.some(e => e.includes('linesChanged must be a positive number')))
     })
 
-    it('passes linesWrittenSinceLastRun as valid when key', () => {
+    it('passes linesWritten as valid when key', () => {
       const { errors } = validateConfig(cfgWithTask({
         name: 'a',
         type: 'agent',
         prompt: 'review this',
-        when: { linesWrittenSinceLastRun: 733 }
+        when: { linesWritten: 733 }
       }))
       assert.strictEqual(errors.length, 0)
     })
 
-    it('errors when linesWrittenSinceLastRun is not a number', () => {
+    it('errors when linesWritten is not a number', () => {
       const { errors } = validateConfig(cfgWithTask({
         name: 'a',
         type: 'script',
         command: 'x',
-        when: { linesWrittenSinceLastRun: '500' }
+        when: { linesWritten: '500' }
       }))
-      assert.ok(errors.some(e => e.includes('linesWrittenSinceLastRun must be a positive number')))
+      assert.ok(errors.some(e => e.includes('linesWritten must be a positive number')))
     })
 
-    it('errors when linesWrittenSinceLastRun is zero', () => {
+    it('errors when linesWritten is zero', () => {
       const { errors } = validateConfig(cfgWithTask({
         name: 'a',
         type: 'script',
         command: 'x',
-        when: { linesWrittenSinceLastRun: 0 }
+        when: { linesWritten: 0 }
       }))
-      assert.ok(errors.some(e => e.includes('linesWrittenSinceLastRun must be a positive number')))
+      assert.ok(errors.some(e => e.includes('linesWritten must be a positive number')))
     })
 
-    it('errors when linesWrittenSinceLastRun is negative', () => {
+    it('errors when linesWritten is negative', () => {
       const { errors } = validateConfig(cfgWithTask({
         name: 'a',
         type: 'script',
         command: 'x',
-        when: { linesWrittenSinceLastRun: -10 }
+        when: { linesWritten: -10 }
       }))
-      assert.ok(errors.some(e => e.includes('linesWrittenSinceLastRun must be a positive number')))
+      assert.ok(errors.some(e => e.includes('linesWritten must be a positive number')))
     })
 
-    it('warns when linesWrittenSinceLastRun is used on a git hook', () => {
+    it('warns when linesWritten is used on a git hook', () => {
       const { errors, warnings } = validateConfig(validConfig({
         hooks: [{
           type: 'git',
@@ -436,16 +436,16 @@ describe('validateConfig', () => {
             name: 'a',
             type: 'script',
             command: 'x',
-            when: { linesWrittenSinceLastRun: 500 }
+            when: { linesWritten: 500 }
           }]
         }]
       }))
       assert.strictEqual(errors.length, 0)
-      assert.ok(warnings.some(w => w.includes('linesWrittenSinceLastRun') && w.includes('git')),
-        'Should warn about linesWrittenSinceLastRun on git hooks')
+      assert.ok(warnings.some(w => w.includes('linesWritten') && w.includes('git')),
+        'Should warn about linesWritten on git hooks')
     })
 
-    it('no warning when linesChangedSinceLastRun is used on a git hook (git-based now)', () => {
+    it('no warning when linesChanged is used on a git hook (git-based now)', () => {
       const { errors, warnings } = validateConfig(validConfig({
         hooks: [{
           type: 'git',
@@ -454,13 +454,13 @@ describe('validateConfig', () => {
             name: 'a',
             type: 'script',
             command: 'x',
-            when: { linesChangedSinceLastRun: 500 }
+            when: { linesChanged: 500 }
           }]
         }]
       }))
       assert.strictEqual(errors.length, 0)
-      assert.ok(!warnings.some(w => w.includes('linesChangedSinceLastRun')),
-        'Should NOT warn about linesChangedSinceLastRun on git hooks anymore')
+      assert.ok(!warnings.some(w => w.includes('linesChanged')),
+        'Should NOT warn about linesChanged on git hooks anymore')
     })
 
     it('passes sourcesModifiedSinceLastRun as valid when key', () => {

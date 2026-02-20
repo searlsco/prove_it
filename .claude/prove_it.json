@@ -18,17 +18,6 @@
           "name": "lock-config",
           "type": "script",
           "command": "prove_it run_builtin config:lock"
-        },
-        {
-          "name": "ensure-tests",
-          "type": "agent",
-          "promptType": "reference",
-          "prompt": "review:test_investment",
-          "model": "haiku",
-          "ruleFile": ".claude/rules/testing.md",
-          "when": {
-            "linesChangedSinceLastRun": 500
-          }
         }
       ]
     },
@@ -42,6 +31,17 @@
           "command": "./script/test_fast"
         },
         {
+          "name": "code-quality-review",
+          "type": "agent",
+          "promptType": "reference",
+          "prompt": "review:code_quality",
+          "model": "haiku",
+          "ruleFile": ".claude/rules/testing.md",
+          "when": {
+            "linesWritten": 733
+          }
+        },
+        {
           "name": "coverage-review",
           "type": "agent",
           "promptType": "reference",
@@ -49,9 +49,7 @@
           "model": "haiku",
           "ruleFile": ".claude/rules/testing.md",
           "when": {
-            "variablesPresent": [
-              "session_diff"
-            ]
+            "linesChanged": 541
           }
         }
       ]
@@ -64,22 +62,9 @@
           "name": "full-tests",
           "type": "script",
           "command": "./script/test"
-        },
-        {
-          "name": "commit-review",
-          "type": "agent",
-          "promptType": "reference",
-          "prompt": "review:commit_quality",
-          "model": "sonnet",
-          "ruleFile": ".claude/rules/testing.md",
-          "when": {
-            "variablesPresent": [
-              "staged_diff"
-            ]
-          }
         }
       ]
     }
   ],
-  "initSeed": "a032c010a440"
+  "initSeed": "ee9760a9b49e"
 }

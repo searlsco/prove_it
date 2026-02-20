@@ -139,7 +139,7 @@ describe('init', () => {
       assert.strictEqual(codeQuality.type, 'agent')
       assert.strictEqual(codeQuality.promptType, 'reference')
       assert.strictEqual(codeQuality.prompt, 'review:code_quality')
-      assert.strictEqual(codeQuality.when.linesWrittenSinceLastRun, 733)
+      assert.strictEqual(codeQuality.when.linesWritten, 733)
     })
 
     it('coverage-review uses type agent with promptType reference and net churn threshold', () => {
@@ -150,7 +150,7 @@ describe('init', () => {
       assert.strictEqual(coverageReview.type, 'agent')
       assert.strictEqual(coverageReview.promptType, 'reference')
       assert.strictEqual(coverageReview.prompt, 'review:test_coverage')
-      assert.strictEqual(coverageReview.when.linesChangedSinceLastRun, 541)
+      assert.strictEqual(coverageReview.when.linesChanged, 541)
     })
 
     it('code-quality-review and coverage-review are both in Stop entry', () => {

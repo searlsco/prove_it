@@ -86,7 +86,7 @@ describe('config merging', () => {
 describe('loadEffectiveConfig ancestor discovery', () => {
   const { loadEffectiveConfig } = require('../lib/config')
   const defaultTestConfig = () => ({
-    enabled: true,
+    enabled: false,
     sources: null,
     hooks: []
   })
@@ -166,7 +166,7 @@ describe('loadEffectiveConfig ancestor discovery', () => {
     process.env.PROVE_IT_DIR = path.join(emptyDir, 'no_global_config')
     try {
       const { cfg } = loadEffectiveConfig(emptyDir, defaultTestConfig)
-      assert.strictEqual(cfg.enabled, true)
+      assert.strictEqual(cfg.enabled, false)
       assert.strictEqual(Array.isArray(cfg.hooks), true, 'hooks should be an array')
       assert.strictEqual(cfg.sources, null)
     } finally {

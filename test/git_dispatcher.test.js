@@ -9,8 +9,8 @@ const { readRef, churnSinceRef, sanitizeRefName } = require('../lib/git')
 
 describe('git dispatcher', () => {
   describe('defaultConfig', () => {
-    it('returns enabled: true', () => {
-      assert.strictEqual(defaultConfig().enabled, true)
+    it('returns enabled: false', () => {
+      assert.strictEqual(defaultConfig().enabled, false)
     })
 
     it('returns empty hooks array', () => {
@@ -223,7 +223,7 @@ describe('git dispatcher', () => {
       assert.ok(context.testOutput.includes('test output'))
     })
 
-    it('advances churn ref on pass for linesChangedSinceLastRun task', () => {
+    it('advances churn ref on pass for linesChanged task', () => {
       // Bootstrap the ref
       churnSinceRef(tmpDir, sanitizeRefName('churn-check'), ['**/*.js'])
 
@@ -242,7 +242,7 @@ describe('git dispatcher', () => {
           name: 'churn-check',
           type: 'script',
           command: passScript,
-          when: { linesChangedSinceLastRun: 5 }
+          when: { linesChanged: 5 }
         }]
       }]
       const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, hookEvent: 'pre-commit', localCfgPath: null, sources: ['**/*.js'], maxChars: 12000, testOutput: '' }
@@ -275,7 +275,7 @@ describe('git dispatcher', () => {
           name: 'sticky-check',
           type: 'script',
           command: failScript,
-          when: { linesChangedSinceLastRun: 5 }
+          when: { linesChanged: 5 }
         }]
       }]
       const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, hookEvent: 'pre-commit', localCfgPath: null, sources: ['**/*.js'], maxChars: 12000, testOutput: '' }
@@ -303,7 +303,7 @@ describe('git dispatcher', () => {
           name: 'reset-check',
           type: 'script',
           command: failScript,
-          when: { linesChangedSinceLastRun: 5 },
+          when: { linesChanged: 5 },
           resetOnFail: true
         }]
       }]
@@ -332,7 +332,7 @@ describe('git dispatcher', () => {
           name: 'deadlock-check',
           type: 'script',
           command: failScript,
-          when: { linesChangedSinceLastRun: 5 },
+          when: { linesChanged: 5 },
           resetOnFail: true
         }]
       }]

@@ -57,6 +57,22 @@ See [AGENTS.md](AGENTS.md) for the full agent testing workflow.
 
 Use the `/release` skill. It reads `RELEASE.md` for the full process.
 
+## Two-tier installation model
+
+prove_it uses a two-tier activation model: `enabled` defaults to `false` in the
+dispatcher, so prove_it does nothing unless explicitly opted in.
+
+- **`install`/`uninstall`** manage global hook registrations in `~/.claude/settings.json`
+  and global config in `~/.claude/prove_it/config.json` (which sets `enabled: true`).
+  These never touch project files.
+- **`init`/`deinit`** manage project-level files only (`.claude/prove_it.json`, git shims).
+  These never touch `~/.claude/settings.json`.
+
+Because the global config sets `enabled: true`, prove_it runs in any project once
+installed globally. Deleting a project's `.claude/prove_it.json` does not stop
+prove_it if the global config has `enabled: true` — it just means no project-specific
+tasks are configured.
+
 ## Conventions
 
 - No dependencies beyond Node.js stdlib (devDependencies: standard for linting only)

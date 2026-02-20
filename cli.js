@@ -175,6 +175,7 @@ function cmdInstall () {
   } else {
     // Edited or legacy (no initSeed) — preserve user config, ensure taskEnv defaults
     const defaults = buildGlobalConfig()
+    if (existingGlobal.enabled === undefined) existingGlobal.enabled = true
     if (!existingGlobal.taskEnv) existingGlobal.taskEnv = {}
     Object.assign(existingGlobal.taskEnv, defaults.taskEnv)
     writeJson(globalCfgPath, existingGlobal)
@@ -753,7 +754,7 @@ function cmdDoctor () {
   let effectiveCfg = null
   try {
     const defaultFn = () => ({
-      enabled: true,
+      enabled: false,
       sources: null,
       hooks: []
     })

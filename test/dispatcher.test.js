@@ -206,7 +206,7 @@ describe('claude dispatcher', () => {
     })
   })
 
-  describe('evaluateWhen — linesChangedSinceLastRun (git-based)', () => {
+  describe('evaluateWhen — linesChanged (git-based)', () => {
     let tmpDir
 
     beforeEach(() => {
@@ -225,7 +225,7 @@ describe('claude dispatcher', () => {
 
     it('returns reason on bootstrap (0 churn)', () => {
       const result = evaluateWhen(
-        { linesChangedSinceLastRun: 500 },
+        { linesChanged: 500 },
         { rootDir: tmpDir, sources: ['**/*.js'] },
         'my-check'
       )
@@ -246,7 +246,7 @@ describe('claude dispatcher', () => {
       spawnSync('git', ['commit', '-m', 'add lines'], { cwd: tmpDir })
 
       const result = evaluateWhen(
-        { linesChangedSinceLastRun: 500 },
+        { linesChanged: 500 },
         { rootDir: tmpDir, sources: ['**/*.js'] },
         'my-check'
       )
@@ -263,7 +263,7 @@ describe('claude dispatcher', () => {
       spawnSync('git', ['commit', '-m', 'small'], { cwd: tmpDir })
 
       const result = evaluateWhen(
-        { linesChangedSinceLastRun: 500 },
+        { linesChanged: 500 },
         { rootDir: tmpDir, sources: ['**/*.js'] },
         'my-check'
       )
@@ -282,7 +282,7 @@ describe('claude dispatcher', () => {
 
       // Fires
       const result = evaluateWhen(
-        { linesChangedSinceLastRun: 500 },
+        { linesChanged: 500 },
         { rootDir: tmpDir, sources: ['**/*.js'] },
         'my-check'
       )
@@ -294,7 +294,7 @@ describe('claude dispatcher', () => {
 
       // Should not fire anymore
       const result2 = evaluateWhen(
-        { linesChangedSinceLastRun: 500 },
+        { linesChanged: 500 },
         { rootDir: tmpDir, sources: ['**/*.js'] },
         'my-check'
       )
@@ -321,7 +321,7 @@ describe('claude dispatcher', () => {
       spawnSync('git', ['commit', '-m', 'round 2'], { cwd: tmpDir })
 
       const result = evaluateWhen(
-        { linesChangedSinceLastRun: 500 },
+        { linesChanged: 500 },
         { rootDir: tmpDir, sources: ['**/*.js'] },
         'my-check'
       )
@@ -332,7 +332,7 @@ describe('claude dispatcher', () => {
       const nonGitDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_nogit_'))
       try {
         const result = evaluateWhen(
-          { linesChangedSinceLastRun: 500 },
+          { linesChanged: 500 },
           { rootDir: nonGitDir, sources: ['**/*.js'] },
           'my-check'
         )
@@ -344,7 +344,7 @@ describe('claude dispatcher', () => {
     })
   })
 
-  describe('evaluateWhen — linesWrittenSinceLastRun (gross churn)', () => {
+  describe('evaluateWhen — linesWritten (gross churn)', () => {
     let tmpDir
 
     beforeEach(() => {
@@ -363,7 +363,7 @@ describe('claude dispatcher', () => {
 
     it('returns reason on bootstrap (0 gross churn)', () => {
       const result = evaluateWhen(
-        { linesWrittenSinceLastRun: 500 },
+        { linesWritten: 500 },
         { rootDir: tmpDir, sources: ['**/*.js'] },
         'my-check'
       )
@@ -380,7 +380,7 @@ describe('claude dispatcher', () => {
       incrementGross(tmpDir, 600)
 
       const result = evaluateWhen(
-        { linesWrittenSinceLastRun: 500 },
+        { linesWritten: 500 },
         { rootDir: tmpDir, sources: ['**/*.js'] },
         'my-check'
       )
@@ -392,7 +392,7 @@ describe('claude dispatcher', () => {
       incrementGross(tmpDir, 100)
 
       const result = evaluateWhen(
-        { linesWrittenSinceLastRun: 500 },
+        { linesWritten: 500 },
         { rootDir: tmpDir, sources: ['**/*.js'] },
         'my-check'
       )
@@ -410,7 +410,7 @@ describe('claude dispatcher', () => {
       incrementGross(tmpDir, 600)
 
       const result = evaluateWhen(
-        { linesChangedSinceLastRun: 500, linesWrittenSinceLastRun: 500 },
+        { linesChanged: 500, linesWritten: 500 },
         { rootDir: tmpDir, sources: ['**/*.js'] },
         'dual-check'
       )
@@ -758,7 +758,7 @@ describe('claude dispatcher', () => {
       incrementGross(tmpDir, 600)
 
       const result = evaluateWhen(
-        { linesChangedSinceLastRun: 500, linesWrittenSinceLastRun: 500 },
+        { linesChanged: 500, linesWritten: 500 },
         { rootDir: tmpDir, sources: ['**/*.js'] },
         'pts-check'
       )
@@ -774,7 +774,7 @@ describe('claude dispatcher', () => {
       incrementGross(tmpDir, 10)
 
       const result = evaluateWhen(
-        { linesChangedSinceLastRun: 500, linesWrittenSinceLastRun: 500 },
+        { linesChanged: 500, linesWritten: 500 },
         { rootDir: tmpDir, sources: ['**/*.js'] },
         'pts-check2'
       )
@@ -789,7 +789,7 @@ describe('claude dispatcher', () => {
       incrementGross(tmpDir, 600)
 
       const result = evaluateWhen(
-        { envSet: 'PROVE_IT_PTS_GATE', linesWrittenSinceLastRun: 500 },
+        { envSet: 'PROVE_IT_PTS_GATE', linesWritten: 500 },
         { rootDir: tmpDir, sources: ['**/*.js'] },
         'pts-gate'
       )
@@ -804,7 +804,7 @@ describe('claude dispatcher', () => {
         incrementGross(tmpDir, 600)
 
         const result = evaluateWhen(
-          { envSet: 'PROVE_IT_PTS_PASS', linesWrittenSinceLastRun: 500 },
+          { envSet: 'PROVE_IT_PTS_PASS', linesWritten: 500 },
           { rootDir: tmpDir, sources: ['**/*.js'] },
           'pts-pass'
         )
@@ -821,7 +821,7 @@ describe('claude dispatcher', () => {
         incrementGross(tmpDir, 10)
 
         const result = evaluateWhen(
-          { envSet: 'PROVE_IT_PTS_TRIG', linesWrittenSinceLastRun: 500 },
+          { envSet: 'PROVE_IT_PTS_TRIG', linesWritten: 500 },
           { rootDir: tmpDir, sources: ['**/*.js'] },
           'pts-trig'
         )
@@ -850,7 +850,7 @@ describe('claude dispatcher', () => {
       assert.ok(Array.isArray(PREREQUISITE_KEYS))
       assert.ok(Array.isArray(TRIGGER_KEYS))
       assert.ok(PREREQUISITE_KEYS.includes('fileExists'))
-      assert.ok(TRIGGER_KEYS.includes('linesChangedSinceLastRun'))
+      assert.ok(TRIGGER_KEYS.includes('linesChanged'))
       assert.ok(TRIGGER_KEYS.includes('sourceFilesEdited'))
     })
   })
@@ -862,8 +862,8 @@ describe('claude dispatcher', () => {
   })
 
   describe('defaultConfig', () => {
-    it('returns enabled: true', () => {
-      assert.strictEqual(defaultConfig().enabled, true)
+    it('returns enabled: false', () => {
+      assert.strictEqual(defaultConfig().enabled, false)
     })
 
     it('returns empty hooks array', () => {
