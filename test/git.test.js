@@ -648,17 +648,17 @@ describe('incrementGross', () => {
 
   it('creates counter from zero (first-write path)', () => {
     assert.strictEqual(readGrossCounter(tmpDir), 0)
-    assert.strictEqual(readRef(tmpDir, '__gross'), null, 'ref should not exist yet')
+    assert.strictEqual(readRef(tmpDir, '__gross_lines'), null, 'ref should not exist yet')
     incrementGross(tmpDir, 50)
     assert.strictEqual(readGrossCounter(tmpDir), 50)
-    assert.ok(readRef(tmpDir, '__gross'), 'ref should exist after first write')
+    assert.ok(readRef(tmpDir, '__gross_lines'), 'ref should exist after first write')
   })
 
   it('accumulates via CAS path when ref already exists', () => {
     incrementGross(tmpDir, 10) // first-write path
-    const refAfterFirst = readRef(tmpDir, '__gross')
+    const refAfterFirst = readRef(tmpDir, '__gross_lines')
     incrementGross(tmpDir, 20) // CAS path — ref exists
-    const refAfterSecond = readRef(tmpDir, '__gross')
+    const refAfterSecond = readRef(tmpDir, '__gross_lines')
     assert.notStrictEqual(refAfterFirst, refAfterSecond,
       'CAS should update the ref SHA')
     incrementGross(tmpDir, 30)
@@ -693,7 +693,7 @@ describe('incrementGross', () => {
     // Set counter to 100 via incrementGross (first-write path)
     incrementGross(tmpDir, 100)
     // Externally modify the ref to simulate another agent's write
-    writeCounterRef(tmpDir, '__gross', 200)
+    writeCounterRef(tmpDir, '__gross_lines', 200)
     assert.strictEqual(readGrossCounter(tmpDir), 200)
 
     // incrementGross should read the fresh value (200) and CAS to 225
@@ -708,7 +708,7 @@ describe('incrementGross', () => {
     const { tryRun, shellEscape } = require('../lib/io')
 
     incrementGross(tmpDir, 100)
-    const currentSha = readRef(tmpDir, '__gross')
+    const currentSha = readRef(tmpDir, '__gross_lines')
     assert.ok(currentSha, 'ref should exist')
 
     // Create a new blob for value 200
@@ -721,7 +721,7 @@ describe('incrementGross', () => {
     const staleSha = stale.stdout.trim()
 
     // CAS with wrong old-value should FAIL
-    const cas = tryRun(`git -C ${shellEscape(tmpDir)} update-ref refs/worktree/prove_it/__gross ${shellEscape(newSha)} ${shellEscape(staleSha)}`, {})
+    const cas = tryRun(`git -C ${shellEscape(tmpDir)} update-ref refs/worktree/prove_it/__gross_lines ${shellEscape(newSha)} ${shellEscape(staleSha)}`, {})
     assert.notStrictEqual(cas.code, 0,
       'update-ref should fail when old-value does not match current ref')
 
@@ -730,7 +730,7 @@ describe('incrementGross', () => {
       'counter should be unchanged after failed CAS')
 
     // CAS with CORRECT old-value should succeed
-    const cas2 = tryRun(`git -C ${shellEscape(tmpDir)} update-ref refs/worktree/prove_it/__gross ${shellEscape(newSha)} ${shellEscape(currentSha)}`, {})
+    const cas2 = tryRun(`git -C ${shellEscape(tmpDir)} update-ref refs/worktree/prove_it/__gross_lines ${shellEscape(newSha)} ${shellEscape(currentSha)}`, {})
     assert.strictEqual(cas2.code, 0,
       'update-ref should succeed with correct old-value')
     assert.strictEqual(readGrossCounter(tmpDir), 200,
@@ -781,7 +781,7 @@ describe('incrementGross', () => {
 
     // Point the ref at HEAD (a commit, not a blob) — readCounterBlob returns 0
     const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
-    tryRun(`git -C ${shellEscape(tmpDir)} update-ref refs/worktree/prove_it/__gross ${head}`, {})
+    tryRun(`git -C ${shellEscape(tmpDir)} update-ref refs/worktree/prove_it/__gross_lines ${head}`, {})
 
     // readCounterBlob will return 0 for a non-parseable blob
     // incrementGross should still not throw

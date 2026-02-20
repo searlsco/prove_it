@@ -247,7 +247,7 @@ When a task passes or resets, the ref advances to a snapshot of the current work
 
 While `linesWrittenSinceLastRun` measures **net** drift (git diff: what changed on disk), `linesChangedSinceLastRun` measures **gross** activity (total lines the agent has written). This catches a different failure mode: thrashing. An agent that writes 500 lines, deletes them, rewrites them differently, and deletes again has written 2000 gross lines but may show 0 net churn. The gross counter catches this.
 
-Gross churn accumulates on every successful PreToolUse for Write/Edit/NotebookEdit to source files. Lines are counted from the tool input (no file I/O needed). The counter is stored as a git blob under `refs/worktree/prove_it/__gross`, with per-task snapshots under `<task>.__snap`. Increment uses compare-and-swap for multi-agent safety — concurrent agents can't lose each other's counts.
+Gross churn accumulates on every successful PreToolUse for Write/Edit/NotebookEdit to source files. Lines are counted from the tool input (no file I/O needed). The counter is stored as a git blob under `refs/worktree/prove_it/__gross_lines`, with per-task snapshots under `<task>.__gross_lines`. Increment uses compare-and-swap for multi-agent safety — concurrent agents can't lose each other's counts.
 
 `resetOnFail` follows the same rules as `linesWrittenSinceLastRun`.
 
