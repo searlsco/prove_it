@@ -660,6 +660,28 @@ describe('init', () => {
       // File should be untouched
       assert.strictEqual(fs.readFileSync(cfgPath, 'utf8'), '{"truncated":')
     })
+
+    it('creates .claude/prove_it/.gitignore ignoring sessions/', () => {
+      const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      assert.ok(results.proveItGitignore.created)
+      const gitignorePath = path.join(tmpDir, '.claude', 'prove_it', '.gitignore')
+      assert.ok(fs.existsSync(gitignorePath))
+      const content = fs.readFileSync(gitignorePath, 'utf8')
+      assert.ok(content.includes('sessions/'),
+        `Should ignore sessions/, got: ${content}`)
+    })
+
+    it('does not overwrite existing .claude/prove_it/.gitignore', () => {
+      const gitignoreDir = path.join(tmpDir, '.claude', 'prove_it')
+      fs.mkdirSync(gitignoreDir, { recursive: true })
+      fs.writeFileSync(path.join(gitignoreDir, '.gitignore'), 'custom-stuff/\n')
+
+      const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      assert.ok(!results.proveItGitignore.created)
+      const content = fs.readFileSync(path.join(gitignoreDir, '.gitignore'), 'utf8')
+      assert.strictEqual(content, 'custom-stuff/\n',
+        'Existing .gitignore should be preserved')
+    })
   })
 
   describe('overwriteTeamConfig', () => {

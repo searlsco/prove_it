@@ -561,6 +561,13 @@ function cmdDeinit () {
     }
   }
 
+  // Clean up .claude/prove_it/ runtime directory (sessions, backchannel, .gitignore)
+  const proveItDir = path.join(repoRoot, '.claude', 'prove_it')
+  if (fs.existsSync(proveItDir)) {
+    fs.rmSync(proveItDir, { recursive: true, force: true })
+    removed.push('.claude/prove_it/')
+  }
+
   const claudeDir = path.join(repoRoot, '.claude')
   if (fs.existsSync(claudeDir)) {
     try {

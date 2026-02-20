@@ -334,6 +334,22 @@ describe('init/deinit', () => {
     assert.ok(fs.existsSync(rulePath), 'Customized rule file should be preserved')
     assert.match(result.stdout, /customized/)
   })
+
+  it('deinit removes .claude/prove_it/ directory', () => {
+    runCli(['init'], { cwd: tmpDir })
+    const proveItDir = path.join(tmpDir, '.claude', 'prove_it')
+    assert.ok(fs.existsSync(path.join(proveItDir, '.gitignore')),
+      'init should create .claude/prove_it/.gitignore')
+
+    // Simulate runtime state
+    const sessionDir = path.join(proveItDir, 'sessions', 'test-session', 'backchannel', 'test-review')
+    fs.mkdirSync(sessionDir, { recursive: true })
+    fs.writeFileSync(path.join(sessionDir, 'README.md'), 'dev response')
+
+    runCli(['deinit'], { cwd: tmpDir })
+    assert.ok(!fs.existsSync(proveItDir),
+      '.claude/prove_it/ should be removed by deinit')
+  })
 })
 
 describe('install/uninstall', () => {

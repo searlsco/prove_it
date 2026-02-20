@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
-const { defaultModel, runAgentCheck } = require('../lib/checks/agent')
+const { defaultModel, runAgentCheck, backchannelDir, backchannelReadmePath, createBackchannel } = require('../lib/checks/agent')
 
 describe('agent check', () => {
   let tmpDir
@@ -371,6 +371,249 @@ describe('agent check', () => {
       { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '', configEnv: { MY_CUSTOM_VAR: 'hello' } }
     )
     assert.strictEqual(result.pass, true, `Expected configEnv to reach reviewer, got: ${result.reason || result.error}`)
+  })
+})
+
+describe('backchannel', () => {
+  let tmpDir
+  const sessionId = 'test-session-abc123'
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_bc_test_'))
+    spawnSync('git', ['init'], { cwd: tmpDir })
+    spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
+    spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
+    fs.writeFileSync(path.join(tmpDir, '.gitkeep'), '')
+    spawnSync('git', ['add', '.'], { cwd: tmpDir })
+    spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('creates backchannel README on FAIL', () => {
+    const reviewerPath = path.join(tmpDir, 'fail_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "FAIL: missing tests"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId, toolInput: null, testOutput: '' }
+    )
+
+    const readmePath = backchannelReadmePath(tmpDir, sessionId, 'test-review')
+    assert.ok(fs.existsSync(readmePath), 'Backchannel README should exist after FAIL')
+    const content = fs.readFileSync(readmePath, 'utf8')
+    assert.ok(content.includes('missing tests'), 'README should contain failure reason')
+    assert.ok(content.includes('Write your recommendation'), 'README should contain instructions')
+  })
+
+  it('does not overwrite backchannel on repeated FAIL', () => {
+    // Pre-create backchannel with dev content
+    const bcDir = backchannelDir(tmpDir, sessionId, 'test-review')
+    fs.mkdirSync(bcDir, { recursive: true })
+    fs.writeFileSync(path.join(bcDir, 'README.md'), 'Dev response: I am doing planning work\n')
+
+    const reviewerPath = path.join(tmpDir, 'fail_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "FAIL: still missing tests"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId, toolInput: null, testOutput: '' }
+    )
+
+    const content = fs.readFileSync(path.join(bcDir, 'README.md'), 'utf8')
+    assert.ok(content.includes('Dev response: I am doing planning work'),
+      'Original dev content should be preserved')
+    assert.ok(!content.includes('still missing tests'),
+      'New failure reason should NOT overwrite existing content')
+  })
+
+  it('cleans backchannel on PASS', () => {
+    // Pre-create backchannel
+    createBackchannel(tmpDir, sessionId, 'test-review', 'some failure')
+
+    const reviewerPath = path.join(tmpDir, 'pass_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS: looks good"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId, toolInput: null, testOutput: '' }
+    )
+
+    const bcDir = backchannelDir(tmpDir, sessionId, 'test-review')
+    assert.ok(!fs.existsSync(bcDir), 'Backchannel dir should be removed after PASS')
+  })
+
+  it('cleans backchannel on SKIP', () => {
+    // Pre-create backchannel
+    createBackchannel(tmpDir, sessionId, 'test-review', 'some failure')
+
+    const reviewerPath = path.join(tmpDir, 'skip_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "SKIP: unrelated changes"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId, toolInput: null, testOutput: '' }
+    )
+
+    const bcDir = backchannelDir(tmpDir, sessionId, 'test-review')
+    assert.ok(!fs.existsSync(bcDir), 'Backchannel dir should be removed after SKIP')
+  })
+
+  it('injects backchannel content into reviewer prompt', () => {
+    // Pre-create backchannel with dev content
+    const bcDir = backchannelDir(tmpDir, sessionId, 'test-review')
+    fs.mkdirSync(bcDir, { recursive: true })
+    fs.writeFileSync(path.join(bcDir, 'README.md'), 'I am doing planning work, not writing code.\n')
+
+    const capturePath = path.join(tmpDir, 'captured.txt')
+    const reviewerPath = path.join(tmpDir, 'capture_reviewer.sh')
+    fs.writeFileSync(reviewerPath, `#!/usr/bin/env bash\ncat > "${capturePath}"\necho "PASS: acknowledged"\n`)
+    fs.chmodSync(reviewerPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId, toolInput: null, testOutput: '' }
+    )
+
+    const captured = fs.readFileSync(capturePath, 'utf8')
+    assert.ok(captured.includes('--- Developer Backchannel ---'),
+      'Prompt should contain backchannel header')
+    assert.ok(captured.includes('I am doing planning work'),
+      'Prompt should contain backchannel content')
+    assert.ok(captured.includes('--- End Developer Backchannel ---'),
+      'Prompt should contain backchannel footer')
+  })
+
+  it('no backchannel section in prompt when none exists', () => {
+    const capturePath = path.join(tmpDir, 'captured.txt')
+    const reviewerPath = path.join(tmpDir, 'capture_reviewer.sh')
+    fs.writeFileSync(reviewerPath, `#!/usr/bin/env bash\ncat > "${capturePath}"\necho "PASS"\n`)
+    fs.chmodSync(reviewerPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId, toolInput: null, testOutput: '' }
+    )
+
+    const captured = fs.readFileSync(capturePath, 'utf8')
+    assert.ok(!captured.includes('Developer Backchannel'),
+      'Prompt should not contain backchannel section when none exists')
+  })
+
+  it('backchannel survives crash', () => {
+    // Pre-create backchannel
+    createBackchannel(tmpDir, sessionId, 'test-review', 'some failure')
+
+    const reviewerPath = path.join(tmpDir, 'crash_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\nexit 1\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId, toolInput: null, testOutput: '' }
+    )
+
+    const readmePath = backchannelReadmePath(tmpDir, sessionId, 'test-review')
+    assert.ok(fs.existsSync(readmePath), 'Backchannel should survive reviewer crash')
+  })
+
+  it('FAIL reason includes backchannel path hint', () => {
+    const reviewerPath = path.join(tmpDir, 'fail_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "FAIL: no tests"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    const result = runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId, toolInput: null, testOutput: '' }
+    )
+
+    assert.strictEqual(result.pass, false)
+    const bcDir = backchannelDir(tmpDir, sessionId, 'test-review')
+    assert.ok(result.reason.includes(bcDir),
+      `Reason should include backchannel path, got: ${result.reason}`)
+    assert.ok(result.reason.includes('README.md'),
+      `Reason should mention README.md, got: ${result.reason}`)
+  })
+
+  it('skips backchannel entirely when sessionId is null', () => {
+    const reviewerPath = path.join(tmpDir, 'fail_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "FAIL: no tests"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    const result = runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '' }
+    )
+
+    assert.strictEqual(result.pass, false)
+    // No backchannel dir should be created
+    const sessionsDir = path.join(tmpDir, '.claude', 'prove_it', 'sessions')
+    assert.ok(!fs.existsSync(sessionsDir),
+      'No sessions dir should be created when sessionId is null')
+    // No backchannel hint in reason
+    assert.ok(!result.reason.includes('backchannel'),
+      `Reason should not mention backchannel when sessionId is null, got: ${result.reason}`)
+  })
+
+  it('multi-line failure reason is fully blockquoted in README', () => {
+    const reason = 'missing tests for:\n- function foo\n- function bar'
+    createBackchannel(tmpDir, sessionId, 'multiline-review', reason)
+
+    const readmePath = backchannelReadmePath(tmpDir, sessionId, 'multiline-review')
+    const content = fs.readFileSync(readmePath, 'utf8')
+    assert.ok(content.includes('> missing tests for:'), 'First line should be blockquoted')
+    assert.ok(content.includes('> - function foo'), 'Second line should be blockquoted')
+    assert.ok(content.includes('> - function bar'), 'Third line should be blockquoted')
+  })
+
+  it('sanitizes task name with path traversal characters', () => {
+    const bcDir = backchannelDir(tmpDir, sessionId, '../etc')
+    assert.ok(bcDir.includes('.._etc'), `Path traversal should be sanitized, got: ${bcDir}`)
+    assert.ok(!bcDir.includes('/../'), `Should not contain literal /../, got: ${bcDir}`)
+  })
+
+  it('sanitizes bare .. task name to prevent parent traversal', () => {
+    const bcDir = backchannelDir(tmpDir, sessionId, '..')
+    assert.ok(!bcDir.endsWith('/backchannel/..'),
+      `Should not resolve to parent, got: ${bcDir}`)
+    assert.ok(bcDir.includes('_..'), `Should prefix with _, got: ${bcDir}`)
+  })
+
+  it('createBackchannel does not crash on filesystem errors', () => {
+    // Place a file where the directory would need to be created
+    const blockingPath = path.join(tmpDir, '.claude', 'prove_it', 'sessions', sessionId, 'backchannel')
+    fs.mkdirSync(path.dirname(blockingPath), { recursive: true })
+    fs.writeFileSync(blockingPath, 'not a directory')
+
+    // Should not throw — best-effort operation
+    assert.doesNotThrow(() => {
+      createBackchannel(tmpDir, sessionId, 'test-review', 'some failure')
+    })
+  })
+
+  it('FAIL result is still returned when createBackchannel hits filesystem error', () => {
+    // Place a file where the backchannel directory would go
+    const blockingPath = path.join(tmpDir, '.claude', 'prove_it', 'sessions', sessionId, 'backchannel')
+    fs.mkdirSync(path.dirname(blockingPath), { recursive: true })
+    fs.writeFileSync(blockingPath, 'not a directory')
+
+    const reviewerPath = path.join(tmpDir, 'fail_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "FAIL: no tests"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    const result = runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId, toolInput: null, testOutput: '' }
+    )
+
+    assert.strictEqual(result.pass, false, 'Should still return FAIL result')
+    assert.ok(result.reason.includes('no tests'), 'Should still include failure reason')
   })
 })
 
