@@ -91,9 +91,11 @@ describe('init', () => {
       assert.ok(!cfg.hooks.some(h => h.type === 'git' && h.event === 'pre-push'))
       // Should have default checks
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
-      assert.ok(allChecks.some(c => c.name === 'commit-review'))
+      assert.ok(allChecks.some(c => c.name === 'code-quality-review'))
       assert.ok(allChecks.some(c => c.name === 'coverage-review'))
-      assert.ok(allChecks.some(c => c.name === 'ensure-tests'))
+      // commit-review and ensure-tests should NOT be in defaults
+      assert.ok(!allChecks.some(c => c.name === 'commit-review'))
+      assert.ok(!allChecks.some(c => c.name === 'ensure-tests'))
     })
 
     it('omits git hooks when gitHooks is false', () => {
@@ -106,7 +108,7 @@ describe('init', () => {
       const cfg = buildConfig({ defaultChecks: false })
       assert.strictEqual(cfg.configVersion, 3)
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
-      assert.ok(!allChecks.some(c => c.name === 'commit-review'))
+      assert.ok(!allChecks.some(c => c.name === 'code-quality-review'))
       assert.ok(!allChecks.some(c => c.name === 'coverage-review'))
     })
 
@@ -115,7 +117,8 @@ describe('init', () => {
       assert.strictEqual(cfg.configVersion, 3)
       assert.ok(!cfg.hooks.some(h => h.type === 'git'))
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
-      assert.ok(!allChecks.some(c => c.name === 'commit-review'))
+      assert.ok(!allChecks.some(c => c.name === 'code-quality-review'))
+      assert.ok(!allChecks.some(c => c.name === 'coverage-review'))
       // Should still have base checks
       assert.ok(allChecks.some(c => c.name === 'lock-config'))
       assert.ok(allChecks.some(c => c.name === 'fast-tests'))
@@ -128,18 +131,18 @@ describe('init', () => {
         'Full config should have at least as many hooks as base')
     })
 
-    it('commit-review uses type agent with promptType reference', () => {
+    it('code-quality-review uses type agent with promptType reference and gross churn threshold', () => {
       const cfg = buildConfig()
       const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
-      const commitReview = allTasks.find(t => t.name === 'commit-review')
-      assert.ok(commitReview, 'Should have commit-review task')
-      assert.strictEqual(commitReview.type, 'agent')
-      assert.strictEqual(commitReview.promptType, 'reference')
-      assert.strictEqual(commitReview.prompt, 'review:commit_quality')
-      assert.deepStrictEqual(commitReview.when.variablesPresent, ['staged_diff'])
+      const codeQuality = allTasks.find(t => t.name === 'code-quality-review')
+      assert.ok(codeQuality, 'Should have code-quality-review task')
+      assert.strictEqual(codeQuality.type, 'agent')
+      assert.strictEqual(codeQuality.promptType, 'reference')
+      assert.strictEqual(codeQuality.prompt, 'review:code_quality')
+      assert.strictEqual(codeQuality.when.linesChangedSinceLastRun, 733)
     })
 
-    it('coverage-review uses type agent with promptType reference', () => {
+    it('coverage-review uses type agent with promptType reference and net churn threshold', () => {
       const cfg = buildConfig()
       const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
       const coverageReview = allTasks.find(t => t.name === 'coverage-review')
@@ -147,44 +150,28 @@ describe('init', () => {
       assert.strictEqual(coverageReview.type, 'agent')
       assert.strictEqual(coverageReview.promptType, 'reference')
       assert.strictEqual(coverageReview.prompt, 'review:test_coverage')
-      assert.deepStrictEqual(coverageReview.when, { sourceFilesEdited: true })
+      assert.strictEqual(coverageReview.when.linesWrittenSinceLastRun, 541)
     })
 
-    it('ensure-tests uses type agent with promptType reference', () => {
+    it('code-quality-review and coverage-review are both in Stop entry', () => {
       const cfg = buildConfig()
-      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
-      const ensureTests = allTasks.find(t => t.name === 'ensure-tests')
-      assert.ok(ensureTests, 'Should have ensure-tests task')
-      assert.strictEqual(ensureTests.type, 'agent')
-      assert.strictEqual(ensureTests.promptType, 'reference')
-      assert.strictEqual(ensureTests.prompt, 'review:test_investment')
-      assert.strictEqual(ensureTests.when.linesWrittenSinceLastRun, 500)
-    })
-
-    it('ensure-tests is in PreToolUse edit entry', () => {
-      const cfg = buildConfig()
-      const editEntry = cfg.hooks.find(h =>
-        h.type === 'claude' && h.event === 'PreToolUse' && h.matcher === 'Edit|Write|NotebookEdit|Bash')
-      assert.ok(editEntry, 'Should have PreToolUse edit entry')
-      const ensureTests = editEntry.tasks.find(t => t.name === 'ensure-tests')
-      assert.ok(ensureTests, 'ensure-tests should be in PreToolUse edit entry')
+      const stopEntry = cfg.hooks.find(h => h.type === 'claude' && h.event === 'Stop')
+      assert.ok(stopEntry, 'Should have Stop entry')
+      assert.ok(stopEntry.tasks.some(t => t.name === 'code-quality-review'),
+        'code-quality-review should be in Stop entry')
+      assert.ok(stopEntry.tasks.some(t => t.name === 'coverage-review'),
+        'coverage-review should be in Stop entry')
     })
 
     it('all default agent tasks include ruleFile', () => {
       const cfg = buildConfig()
       const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
       const agentTasks = allTasks.filter(t => t.type === 'agent')
-      assert.ok(agentTasks.length >= 3, 'Should have at least 3 agent tasks')
+      assert.ok(agentTasks.length >= 2, 'Should have at least 2 agent tasks')
       for (const task of agentTasks) {
         assert.strictEqual(task.ruleFile, '.claude/rules/testing.md',
           `Agent task "${task.name}" should have ruleFile set`)
       }
-    })
-
-    it('omits ensure-tests when defaultChecks is false', () => {
-      const cfg = buildConfig({ defaultChecks: false })
-      const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
-      assert.ok(!allChecks.some(c => c.name === 'ensure-tests'))
     })
 
     it('generated config passes validation', () => {

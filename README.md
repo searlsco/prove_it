@@ -14,8 +14,8 @@ If it's not obvious, **prove_it only works with Claude Code.** If you're not usi
 
 The two most important things prove_it does:
 
-* **Blocks stop** — each time Claude finishes its response and hands control back to the user, it fires ["stop" hooks](https://code.claude.com/docs/en/hooks#subagentstop). prove_it runs your fast tests (`script/test_fast`) and blocks if they fail. It can also deploy a [reviewer agent](#agent-tasks) to check whether commensurate verification methods (e.g. test coverage) were introduced for whatever code was added during the response
-* **Blocks commits** — each time Claude attempts a `git commit`, prove_it runs `./script/test` and blocks unless it passes. It can then deploy a [reviewer agent](#agent-tasks) that inspects all staged changes and hunts for potential bugs and dead code, blocking if it finds anything significant
+* **Blocks stop** — each time Claude finishes its response and hands control back to the user, it fires ["stop" hooks](https://code.claude.com/docs/en/hooks#subagentstop). prove_it runs your fast tests (`script/test_fast`) and blocks if they fail. It can also deploy [reviewer agents](#agent-tasks) — a code quality review and a coverage review — that fire periodically based on how much code the agent has written
+* **Blocks commits** — each time Claude attempts a `git commit`, prove_it runs `./script/test` and blocks unless it passes
 
 Other stuff prove_it does:
 
@@ -204,16 +204,33 @@ PreToolUse hooks can filter by tool name and command patterns:
 
 Supported conditions:
 
-| Condition | Type | Description |
-|-----------|------|-------------|
-| `fileExists` | string | Passes when file exists relative to project root |
-| `envSet` | string | Passes when environment variable is set |
-| `envNotSet` | string | Passes when environment variable is not set |
-| `variablesPresent` | string[] | Passes when all listed template variables resolve to non-empty values |
-| `linesWrittenSinceLastRun` | number | Passes when at least N source lines have changed (additions + deletions) since the task last ran. Backed by git refs — works in both Claude hooks and git hooks. |
-| `sourcesModifiedSinceLastRun` | boolean | Passes when source file mtimes are newer than the last run |
-| `sourceFilesEdited` | boolean | Passes when source files were edited this turn (session-scoped, tool-agnostic) |
-| `toolsUsed` | string[] | Passes when any of the listed tools were used this turn |
+| Condition | Category | Type | Description |
+|-----------|----------|------|-------------|
+| `fileExists` | prerequisite | string | Passes when file exists relative to project root |
+| `envSet` | prerequisite | string | Passes when environment variable is set |
+| `envNotSet` | prerequisite | string | Passes when environment variable is not set |
+| `variablesPresent` | prerequisite | string[] | Passes when all listed template variables resolve to non-empty values |
+| `linesWrittenSinceLastRun` | trigger | number | Passes when at least N source lines have changed (additions + deletions) since the task last ran. Backed by git refs — works in both Claude hooks and git hooks. |
+| `linesChangedSinceLastRun` | trigger | number | Passes when at least N gross lines have been written by the agent since the task last ran. Tracks cumulative Write/Edit/NotebookEdit activity — catches thrashing (back-and-forth edits that net to zero). Claude Code sessions only. |
+| `sourcesModifiedSinceLastRun` | trigger | boolean | Passes when source file mtimes are newer than the last run |
+| `sourceFilesEdited` | trigger | boolean | Passes when source files were edited this turn (session-scoped, tool-agnostic) |
+| `toolsUsed` | trigger | string[] | Passes when any of the listed tools were used this turn |
+
+**Prerequisites** are environmental gates — all must pass (AND). **Triggers** are activity signals — any one passing is enough to fire the task (OR). Prerequisites are checked first; if any fails, the task is skipped regardless of triggers. When no triggers are present, prerequisites alone decide. This means you can combine a prerequisite like `envSet` with multiple triggers like `linesWrittenSinceLastRun` and `linesChangedSinceLastRun` — the env var must be set, but either churn threshold will fire the review:
+
+```json
+{
+  "name": "coverage-review",
+  "type": "agent",
+  "prompt": "review:test_coverage",
+  "promptType": "reference",
+  "when": {
+    "envSet": "CLAUDECODE",
+    "linesWrittenSinceLastRun": 500,
+    "linesChangedSinceLastRun": 1000
+  }
+}
+```
 
 #### Git-based churn tracking (`linesWrittenSinceLastRun`)
 
@@ -226,20 +243,27 @@ When a task passes or resets, the ref advances to a snapshot of the current work
 - **Stop / git hooks** (default `resetOnFail: false`): The ref does NOT advance. The agent gets sent back to fix the issue, and the same accumulated churn keeps triggering the review.
 - You can override the default with an explicit `resetOnFail: true` or `resetOnFail: false` on the task.
 
+#### Gross churn tracking (`linesChangedSinceLastRun`)
+
+While `linesWrittenSinceLastRun` measures **net** drift (git diff: what changed on disk), `linesChangedSinceLastRun` measures **gross** activity (total lines the agent has written). This catches a different failure mode: thrashing. An agent that writes 500 lines, deletes them, rewrites them differently, and deletes again has written 2000 gross lines but may show 0 net churn. The gross counter catches this.
+
+Gross churn accumulates on every successful PreToolUse for Write/Edit/NotebookEdit to source files. Lines are counted from the tool input (no file I/O needed). The counter is stored as a git blob under `refs/worktree/prove_it/__gross`, with per-task snapshots under `<task>.__snap`. Increment uses compare-and-swap for multi-agent safety — concurrent agents can't lose each other's counts.
+
+`resetOnFail` follows the same rules as `linesWrittenSinceLastRun`.
+
 #### Session-scoped conditions
 
 `sourceFilesEdited` and `toolsUsed` are **session-scoped**: they track which tools and files each Claude Code session uses, per-turn. After a successful Stop, the tracking resets so the next Stop only fires if new edits occur.
 
 These conditions solve cross-session bleed — unlike `sourcesModifiedSinceLastRun` (which uses global file timestamps), session-scoped conditions ensure Session A's edits don't trigger Session B's reviewers.
 
-**`sourceFilesEdited: true`** — The recommended condition for gating reviewers on Stop:
+**`sourceFilesEdited: true`** — Gates a task on source file edits in the current turn:
 
 ```json
 {
-  "name": "coverage-review",
+  "name": "my-review",
   "type": "agent",
-  "prompt": "review:test_coverage",
-  "promptType": "reference",
+  "prompt": "Review the changes...",
   "when": { "sourceFilesEdited": true }
 }
 ```
@@ -268,7 +292,7 @@ By default, prove_it tracks Claude's built-in editing tools (`Edit`, `Write`, `N
 }
 ```
 
-Tools listed in `fileEditingTools` are tracked alongside the builtins — they participate in `sourceFilesEdited`, `toolsUsed`, and the `session_diff` git fallback.
+Tools listed in `fileEditingTools` are tracked alongside the builtins — they participate in `sourceFilesEdited`, `toolsUsed`, gross churn (`linesChangedSinceLastRun`), and the `session_diff` git fallback. For gross churn, line counts are estimated from the longest string value in the tool input.
 
 ## Env tasks
 
@@ -331,9 +355,9 @@ By default, agent tasks use `claude -p` (Claude Code in pipe mode). The reviewer
 
 ```json
 {
-  "name": "commit-review",
+  "name": "my-review",
   "type": "agent",
-  "prompt": "Review staged changes for:\n1. Test coverage gaps\n2. Logic errors or edge cases\n3. Dead code\n\nCheck recent git history before failing for coverage gaps.\n\n{{staged_diff}}\n\n{{recent_commits}}\n\n{{git_status}}"
+  "prompt": "Review recent changes for:\n1. Test coverage gaps\n2. Logic errors or edge cases\n3. Dead code\n\n{{recently_edited_files}}\n\n{{recent_commits}}\n\n{{git_status}}"
 }
 ```
 
@@ -372,7 +396,7 @@ Agent tasks accept a `ruleFile` field that injects the contents of a project-spe
 
 The path is resolved relative to the project directory. If the file is missing, the task fails with a clear error — this is intentional so you don't silently run reviews without your rules.
 
-`prove_it init` generates a default `.claude/rules/testing.md` with starter rules and a TODO for you to customize. The three default agent tasks (`commit-review`, `coverage-review`, `ensure-tests`) all point to this file.
+`prove_it init` generates a default `.claude/rules/testing.md` with starter rules and a TODO for you to customize. The default agent tasks (`code-quality-review`, `coverage-review`) both point to this file.
 
 ### Adversarial cross-platform review
 
@@ -435,11 +459,13 @@ An explicit `model` always wins. Setting a custom `command` disables default mod
 
 prove_it ships with built-in tasks invoked via `prove_it run_builtin <name>`:
 
-| Builtin | Event | What it does |
-|---------|-------|-------------|
-| `config:lock` | PreToolUse | Blocks direct edits to prove_it config files |
-| `review:commit_quality` | pre-commit | Agent reviews staged diff for bugs and dead code |
-| `review:test_coverage` | Stop | Agent reviews session diffs for test coverage |
+| Builtin | Type | What it does |
+|---------|------|-------------|
+| `config:lock` | script | Blocks direct edits to prove_it config files |
+| `review:code_quality` | agent prompt | Reviews for logic errors, dead code, error handling gaps, naming contradictions |
+| `review:commit_quality` | agent prompt | Reviews staged diff for test coverage gaps, logic errors, dead code |
+| `review:test_coverage` | agent prompt | Reviews session diffs for test coverage adequacy |
+| `review:test_investment` | agent prompt | Reviews whether recent edits include adequate test investment |
 
 ## Skills
 
@@ -540,14 +566,13 @@ prove_it doctor
 - **Hooks not firing** — Restart Claude Code after `prove_it install`
 - **Tests not running** — Check `./script/test` exists and is executable (`chmod +x`)
 - **Hooks running in wrong directories** — prove_it only activates in git repos
-- **coverage-review never fires** — The default `when` condition is `sourceFilesEdited: true`, which tracks file edits per-session. If you use MCP tools that edit files (e.g. Xcode MCP's `XcodeEdit`), add them to `fileEditingTools` in your config so prove_it can track them:
+- **Reviews never fire** — The default `when` conditions use churn thresholds (`linesWrittenSinceLastRun`, `linesChangedSinceLastRun`). Reviews only trigger after enough code has been written. Check `prove_it monitor` to see skip reasons with current/threshold counts. If you use MCP tools that edit files (e.g. Xcode MCP's `XcodeEdit`), add them to `fileEditingTools` so all churn tracking works for those tools:
   ```json
   {
     "fileEditingTools": ["XcodeEdit"],
     "hooks": [...]
   }
   ```
-  This also enables the `session_diff` git fallback — when Claude Code's built-in file-history is empty (because edits went through MCP tools), prove_it falls back to a git diff scoped to only the files tracked during the session.
 
 ## Examples
 

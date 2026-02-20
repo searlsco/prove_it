@@ -208,7 +208,7 @@ describe('init/deinit', () => {
     const newCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
     assert.ok(newCfg.initSeed)
     const allTasks = newCfg.hooks.flatMap(h => h.tasks || [])
-    assert.ok(!allTasks.some(t => t.name === 'commit-review'), 'should not have default checks')
+    assert.ok(!allTasks.some(t => t.name === 'code-quality-review'), 'should not have default checks')
     assert.ok(!allTasks.some(t => t.name === 'coverage-review'), 'should not have default checks')
   })
 

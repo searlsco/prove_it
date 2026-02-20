@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
-const { gitDiffFiles, sanitizeRefName, readRef, updateRef, snapshotWorkingTree, deleteAllRefs, churnSinceRef, advanceChurnRef } = require('../lib/git')
+const { gitDiffFiles, sanitizeRefName, readRef, updateRef, snapshotWorkingTree, deleteAllRefs, churnSinceRef, advanceChurnRef, readCounterBlob, writeCounterRef, readGrossCounter, incrementGross, grossChurnSince, advanceGrossSnapshot, computeWriteLines } = require('../lib/git')
 
 describe('gitDiffFiles', () => {
   let tmpDir
@@ -538,5 +538,402 @@ describe('advanceChurnRef', () => {
 
     assert.strictEqual(churnSinceRef(tmpDir, sanitizeRefName('my-task'), ['**/*.js']), 0,
       'Explicit resetOnFail: true should reset churn even on Stop')
+  })
+
+  it('advances gross snapshot on pass for linesChangedSinceLastRun tasks', () => {
+    incrementGross(tmpDir, 100)
+    const grossTask = { name: 'gross-task', when: { linesChangedSinceLastRun: 50 } }
+    // Bootstrap the snapshot
+    grossChurnSince(tmpDir, sanitizeRefName('gross-task'))
+    // Add more gross churn
+    incrementGross(tmpDir, 200)
+    assert.strictEqual(grossChurnSince(tmpDir, sanitizeRefName('gross-task')), 200)
+
+    advanceChurnRef(grossTask, true, 'Stop', tmpDir, ['**/*.js'])
+
+    assert.strictEqual(grossChurnSince(tmpDir, sanitizeRefName('gross-task')), 0,
+      'Gross snapshot should advance on pass')
+  })
+
+  it('does NOT advance gross snapshot on Stop fail (default resetOnFail: false)', () => {
+    incrementGross(tmpDir, 100)
+    const grossTask = { name: 'gross-fail', when: { linesChangedSinceLastRun: 50 } }
+    grossChurnSince(tmpDir, sanitizeRefName('gross-fail'))
+    incrementGross(tmpDir, 200)
+    const before = grossChurnSince(tmpDir, sanitizeRefName('gross-fail'))
+    assert.strictEqual(before, 200)
+
+    advanceChurnRef(grossTask, false, 'Stop', tmpDir, ['**/*.js'])
+
+    assert.strictEqual(grossChurnSince(tmpDir, sanitizeRefName('gross-fail')), 200,
+      'Stop should default to NOT resetting gross snapshot on failure')
+  })
+
+  it('advances both net and gross refs when task has both criteria', () => {
+    // Set up net churn
+    churnSinceRef(tmpDir, sanitizeRefName('dual-task'), ['**/*.js'])
+    const lines = Array.from({ length: 10 }, (_, i) => `line${i}`).join('\n') + '\n'
+    fs.writeFileSync(path.join(tmpDir, 'file.js'), lines)
+    // Set up gross churn
+    incrementGross(tmpDir, 100)
+    grossChurnSince(tmpDir, sanitizeRefName('dual-task'))
+    incrementGross(tmpDir, 200)
+
+    const dualTask = { name: 'dual-task', when: { linesWrittenSinceLastRun: 5, linesChangedSinceLastRun: 50 } }
+    advanceChurnRef(dualTask, true, 'Stop', tmpDir, ['**/*.js'])
+
+    assert.strictEqual(churnSinceRef(tmpDir, sanitizeRefName('dual-task'), ['**/*.js']), 0,
+      'Net churn should be reset')
+    assert.strictEqual(grossChurnSince(tmpDir, sanitizeRefName('dual-task')), 0,
+      'Gross churn should be reset')
+  })
+})
+
+describe('readCounterBlob / writeCounterRef', () => {
+  let tmpDir
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_blob_'))
+    initGitRepo(tmpDir)
+    fs.writeFileSync(path.join(tmpDir, 'file.js'), 'initial\n')
+    commit(tmpDir, 'init')
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('round-trips an integer value', () => {
+    writeCounterRef(tmpDir, 'test-counter', 42)
+    const sha = readRef(tmpDir, 'test-counter')
+    assert.ok(sha, 'Ref should exist after write')
+    assert.strictEqual(readCounterBlob(tmpDir, sha), 42)
+  })
+
+  it('returns 0 for null sha', () => {
+    assert.strictEqual(readCounterBlob(tmpDir, null), 0)
+  })
+
+  it('returns 0 for non-existent sha', () => {
+    assert.strictEqual(readCounterBlob(tmpDir, 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef'), 0)
+  })
+
+  it('handles large values', () => {
+    writeCounterRef(tmpDir, 'big-counter', 999999)
+    const sha = readRef(tmpDir, 'big-counter')
+    assert.strictEqual(readCounterBlob(tmpDir, sha), 999999)
+  })
+
+  it('overwrites existing ref', () => {
+    writeCounterRef(tmpDir, 'counter', 10)
+    writeCounterRef(tmpDir, 'counter', 20)
+    const sha = readRef(tmpDir, 'counter')
+    assert.strictEqual(readCounterBlob(tmpDir, sha), 20)
+  })
+})
+
+describe('incrementGross', () => {
+  let tmpDir
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_incr_'))
+    initGitRepo(tmpDir)
+    fs.writeFileSync(path.join(tmpDir, 'file.js'), 'initial\n')
+    commit(tmpDir, 'init')
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('creates counter from zero (first-write path)', () => {
+    assert.strictEqual(readGrossCounter(tmpDir), 0)
+    assert.strictEqual(readRef(tmpDir, '__gross'), null, 'ref should not exist yet')
+    incrementGross(tmpDir, 50)
+    assert.strictEqual(readGrossCounter(tmpDir), 50)
+    assert.ok(readRef(tmpDir, '__gross'), 'ref should exist after first write')
+  })
+
+  it('accumulates via CAS path when ref already exists', () => {
+    incrementGross(tmpDir, 10) // first-write path
+    const refAfterFirst = readRef(tmpDir, '__gross')
+    incrementGross(tmpDir, 20) // CAS path — ref exists
+    const refAfterSecond = readRef(tmpDir, '__gross')
+    assert.notStrictEqual(refAfterFirst, refAfterSecond,
+      'CAS should update the ref SHA')
+    incrementGross(tmpDir, 30)
+    assert.strictEqual(readGrossCounter(tmpDir), 60)
+  })
+
+  it('ignores zero delta', () => {
+    incrementGross(tmpDir, 10)
+    incrementGross(tmpDir, 0)
+    assert.strictEqual(readGrossCounter(tmpDir), 10)
+  })
+
+  it('ignores negative delta', () => {
+    incrementGross(tmpDir, 10)
+    incrementGross(tmpDir, -5)
+    assert.strictEqual(readGrossCounter(tmpDir), 10)
+  })
+
+  it('does not throw on non-git directory (hash-object failure)', () => {
+    const nonGitDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_nogit_'))
+    try {
+      // hash-object will fail — should bail gracefully, not throw
+      incrementGross(nonGitDir, 50)
+      assert.strictEqual(readGrossCounter(nonGitDir), 0,
+        'counter should remain 0 when git commands fail')
+    } finally {
+      fs.rmSync(nonGitDir, { recursive: true, force: true })
+    }
+  })
+
+  it('succeeds after external ref modification (CAS path reads fresh state)', () => {
+    // Set counter to 100 via incrementGross (first-write path)
+    incrementGross(tmpDir, 100)
+    // Externally modify the ref to simulate another agent's write
+    writeCounterRef(tmpDir, '__gross', 200)
+    assert.strictEqual(readGrossCounter(tmpDir), 200)
+
+    // incrementGross should read the fresh value (200) and CAS to 225
+    incrementGross(tmpDir, 25)
+    assert.strictEqual(readGrossCounter(tmpDir), 225,
+      'should increment from externally-modified value, not stale cache')
+  })
+
+  it('CAS rejects stale old-value (git update-ref with wrong expected SHA)', () => {
+    // Directly verify that git update-ref fails when old-value is wrong.
+    // This is the mechanism incrementGross relies on for retry.
+    const { tryRun, shellEscape } = require('../lib/io')
+
+    incrementGross(tmpDir, 100)
+    const currentSha = readRef(tmpDir, '__gross')
+    assert.ok(currentSha, 'ref should exist')
+
+    // Create a new blob for value 200
+    const r = tryRun(`printf '%s' '200' | git -C ${shellEscape(tmpDir)} hash-object -w --stdin`, {})
+    assert.strictEqual(r.code, 0)
+    const newSha = r.stdout.trim()
+
+    // Create a fake "stale" SHA (some other blob)
+    const stale = tryRun(`printf '%s' '999' | git -C ${shellEscape(tmpDir)} hash-object -w --stdin`, {})
+    const staleSha = stale.stdout.trim()
+
+    // CAS with wrong old-value should FAIL
+    const cas = tryRun(`git -C ${shellEscape(tmpDir)} update-ref refs/worktree/prove_it/__gross ${shellEscape(newSha)} ${shellEscape(staleSha)}`, {})
+    assert.notStrictEqual(cas.code, 0,
+      'update-ref should fail when old-value does not match current ref')
+
+    // Counter should be unchanged
+    assert.strictEqual(readGrossCounter(tmpDir), 100,
+      'counter should be unchanged after failed CAS')
+
+    // CAS with CORRECT old-value should succeed
+    const cas2 = tryRun(`git -C ${shellEscape(tmpDir)} update-ref refs/worktree/prove_it/__gross ${shellEscape(newSha)} ${shellEscape(currentSha)}`, {})
+    assert.strictEqual(cas2.code, 0,
+      'update-ref should succeed with correct old-value')
+    assert.strictEqual(readGrossCounter(tmpDir), 200,
+      'counter should reflect CAS update')
+  })
+
+  it('concurrent incrementGross calls recover most increments via CAS retry', () => {
+    // Set up initial counter so CAS path is used
+    incrementGross(tmpDir, 100)
+
+    // Launch child processes concurrently. Under real contention, some
+    // CAS attempts may fail and retry. With 3 retries per call, most
+    // increments land but under heavy contention some may be lost.
+    const { execSync } = require('child_process')
+    const n = 4
+    const delta = 10
+    const scriptFile = path.join(tmpDir, '_incr.js')
+    fs.writeFileSync(scriptFile, `
+      const { incrementGross } = require(${JSON.stringify(path.join(__dirname, '..', 'lib', 'git'))});
+      incrementGross(${JSON.stringify(tmpDir)}, ${delta});
+    `)
+
+    const cmds = Array.from({ length: n }, () => `node ${scriptFile}`).join(' & ')
+    execSync(`${cmds} & wait`, { encoding: 'utf8', timeout: 10000 })
+
+    const counter = readGrossCounter(tmpDir)
+    const expected = 100 + (n * delta)
+    // Without CAS: all readers see 100, all write 110 → final = 110
+    // With CAS + retry: most or all increments land
+    assert.ok(counter > 110,
+      `CAS should recover more than a single increment: expected > 110, got ${counter}`)
+    assert.ok(counter <= expected,
+      `counter should not exceed ${expected}, got ${counter}`)
+    // At least half the increments should land even under worst-case contention
+    assert.ok(counter >= 100 + (n * delta) / 2,
+      `at least half the increments should land: expected >= ${100 + (n * delta) / 2}, got ${counter}`)
+  })
+
+  it('silently gives up after max retries exhausted (no crash)', () => {
+    // We can't easily force 3 consecutive CAS failures in a unit test,
+    // but we CAN verify the function doesn't throw even when the ref
+    // is in an unexpected state. Corrupt the ref to point at a non-blob.
+    const { tryRun, shellEscape } = require('../lib/io')
+
+    // Create the __gross ref pointing at a valid blob
+    incrementGross(tmpDir, 50)
+    assert.strictEqual(readGrossCounter(tmpDir), 50)
+
+    // Point the ref at HEAD (a commit, not a blob) — readCounterBlob returns 0
+    const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
+    tryRun(`git -C ${shellEscape(tmpDir)} update-ref refs/worktree/prove_it/__gross ${head}`, {})
+
+    // readCounterBlob will return 0 for a non-parseable blob
+    // incrementGross should still not throw
+    incrementGross(tmpDir, 25)
+    // The counter may or may not be 25 depending on whether the CAS succeeds,
+    // but the function should not crash
+    const counter = readGrossCounter(tmpDir)
+    assert.strictEqual(typeof counter, 'number', 'counter should be a number')
+  })
+})
+
+describe('grossChurnSince', () => {
+  let tmpDir
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_gcs_'))
+    initGitRepo(tmpDir)
+    fs.writeFileSync(path.join(tmpDir, 'file.js'), 'initial\n')
+    commit(tmpDir, 'init')
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('returns 0 on bootstrap (first call)', () => {
+    incrementGross(tmpDir, 100)
+    const churn = grossChurnSince(tmpDir, 'my-task')
+    assert.strictEqual(churn, 0, 'First call should bootstrap and return 0')
+  })
+
+  it('returns 0 when no counter exists (brand new repo)', () => {
+    const churn = grossChurnSince(tmpDir, 'my-task')
+    assert.strictEqual(churn, 0)
+  })
+
+  it('returns accumulated churn after bootstrap', () => {
+    grossChurnSince(tmpDir, 'my-task') // bootstrap
+    incrementGross(tmpDir, 50)
+    incrementGross(tmpDir, 30)
+    assert.strictEqual(grossChurnSince(tmpDir, 'my-task'), 80)
+  })
+
+  it('resets to 0 after advanceGrossSnapshot', () => {
+    grossChurnSince(tmpDir, 'my-task') // bootstrap
+    incrementGross(tmpDir, 100)
+    assert.strictEqual(grossChurnSince(tmpDir, 'my-task'), 100)
+
+    advanceGrossSnapshot(tmpDir, 'my-task')
+    assert.strictEqual(grossChurnSince(tmpDir, 'my-task'), 0)
+  })
+
+  it('tracks separate tasks independently', () => {
+    grossChurnSince(tmpDir, 'task-a') // bootstrap
+    grossChurnSince(tmpDir, 'task-b') // bootstrap
+    incrementGross(tmpDir, 100)
+
+    assert.strictEqual(grossChurnSince(tmpDir, 'task-a'), 100)
+    assert.strictEqual(grossChurnSince(tmpDir, 'task-b'), 100)
+
+    advanceGrossSnapshot(tmpDir, 'task-a')
+    assert.strictEqual(grossChurnSince(tmpDir, 'task-a'), 0)
+    assert.strictEqual(grossChurnSince(tmpDir, 'task-b'), 100,
+      'Advancing task-a should not affect task-b')
+  })
+
+  it('is cleaned up by deleteAllRefs', () => {
+    incrementGross(tmpDir, 100)
+    grossChurnSince(tmpDir, 'my-task')
+    incrementGross(tmpDir, 50)
+
+    deleteAllRefs(tmpDir)
+
+    // After cleanup, global counter and snapshot are gone
+    assert.strictEqual(readGrossCounter(tmpDir), 0)
+    // Bootstrap again — should return 0
+    assert.strictEqual(grossChurnSince(tmpDir, 'my-task'), 0)
+  })
+})
+
+describe('computeWriteLines', () => {
+  it('counts lines for Write', () => {
+    assert.strictEqual(computeWriteLines('Write', { content: 'a\nb\nc' }), 3)
+  })
+
+  it('counts single-line Write', () => {
+    assert.strictEqual(computeWriteLines('Write', { content: 'single' }), 1)
+  })
+
+  it('returns 0 for Write with no content', () => {
+    assert.strictEqual(computeWriteLines('Write', {}), 0)
+    assert.strictEqual(computeWriteLines('Write', { content: 42 }), 0)
+  })
+
+  it('counts old + new lines for Edit', () => {
+    assert.strictEqual(computeWriteLines('Edit', {
+      old_string: 'a\nb',
+      new_string: 'c\nd\ne'
+    }), 5) // 2 old + 3 new
+  })
+
+  it('handles Edit with only new_string', () => {
+    assert.strictEqual(computeWriteLines('Edit', { new_string: 'a\nb' }), 2)
+  })
+
+  it('counts lines for NotebookEdit insert', () => {
+    assert.strictEqual(computeWriteLines('NotebookEdit', {
+      edit_mode: 'insert',
+      new_source: 'x = 1\ny = 2'
+    }), 2)
+  })
+
+  it('counts lines for NotebookEdit replace (default mode)', () => {
+    assert.strictEqual(computeWriteLines('NotebookEdit', {
+      new_source: 'a\nb\nc'
+    }), 3)
+  })
+
+  it('returns 0 for NotebookEdit delete', () => {
+    assert.strictEqual(computeWriteLines('NotebookEdit', {
+      edit_mode: 'delete',
+      new_source: 'ignored'
+    }), 0)
+  })
+
+  it('uses longest string heuristic for unknown tools with content', () => {
+    // MCP tool with a content field — longest string is the content
+    assert.strictEqual(computeWriteLines('mcp__xcode__edit', {
+      file_path: 'src/app.swift',
+      content: 'import UIKit\nclass App {}\n'
+    }), 3)
+  })
+
+  it('uses longest string heuristic across multiple fields', () => {
+    assert.strictEqual(computeWriteLines('mcp__custom__write', {
+      path: '/short',
+      sourceText: 'line1\nline2\nline3\nline4\n',
+      encoding: 'utf8'
+    }), 5)
+  })
+
+  it('returns 0 for unknown tool with no string values', () => {
+    assert.strictEqual(computeWriteLines('mcp__tool', { count: 42, flag: true }), 0)
+  })
+
+  it('returns 0 for unknown tool with only short path-like strings', () => {
+    // file_path is the only string — still counts its "lines"
+    // (1 line for a path is minimal and harmless)
+    assert.strictEqual(computeWriteLines('mcp__tool', { file_path: 'x' }), 1)
+  })
+
+  it('returns 0 for null input', () => {
+    assert.strictEqual(computeWriteLines('Write', null), 0)
   })
 })

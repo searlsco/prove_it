@@ -86,6 +86,19 @@ describe('builtins', () => {
         'commit_quality prompt should contain {{git_status}}')
     })
 
+    it('has review:code_quality prompt', () => {
+      assert.strictEqual(typeof BUILTIN_PROMPTS['review:code_quality'], 'string')
+      assert.ok(BUILTIN_PROMPTS['review:code_quality'].length > 0)
+      assert.ok(BUILTIN_PROMPTS['review:code_quality'].includes('{{recently_edited_files}}'),
+        'code_quality prompt should contain {{recently_edited_files}}')
+      assert.ok(BUILTIN_PROMPTS['review:code_quality'].includes('{{#session_diff}}'),
+        'code_quality prompt should contain {{#session_diff}} conditional block')
+      assert.ok(BUILTIN_PROMPTS['review:code_quality'].includes('{{recent_commits}}'),
+        'code_quality prompt should contain {{recent_commits}}')
+      assert.ok(BUILTIN_PROMPTS['review:code_quality'].includes('{{git_status}}'),
+        'code_quality prompt should contain {{git_status}}')
+    })
+
     it('has review:test_coverage prompt', () => {
       assert.strictEqual(typeof BUILTIN_PROMPTS['review:test_coverage'], 'string')
       assert.ok(BUILTIN_PROMPTS['review:test_coverage'].length > 0)

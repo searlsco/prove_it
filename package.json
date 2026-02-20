@@ -1,6 +1,6 @@
 {
   "name": "prove_it",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "description": "Config-driven hook framework for Claude Code - enforce verified workflows",
   "author": "Justin Searls <justin@searls.co>",
   "license": "MIT",
@@ -33,7 +33,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "test:integration": "node --test test/integration/test_enforcement.integration.test.js test/integration/hook_contract.integration.test.js test/integration/core_hooks.integration.test.js test/integration/mtime_skip.integration.test.js test/integration/config_behavior.integration.test.js test/integration/reviewer_prompt.integration.test.js test/integration/session_start_types.integration.test.js",
+    "test:integration": "node --test test/integration/test_enforcement.integration.test.js test/integration/hook_contract.integration.test.js test/integration/core_hooks.integration.test.js test/integration/mtime_skip.integration.test.js test/integration/config_behavior.integration.test.js test/integration/reviewer_prompt.integration.test.js test/integration/session_start_types.integration.test.js test/integration/gross_churn.integration.test.js",
     "test:reviewer": "node --test test/integration/reviewer.integration.test.js",
     "test:all": "node --test test/*.test.js test/integration/*.test.js"
   },

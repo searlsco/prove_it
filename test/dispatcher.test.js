@@ -4,9 +4,9 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
-const { matchesHookEntry, evaluateWhen, defaultConfig, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
+const { matchesHookEntry, evaluateWhen, defaultConfig, BUILTIN_EDIT_TOOLS, PREREQUISITE_KEYS, TRIGGER_KEYS } = require('../lib/dispatcher/claude')
 const { recordFileEdit, resetTurnTracking } = require('../lib/session')
-const { updateRef, churnSinceRef, sanitizeRefName } = require('../lib/git')
+const { updateRef, churnSinceRef, sanitizeRefName, incrementGross, grossChurnSince } = require('../lib/git')
 
 describe('claude dispatcher', () => {
   describe('matchesHookEntry', () => {
@@ -344,6 +344,81 @@ describe('claude dispatcher', () => {
     })
   })
 
+  describe('evaluateWhen — linesChangedSinceLastRun (gross churn)', () => {
+    let tmpDir
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_lcslr_'))
+      spawnSync('git', ['init'], { cwd: tmpDir })
+      spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
+      spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'initial\n')
+      spawnSync('git', ['add', '.'], { cwd: tmpDir })
+      spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+    })
+
+    afterEach(() => {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('returns reason on bootstrap (0 gross churn)', () => {
+      const result = evaluateWhen(
+        { linesChangedSinceLastRun: 500 },
+        { rootDir: tmpDir, sources: ['**/*.js'] },
+        'my-check'
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('0'), `Expected 0 in reason, got: ${result}`)
+      assert.ok(result.includes('500'), `Expected threshold in reason, got: ${result}`)
+      assert.ok(result.includes('gross lines changed'), `Expected reason, got: ${result}`)
+    })
+
+    it('returns true when gross churn meets threshold', () => {
+      // Bootstrap
+      grossChurnSince(tmpDir, sanitizeRefName('my-check'))
+      // Accumulate enough gross churn
+      incrementGross(tmpDir, 600)
+
+      const result = evaluateWhen(
+        { linesChangedSinceLastRun: 500 },
+        { rootDir: tmpDir, sources: ['**/*.js'] },
+        'my-check'
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('returns reason when gross churn is below threshold', () => {
+      grossChurnSince(tmpDir, sanitizeRefName('my-check'))
+      incrementGross(tmpDir, 100)
+
+      const result = evaluateWhen(
+        { linesChangedSinceLastRun: 500 },
+        { rootDir: tmpDir, sources: ['**/*.js'] },
+        'my-check'
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('100'), `Expected churn in reason, got: ${result}`)
+      assert.ok(result.includes('500'), `Expected threshold in reason, got: ${result}`)
+    })
+
+    it('OR-ed triggers — gross passes, net fails → task fires', () => {
+      // Bootstrap both refs
+      churnSinceRef(tmpDir, sanitizeRefName('dual-check'), ['**/*.js'])
+      grossChurnSince(tmpDir, sanitizeRefName('dual-check'))
+
+      // Gross churn meets threshold, but net churn does not
+      incrementGross(tmpDir, 600)
+
+      const result = evaluateWhen(
+        { linesWrittenSinceLastRun: 500, linesChangedSinceLastRun: 500 },
+        { rootDir: tmpDir, sources: ['**/*.js'] },
+        'dual-check'
+      )
+      // Triggers are OR-ed: gross passes → task fires even though net fails
+      assert.strictEqual(result, true)
+    })
+  })
+
   describe('evaluateWhen — sourcesModifiedSinceLastRun', () => {
     let tmpDir
 
@@ -629,6 +704,154 @@ describe('claude dispatcher', () => {
       )
       assert.notStrictEqual(result, true)
       assert.ok(result.includes('not applicable'), `Expected not applicable reason, got: ${result}`)
+    })
+  })
+
+  describe('evaluateWhen — prerequisite/trigger split', () => {
+    let tmpDir
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_pts_'))
+      spawnSync('git', ['init'], { cwd: tmpDir })
+      spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
+      spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'initial\n')
+      spawnSync('git', ['add', '.'], { cwd: tmpDir })
+      spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+    })
+
+    afterEach(() => {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('multiple prerequisites AND — all pass → true', () => {
+      process.env.PROVE_IT_PTS_VAR = '1'
+      try {
+        fs.writeFileSync(path.join(tmpDir, '.config'), 'x')
+        const result = evaluateWhen(
+          { fileExists: '.config', envSet: 'PROVE_IT_PTS_VAR' },
+          { rootDir: tmpDir }
+        )
+        assert.strictEqual(result, true)
+      } finally {
+        delete process.env.PROVE_IT_PTS_VAR
+      }
+    })
+
+    it('multiple prerequisites AND — one fails → skip', () => {
+      delete process.env.PROVE_IT_PTS_MISSING
+      fs.writeFileSync(path.join(tmpDir, '.config'), 'x')
+      const result = evaluateWhen(
+        { fileExists: '.config', envSet: 'PROVE_IT_PTS_MISSING' },
+        { rootDir: tmpDir }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('was not set'), `Expected prereq reason, got: ${result}`)
+    })
+
+    it('multiple triggers OR — one passes → true', () => {
+      // Bootstrap refs
+      churnSinceRef(tmpDir, sanitizeRefName('pts-check'), ['**/*.js'])
+      grossChurnSince(tmpDir, sanitizeRefName('pts-check'))
+
+      // Only gross churn meets threshold
+      incrementGross(tmpDir, 600)
+
+      const result = evaluateWhen(
+        { linesWrittenSinceLastRun: 500, linesChangedSinceLastRun: 500 },
+        { rootDir: tmpDir, sources: ['**/*.js'] },
+        'pts-check'
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('multiple triggers OR — none pass → skip', () => {
+      // Bootstrap refs
+      churnSinceRef(tmpDir, sanitizeRefName('pts-check2'), ['**/*.js'])
+      grossChurnSince(tmpDir, sanitizeRefName('pts-check2'))
+
+      // Neither meets threshold
+      incrementGross(tmpDir, 10)
+
+      const result = evaluateWhen(
+        { linesWrittenSinceLastRun: 500, linesChangedSinceLastRun: 500 },
+        { rootDir: tmpDir, sources: ['**/*.js'] },
+        'pts-check2'
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('gross lines changed'), `Expected trigger reason, got: ${result}`)
+    })
+
+    it('prerequisite fails + trigger passes → skip (prereq gates)', () => {
+      delete process.env.PROVE_IT_PTS_GATE
+      // Set up a trigger that would pass
+      grossChurnSince(tmpDir, sanitizeRefName('pts-gate'))
+      incrementGross(tmpDir, 600)
+
+      const result = evaluateWhen(
+        { envSet: 'PROVE_IT_PTS_GATE', linesChangedSinceLastRun: 500 },
+        { rootDir: tmpDir, sources: ['**/*.js'] },
+        'pts-gate'
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('was not set'), `Expected prereq reason, got: ${result}`)
+    })
+
+    it('prerequisite passes + trigger passes → true', () => {
+      process.env.PROVE_IT_PTS_PASS = '1'
+      try {
+        grossChurnSince(tmpDir, sanitizeRefName('pts-pass'))
+        incrementGross(tmpDir, 600)
+
+        const result = evaluateWhen(
+          { envSet: 'PROVE_IT_PTS_PASS', linesChangedSinceLastRun: 500 },
+          { rootDir: tmpDir, sources: ['**/*.js'] },
+          'pts-pass'
+        )
+        assert.strictEqual(result, true)
+      } finally {
+        delete process.env.PROVE_IT_PTS_PASS
+      }
+    })
+
+    it('prerequisite passes + trigger fails → skip', () => {
+      process.env.PROVE_IT_PTS_TRIG = '1'
+      try {
+        grossChurnSince(tmpDir, sanitizeRefName('pts-trig'))
+        incrementGross(tmpDir, 10)
+
+        const result = evaluateWhen(
+          { envSet: 'PROVE_IT_PTS_TRIG', linesChangedSinceLastRun: 500 },
+          { rootDir: tmpDir, sources: ['**/*.js'] },
+          'pts-trig'
+        )
+        assert.notStrictEqual(result, true)
+        assert.ok(result.includes('gross lines changed'), `Expected trigger reason, got: ${result}`)
+      } finally {
+        delete process.env.PROVE_IT_PTS_TRIG
+      }
+    })
+
+    it('prerequisites only (no triggers) → true when all pass', () => {
+      process.env.PROVE_IT_PTS_ONLY = '1'
+      try {
+        fs.writeFileSync(path.join(tmpDir, '.config'), 'x')
+        const result = evaluateWhen(
+          { fileExists: '.config', envSet: 'PROVE_IT_PTS_ONLY' },
+          { rootDir: tmpDir }
+        )
+        assert.strictEqual(result, true)
+      } finally {
+        delete process.env.PROVE_IT_PTS_ONLY
+      }
+    })
+
+    it('PREREQUISITE_KEYS and TRIGGER_KEYS are exported', () => {
+      assert.ok(Array.isArray(PREREQUISITE_KEYS))
+      assert.ok(Array.isArray(TRIGGER_KEYS))
+      assert.ok(PREREQUISITE_KEYS.includes('fileExists'))
+      assert.ok(TRIGGER_KEYS.includes('linesWrittenSinceLastRun'))
+      assert.ok(TRIGGER_KEYS.includes('sourceFilesEdited'))
     })
   })
 

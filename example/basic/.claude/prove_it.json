@@ -28,13 +28,24 @@
           "command": "./script/test_fast"
         },
         {
+          "name": "code-quality-review",
+          "type": "agent",
+          "prompt": "review:code_quality",
+          "promptType": "reference",
+          "model": "haiku",
+          "when": {
+            "linesChangedSinceLastRun": 733
+          },
+          "ruleFile": ".claude/rules/testing.md"
+        },
+        {
           "name": "coverage-review",
           "type": "agent",
           "prompt": "review:test_coverage",
           "promptType": "reference",
           "model": "haiku",
           "when": {
-            "sourceFilesEdited": true
+            "linesWrittenSinceLastRun": 541
           },
           "ruleFile": ".claude/rules/testing.md"
         }
@@ -48,19 +59,6 @@
           "name": "full-tests",
           "type": "script",
           "command": "./script/test"
-        },
-        {
-          "name": "commit-review",
-          "type": "agent",
-          "prompt": "review:commit_quality",
-          "promptType": "reference",
-          "model": "sonnet",
-          "when": {
-            "variablesPresent": [
-              "staged_diff"
-            ]
-          },
-          "ruleFile": ".claude/rules/testing.md"
         }
       ]
     }

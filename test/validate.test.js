@@ -387,6 +387,64 @@ describe('validateConfig', () => {
       assert.ok(errors.some(e => e.includes('linesWrittenSinceLastRun must be a positive number')))
     })
 
+    it('passes linesChangedSinceLastRun as valid when key', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'agent',
+        prompt: 'review this',
+        when: { linesChangedSinceLastRun: 733 }
+      }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('errors when linesChangedSinceLastRun is not a number', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { linesChangedSinceLastRun: '500' }
+      }))
+      assert.ok(errors.some(e => e.includes('linesChangedSinceLastRun must be a positive number')))
+    })
+
+    it('errors when linesChangedSinceLastRun is zero', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { linesChangedSinceLastRun: 0 }
+      }))
+      assert.ok(errors.some(e => e.includes('linesChangedSinceLastRun must be a positive number')))
+    })
+
+    it('errors when linesChangedSinceLastRun is negative', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { linesChangedSinceLastRun: -10 }
+      }))
+      assert.ok(errors.some(e => e.includes('linesChangedSinceLastRun must be a positive number')))
+    })
+
+    it('warns when linesChangedSinceLastRun is used on a git hook', () => {
+      const { errors, warnings } = validateConfig(validConfig({
+        hooks: [{
+          type: 'git',
+          event: 'pre-commit',
+          tasks: [{
+            name: 'a',
+            type: 'script',
+            command: 'x',
+            when: { linesChangedSinceLastRun: 500 }
+          }]
+        }]
+      }))
+      assert.strictEqual(errors.length, 0)
+      assert.ok(warnings.some(w => w.includes('linesChangedSinceLastRun') && w.includes('git')),
+        'Should warn about linesChangedSinceLastRun on git hooks')
+    })
+
     it('no warning when linesWrittenSinceLastRun is used on a git hook (git-based now)', () => {
       const { errors, warnings } = validateConfig(validConfig({
         hooks: [{
