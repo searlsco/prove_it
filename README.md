@@ -42,7 +42,7 @@ cd your-project
 prove_it init
 ```
 
-This will interactively set up `.claude/prove_it.json`, create a `script/test` stub if you don't have one, and install git hooks. Restart Claude Code and you're live.
+This will interactively set up `.claude/prove_it/config.json`, create a `script/test` stub if you don't have one, and install git hooks. Restart Claude Code and you're live.
 
 ### Non-interactive init
 
@@ -98,11 +98,11 @@ The `trap ... EXIT` pattern shown above ensures prove_it's mtime cache stays cur
 `prove_it record` options:
 - `--result <N>` — record pass (N=0) or fail (N!=0), exit with code N (best for traps)
 - `--pass` / `--fail` — record explicitly (exit 0 / exit 1)
-- `--name <task>` — must match the task name in your `prove_it.json` config
+- `--name <task>` — must match the task name in your config
 
 ## Configuration
 
-prove_it is configured with a `hooks` array in `.claude/prove_it.json`. Each hook targets a lifecycle event and runs an ordered list of tasks:
+prove_it is configured with a `hooks` array in `.claude/prove_it/config.json`. Each hook targets a lifecycle event and runs an ordered list of tasks:
 
 ```json
 {
@@ -126,8 +126,8 @@ prove_it is configured with a `hooks` array in `.claude/prove_it.json`. Each hoo
 Config files merge (later overrides earlier):
 
 1. `~/.claude/prove_it/config.json` — global defaults
-2. `.claude/prove_it.json` — project config (commit this)
-3. `.claude/prove_it.local.json` — local overrides (gitignored, per-developer)
+2. `.claude/prove_it/config.json` — project config (commit this)
+3. `.claude/prove_it/config.local.json` — local overrides (gitignored, per-developer)
 
 ### Lifecycle events
 
@@ -542,12 +542,12 @@ Edit `~/.claude/prove_it/config.json`:
 
 ### Disable for a project
 
-For all contributors — edit `.claude/prove_it.json`:
+For all contributors — edit `.claude/prove_it/config.json`:
 ```json
 { "enabled": false }
 ```
 
-For just you — edit `.claude/prove_it.local.json`:
+For just you — edit `.claude/prove_it/config.local.json`:
 ```json
 { "enabled": false }
 ```

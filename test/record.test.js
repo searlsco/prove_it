@@ -36,7 +36,7 @@ describe('record command', () => {
     assert.strictEqual(result.exitCode, 0)
     assert.match(result.stderr, /recorded foo pass/)
 
-    const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.local.json'), 'utf8'))
+    const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it/config.local.json'), 'utf8'))
     assert.strictEqual(data.runs.foo.result, 'pass')
     assert.ok(typeof data.runs.foo.at === 'number')
   })
@@ -46,7 +46,7 @@ describe('record command', () => {
     assert.strictEqual(result.exitCode, 1)
     assert.match(result.stderr, /recorded foo fail/)
 
-    const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.local.json'), 'utf8'))
+    const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it/config.local.json'), 'utf8'))
     assert.strictEqual(data.runs.foo.result, 'fail')
   })
 
@@ -54,7 +54,7 @@ describe('record command', () => {
     const result = runCli(['record', '--pass', '--name', 'my check!@#'], { cwd: tmpDir })
     assert.strictEqual(result.exitCode, 0)
 
-    const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.local.json'), 'utf8'))
+    const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it/config.local.json'), 'utf8'))
     assert.ok(data.runs.my_check___, 'name should be sanitized with same regex as script.js')
   })
 
@@ -82,7 +82,7 @@ describe('record command', () => {
       assert.strictEqual(result.exitCode, 0)
       assert.match(result.stderr, /recorded foo pass/)
 
-      const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.local.json'), 'utf8'))
+      const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it/config.local.json'), 'utf8'))
       assert.strictEqual(data.runs.foo.result, 'pass')
     })
 
@@ -91,7 +91,7 @@ describe('record command', () => {
       assert.strictEqual(result.exitCode, 1)
       assert.match(result.stderr, /recorded foo fail/)
 
-      const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.local.json'), 'utf8'))
+      const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it/config.local.json'), 'utf8'))
       assert.strictEqual(data.runs.foo.result, 'fail')
     })
 
@@ -100,7 +100,7 @@ describe('record command', () => {
       assert.strictEqual(result.exitCode, 42)
       assert.match(result.stderr, /recorded foo fail/)
 
-      const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.local.json'), 'utf8'))
+      const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it/config.local.json'), 'utf8'))
       assert.strictEqual(data.runs.foo.result, 'fail')
     })
 
@@ -138,13 +138,14 @@ describe('record command', () => {
       const result = spawnSync('bash', [scriptPath], { encoding: 'utf8', cwd: tmpDir })
       assert.notStrictEqual(result.status, 0, 'script should exit non-zero')
 
-      const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.local.json'), 'utf8'))
+      const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it/config.local.json'), 'utf8'))
       assert.strictEqual(data.runs.traptest.result, 'fail', 'should record fail')
     })
   })
 
   it('preserves existing local config data', () => {
-    const localPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+    const localPath = path.join(tmpDir, '.claude', 'prove_it', 'config.local.json')
+    fs.mkdirSync(path.dirname(localPath), { recursive: true })
     fs.writeFileSync(localPath, JSON.stringify({ runs: { existing: { at: 1, pass: true } } }))
 
     runCli(['record', '--pass', '--name', 'new-check'], { cwd: tmpDir })

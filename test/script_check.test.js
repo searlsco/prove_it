@@ -131,7 +131,7 @@ describe('script check', () => {
       spawnSync('git', ['add', 'script/test'], { cwd: tmpDir })
       spawnSync('git', ['commit', '-m', 'add test'], { cwd: tmpDir })
 
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
       fs.mkdirSync(path.dirname(localCfgPath), { recursive: true })
       const runTime = Date.now()
       fs.writeFileSync(localCfgPath, JSON.stringify({
@@ -159,7 +159,7 @@ describe('script check', () => {
       spawnSync('git', ['add', 'script/test'], { cwd: tmpDir })
       spawnSync('git', ['commit', '-m', 'add test'], { cwd: tmpDir })
 
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
       fs.mkdirSync(path.dirname(localCfgPath), { recursive: true })
       const runTime = Date.now()
       fs.writeFileSync(localCfgPath, JSON.stringify({
@@ -186,7 +186,7 @@ describe('script check', () => {
       spawnSync('git', ['add', 'script/test'], { cwd: tmpDir })
       spawnSync('git', ['commit', '-m', 'add test'], { cwd: tmpDir })
 
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
       fs.mkdirSync(path.dirname(localCfgPath), { recursive: true })
       const runTime = Date.now()
       fs.writeFileSync(localCfgPath, JSON.stringify({
@@ -211,7 +211,7 @@ describe('script check', () => {
       fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nexit 0\n')
       fs.chmodSync(scriptPath, 0o755)
 
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
       fs.mkdirSync(path.dirname(localCfgPath), { recursive: true })
 
       runScriptCheck(
@@ -230,7 +230,7 @@ describe('script check', () => {
       fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nexit 1\n')
       fs.chmodSync(scriptPath, 0o755)
 
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
       fs.mkdirSync(path.dirname(localCfgPath), { recursive: true })
 
       runScriptCheck(
@@ -250,7 +250,7 @@ describe('script check', () => {
       spawnSync('git', ['add', 'script/test'], { cwd: tmpDir })
       spawnSync('git', ['commit', '-m', 'add test'], { cwd: tmpDir })
 
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
       fs.mkdirSync(path.dirname(localCfgPath), { recursive: true })
       const runTime = Date.now()
       // Old format: { at, pass: true }
@@ -393,7 +393,7 @@ describe('script check', () => {
         spawnSync('git', ['add', 'script/test'], { cwd: tmpDir })
         spawnSync('git', ['commit', '-m', 'add test'], { cwd: tmpDir })
 
-        const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+        const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
         fs.mkdirSync(path.dirname(localCfgPath), { recursive: true })
         const runTime = Date.now()
         fs.writeFileSync(localCfgPath, JSON.stringify({

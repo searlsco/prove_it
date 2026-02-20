@@ -8,7 +8,6 @@ const { configHash } = require('../lib/config')
 const {
   isScriptTestStub,
   buildConfig,
-  addToGitignore,
   initProject,
   overwriteTeamConfig,
   installGitHookShim,
@@ -179,30 +178,6 @@ describe('init', () => {
       const cfg = buildConfig()
       const { errors } = validateConfig(cfg)
       assert.deepStrictEqual(errors, [], `buildConfig() should produce valid config, got errors: ${errors.join('; ')}`)
-    })
-  })
-
-  describe('addToGitignore', () => {
-    it('creates .gitignore if missing', () => {
-      const result = addToGitignore(tmpDir, '.claude/prove_it.local.json')
-      assert.ok(result)
-      const content = fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf8')
-      assert.ok(content.includes('.claude/prove_it.local.json'))
-    })
-
-    it('appends to existing .gitignore', () => {
-      fs.writeFileSync(path.join(tmpDir, '.gitignore'), 'node_modules\n')
-      const result = addToGitignore(tmpDir, '.claude/prove_it.local.json')
-      assert.ok(result)
-      const content = fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf8')
-      assert.ok(content.includes('node_modules'))
-      assert.ok(content.includes('.claude/prove_it.local.json'))
-    })
-
-    it('does not duplicate existing entry', () => {
-      fs.writeFileSync(path.join(tmpDir, '.gitignore'), '.claude/prove_it.local.json\n')
-      const result = addToGitignore(tmpDir, '.claude/prove_it.local.json')
-      assert.ok(!result)
     })
   })
 
@@ -469,15 +444,15 @@ describe('init', () => {
       assert.ok(results.localConfig.created)
       assert.ok(results.scriptTest.created)
       assert.ok(results.scriptTestFast.created)
-      assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.json')))
-      assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.local.json')))
+      assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json')))
+      assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it', 'config.local.json')))
       assert.ok(fs.existsSync(path.join(tmpDir, 'script', 'test')))
       assert.ok(fs.existsSync(path.join(tmpDir, 'script', 'test_fast')))
     })
 
     it('newly created config includes initSeed', () => {
       initProject(tmpDir, { gitHooks: false, defaultChecks: false })
-      const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), 'utf8'))
+      const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json'), 'utf8'))
       assert.ok(cfg.initSeed, 'should have initSeed')
       assert.strictEqual(cfg.initSeed.length, 12)
       assert.strictEqual(cfg.initSeed, configHash(cfg))
@@ -486,13 +461,13 @@ describe('init', () => {
     it('config written to disk passes validation', () => {
       const { validateConfig } = require('../lib/validate')
       initProject(tmpDir, { gitHooks: true, defaultChecks: true })
-      const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), 'utf8'))
+      const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json'), 'utf8'))
       const { errors } = validateConfig(cfg)
       assert.deepStrictEqual(errors, [], `Config on disk should be valid, got errors: ${errors.join('; ')}`)
     })
 
     it('does not overwrite existing team config', () => {
-      const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
       fs.mkdirSync(path.dirname(cfgPath), { recursive: true })
       fs.writeFileSync(cfgPath, '{"custom": true}')
 
@@ -619,7 +594,7 @@ describe('init', () => {
     it('auto-upgraded config updates initSeed', () => {
       initProject(tmpDir, { gitHooks: false, defaultChecks: false })
       initProject(tmpDir, { gitHooks: false, defaultChecks: true })
-      const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), 'utf8'))
+      const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json'), 'utf8'))
       assert.ok(cfg.initSeed)
       assert.strictEqual(cfg.initSeed, configHash(cfg))
     })
@@ -627,7 +602,7 @@ describe('init', () => {
     it('sets edited when config was modified by user', () => {
       initProject(tmpDir, { gitHooks: false, defaultChecks: false })
       // Simulate user editing the config
-      const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
       const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
       cfg.sources = ['src/**/*.js']
       fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
@@ -640,7 +615,7 @@ describe('init', () => {
     })
 
     it('sets edited for legacy configs with no initSeed', () => {
-      const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
       fs.mkdirSync(path.dirname(cfgPath), { recursive: true })
       fs.writeFileSync(cfgPath, JSON.stringify({ hooks: [] }, null, 2) + '\n')
 
@@ -650,7 +625,7 @@ describe('init', () => {
     })
 
     it('treats corrupted JSON config as edited and preserves it', () => {
-      const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
       fs.mkdirSync(path.dirname(cfgPath), { recursive: true })
       fs.writeFileSync(cfgPath, '{"truncated":')
 
@@ -661,7 +636,7 @@ describe('init', () => {
       assert.strictEqual(fs.readFileSync(cfgPath, 'utf8'), '{"truncated":')
     })
 
-    it('creates .claude/prove_it/.gitignore ignoring sessions/', () => {
+    it('creates .claude/prove_it/.gitignore ignoring sessions/ and config.local.json', () => {
       const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
       assert.ok(results.proveItGitignore.created)
       const gitignorePath = path.join(tmpDir, '.claude', 'prove_it', '.gitignore')
@@ -669,9 +644,11 @@ describe('init', () => {
       const content = fs.readFileSync(gitignorePath, 'utf8')
       assert.ok(content.includes('sessions/'),
         `Should ignore sessions/, got: ${content}`)
+      assert.ok(content.includes('config.local.json'),
+        `Should ignore config.local.json, got: ${content}`)
     })
 
-    it('does not overwrite existing .claude/prove_it/.gitignore', () => {
+    it('does not overwrite existing .claude/prove_it/.gitignore but appends config.local.json', () => {
       const gitignoreDir = path.join(tmpDir, '.claude', 'prove_it')
       fs.mkdirSync(gitignoreDir, { recursive: true })
       fs.writeFileSync(path.join(gitignoreDir, '.gitignore'), 'custom-stuff/\n')
@@ -679,8 +656,21 @@ describe('init', () => {
       const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
       assert.ok(!results.proveItGitignore.created)
       const content = fs.readFileSync(path.join(gitignoreDir, '.gitignore'), 'utf8')
-      assert.strictEqual(content, 'custom-stuff/\n',
-        'Existing .gitignore should be preserved')
+      assert.ok(content.includes('custom-stuff/'),
+        'Should preserve existing content')
+      assert.ok(content.includes('config.local.json'),
+        'Should append config.local.json')
+    })
+
+    it('does not duplicate config.local.json in existing .gitignore', () => {
+      const gitignoreDir = path.join(tmpDir, '.claude', 'prove_it')
+      fs.mkdirSync(gitignoreDir, { recursive: true })
+      fs.writeFileSync(path.join(gitignoreDir, '.gitignore'), 'sessions/\nconfig.local.json\n')
+
+      initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      const content = fs.readFileSync(path.join(gitignoreDir, '.gitignore'), 'utf8')
+      assert.strictEqual(content, 'sessions/\nconfig.local.json\n',
+        'Should not duplicate config.local.json')
     })
   })
 
@@ -688,7 +678,7 @@ describe('init', () => {
     it('writes fresh config with initSeed', () => {
       initProject(tmpDir, { gitHooks: false, defaultChecks: false })
       // Simulate user edit
-      const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
       fs.writeFileSync(cfgPath, JSON.stringify({ custom: true }, null, 2) + '\n')
 
       overwriteTeamConfig(tmpDir, { gitHooks: false, defaultChecks: false })
@@ -700,7 +690,7 @@ describe('init', () => {
 
     it('generates matching initSeed', () => {
       overwriteTeamConfig(tmpDir, { gitHooks: false, defaultChecks: false })
-      const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), 'utf8'))
+      const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json'), 'utf8'))
       assert.strictEqual(cfg.initSeed, configHash(cfg))
     })
   })

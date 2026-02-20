@@ -29,7 +29,7 @@ All child processes inherit the modified PATH: hook dispatchers, builtin tasks, 
 
 ## Verification
 
-The project's `.claude/prove_it.json` includes a `local-shim-check` as the first SessionStart task. On every session start, it runs:
+The project's `.claude/prove_it/config.json` includes a `local-shim-check` as the first SessionStart task. On every session start, it runs:
 
 ```bash
 which prove_it | grep -q test/bin/prove_it

@@ -16,7 +16,7 @@ domain-specific agent prompts, and `when` conditions.
 - `test/calculator.test.js` — tests using `node:test`
 - `script/test` and `script/test_fast` — test runners
 - `script/lint.sh` — custom lint check
-- `.claude/prove_it.json` — customized prove_it config
+- `.claude/prove_it/config.json` — customized prove_it config
 
 ## Prerequisites
 

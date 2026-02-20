@@ -7,7 +7,7 @@ A minimal project showing prove_it's default configuration.
 - `src/greet.js` — a simple greeting module
 - `test/greet.test.js` — tests using `node:test`
 - `script/test` and `script/test_fast` — test runners
-- `.claude/prove_it.json` — default prove_it config (output of `prove_it init`)
+- `.claude/prove_it/config.json` — default prove_it config (output of `prove_it init`)
 
 ## Prerequisites
 
@@ -26,7 +26,7 @@ cd example/basic
 Or copy the config to your own project:
 
 ```bash
-cp .claude/prove_it.json /path/to/your/project/.claude/prove_it.json
+cp .claude/prove_it/config.json /path/to/your/project/.claude/prove_it/config.json
 ```
 
 ## Testing hooks manually

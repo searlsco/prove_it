@@ -306,7 +306,7 @@ describe('Config-driven hook behavior (v2)', () => {
         }
       ]))
       // Local override: disabled entirely
-      createFile(tmpDir, '.claude/prove_it.local.json', JSON.stringify({
+      createFile(tmpDir, '.claude/prove_it/config.local.json', JSON.stringify({
         enabled: false
       }))
       createFastTestScript(tmpDir, false) // Would block if not disabled

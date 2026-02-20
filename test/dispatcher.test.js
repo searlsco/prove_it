@@ -439,7 +439,7 @@ describe('claude dispatcher', () => {
         { sourcesModifiedSinceLastRun: true },
         {
           rootDir: tmpDir,
-          localCfgPath: path.join(tmpDir, '.claude', 'prove_it.local.json'),
+          localCfgPath: path.join(tmpDir, '.claude', 'prove_it/config.local.json'),
           latestSourceMtime: getLatestMtime(tmpDir, ['**/*.js'])
         },
         'my-task'
@@ -450,7 +450,7 @@ describe('claude dispatcher', () => {
     it('skips when sources have not changed since last run', () => {
       fs.writeFileSync(path.join(tmpDir, 'app.js'), 'code\n')
       const { getLatestMtime, saveRunData } = require('../lib/testing')
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
       const mtime = getLatestMtime(tmpDir, ['**/*.js'])
       // Record a run after the source was last modified
       saveRunData(localCfgPath, 'my-task', { at: mtime + 1000 })
@@ -467,7 +467,7 @@ describe('claude dispatcher', () => {
     it('passes through cached failures (pass: false) even when sources unchanged', () => {
       fs.writeFileSync(path.join(tmpDir, 'app.js'), 'code\n')
       const { getLatestMtime, saveRunData } = require('../lib/testing')
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
       const mtime = getLatestMtime(tmpDir, ['**/*.js'])
       // Record a failed run after the source was last modified
       saveRunData(localCfgPath, 'my-task', { at: mtime + 1000, pass: false })
@@ -483,7 +483,7 @@ describe('claude dispatcher', () => {
     it('passes when sources are newer than last run', () => {
       fs.writeFileSync(path.join(tmpDir, 'app.js'), 'code\n')
       const { getLatestMtime, saveRunData } = require('../lib/testing')
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
       // Record a run well in the past
       saveRunData(localCfgPath, 'my-task', { at: 1000 })
       const mtime = getLatestMtime(tmpDir, ['**/*.js'])
@@ -499,7 +499,7 @@ describe('claude dispatcher', () => {
     it('passes through result: skip even when sources unchanged', () => {
       fs.writeFileSync(path.join(tmpDir, 'app.js'), 'code\n')
       const { getLatestMtime, saveRunData } = require('../lib/testing')
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
       const mtime = getLatestMtime(tmpDir, ['**/*.js'])
       // New format: result: 'skip'
       saveRunData(localCfgPath, 'my-task', { at: mtime + 1000, result: 'skip' })
@@ -515,7 +515,7 @@ describe('claude dispatcher', () => {
     it('suppresses re-run for result: pass (new format)', () => {
       fs.writeFileSync(path.join(tmpDir, 'app.js'), 'code\n')
       const { getLatestMtime, saveRunData } = require('../lib/testing')
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
       const mtime = getLatestMtime(tmpDir, ['**/*.js'])
       saveRunData(localCfgPath, 'my-task', { at: mtime + 1000, result: 'pass' })
 
@@ -530,7 +530,7 @@ describe('claude dispatcher', () => {
     it('backward compat: pass: true (old format) still suppresses re-run', () => {
       fs.writeFileSync(path.join(tmpDir, 'app.js'), 'code\n')
       const { getLatestMtime, saveRunData } = require('../lib/testing')
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
       const mtime = getLatestMtime(tmpDir, ['**/*.js'])
       // Old format
       saveRunData(localCfgPath, 'my-task', { at: mtime + 1000, pass: true })
@@ -544,7 +544,7 @@ describe('claude dispatcher', () => {
     })
 
     it('skips when latestSourceMtime is 0 (no source files)', () => {
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
       const result = evaluateWhen(
         { sourcesModifiedSinceLastRun: true },
         { rootDir: tmpDir, localCfgPath, latestSourceMtime: 0 },

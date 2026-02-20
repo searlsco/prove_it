@@ -38,6 +38,14 @@ describe('local config write protection', () => {
       assert.strictEqual(isConfigFileEdit('Edit', { file_path: '/home/user/.claude/prove_it/config.json' }), true)
     })
 
+    it('blocks Write to prove_it/config.local.json', () => {
+      assert.strictEqual(isConfigFileEdit('Write', { file_path: '/project/.claude/prove_it/config.local.json' }), true)
+    })
+
+    it('blocks Edit to prove_it/config.local.json', () => {
+      assert.strictEqual(isConfigFileEdit('Edit', { file_path: '.claude/prove_it/config.local.json' }), true)
+    })
+
     it('allows Write to other files', () => {
       assert.strictEqual(isConfigFileEdit('Write', { file_path: '/project/src/index.js' }), false)
     })
@@ -86,6 +94,14 @@ describe('local config write protection', () => {
 
     it('blocks redirect to global prove_it/config.json', () => {
       assert.strictEqual(isLocalConfigWrite('echo {} > ~/.claude/prove_it/config.json'), true)
+    })
+
+    it('blocks redirect to prove_it/config.local.json', () => {
+      assert.strictEqual(isLocalConfigWrite('echo {} > .claude/prove_it/config.local.json'), true)
+    })
+
+    it('blocks tee to prove_it/config.local.json', () => {
+      assert.strictEqual(isLocalConfigWrite('echo foo | tee .claude/prove_it/config.local.json'), true)
     })
   })
 

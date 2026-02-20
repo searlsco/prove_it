@@ -23,6 +23,23 @@ describe('builtins', () => {
       assert.strictEqual(result.pass, false)
     })
 
+    it('blocks Edit to prove_it/config.json', () => {
+      const result = configLock({}, {
+        toolName: 'Edit',
+        toolInput: { file_path: '.claude/prove_it/config.json', old_string: 'a', new_string: 'b' }
+      })
+      assert.strictEqual(result.pass, false)
+      assert.ok(result.reason.includes('Cannot modify'))
+    })
+
+    it('blocks Write to prove_it/config.local.json', () => {
+      const result = configLock({}, {
+        toolName: 'Write',
+        toolInput: { file_path: '/some/path/.claude/prove_it/config.local.json', content: '{}' }
+      })
+      assert.strictEqual(result.pass, false)
+    })
+
     it('blocks Bash redirect to prove_it.json', () => {
       const result = configLock({}, {
         toolName: 'Bash',

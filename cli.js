@@ -320,7 +320,7 @@ async function cmdInit () {
         overwriteTeamConfig(repoRoot, flags)
         overwritten = true
       } else if (flags.overwrite === null && rl) {
-        const doOverwrite = await askYesNo(rl, 'Existing prove_it.json has been customized. Overwrite with current defaults?', false)
+        const doOverwrite = await askYesNo(rl, 'Existing config has been customized. Overwrite with current defaults?', false)
         if (doOverwrite) {
           overwriteTeamConfig(repoRoot, flags)
           overwritten = true
@@ -373,8 +373,8 @@ async function cmdInit () {
       log(`  Exists:  ${results.scriptTestFast.path}`)
     }
 
-    if (results.addedToGitignore) {
-      log('  Added to .gitignore: .claude/prove_it.local.json')
+    if (results.proveItGitignore && results.proveItGitignore.created) {
+      log('  Created: .claude/prove_it/.gitignore')
     }
 
     // Report git hook results
@@ -425,12 +425,12 @@ async function cmdInit () {
     }
 
     // Sources glob TODO — check the team config for placeholder globs
-    const teamCfg = loadJson(path.join(repoRoot, '.claude', 'prove_it.json'))
+    const teamCfg = loadJson(path.join(repoRoot, '.claude', 'prove_it', 'config.json'))
     const teamSources = teamCfg?.sources
     if (Array.isArray(teamSources) && teamSources.some(s => s.includes('replace/these/with/globs'))) {
       todos.push({
         done: false,
-        text: 'Replace the placeholder sources globs in .claude/prove_it.json\n' +
+        text: 'Replace the placeholder sources globs in .claude/prove_it/config.json\n' +
           '        Sources controls which files trigger mtime-based reviewer gating\n' +
           '        and git-based churn tracking (e.g. ["src/**/*.*", "test/**/*.*"])'
       })
@@ -441,19 +441,19 @@ async function cmdInit () {
     if (results.teamConfig.upgraded || overwritten) {
       todos.push({
         done: false,
-        text: 'Review updated .claude/prove_it.json (check commands)'
+        text: 'Review updated .claude/prove_it/config.json (check commands)'
       })
     } else {
       todos.push({
         done: false,
-        text: 'Customize .claude/prove_it.json (check commands)'
+        text: 'Customize .claude/prove_it/config.json (check commands)'
       })
     }
 
     if (results.teamConfigNeedsCommit || results.teamConfig.upgraded || overwritten) {
       todos.push({ done: false, text: 'Commit changes' })
     } else if (results.teamConfig.existed) {
-      todos.push({ done: true, text: '.claude/prove_it.json committed' })
+      todos.push({ done: true, text: '.claude/prove_it/config.json committed' })
     }
 
     log('\nTODO:')
@@ -480,24 +480,11 @@ async function cmdInit () {
 // Deinit command
 // ============================================================================
 
-const PROVE_IT_PROJECT_FILES = [
-  '.claude/prove_it.json',
-  '.claude/prove_it.local.json'
-]
-
 function cmdDeinit () {
   const { isScriptTestStub, isDefaultRuleFile, removeGitHookShim } = require('./lib/init')
   const repoRoot = process.cwd()
   const removed = []
   const skipped = []
-
-  for (const relPath of PROVE_IT_PROJECT_FILES) {
-    const absPath = path.join(repoRoot, relPath)
-    if (fs.existsSync(absPath)) {
-      rmIfExists(absPath)
-      removed.push(relPath)
-    }
-  }
 
   for (const scriptRel of ['script/test', 'script/test_fast']) {
     const scriptAbs = path.join(repoRoot, scriptRel)
@@ -566,6 +553,15 @@ function cmdDeinit () {
   if (fs.existsSync(proveItDir)) {
     fs.rmSync(proveItDir, { recursive: true, force: true })
     removed.push('.claude/prove_it/')
+  }
+
+  // Clean up legacy flat-file configs from pre-directory layout
+  for (const legacy of ['.claude/prove_it.json', '.claude/prove_it.local.json']) {
+    const legacyPath = path.join(repoRoot, legacy)
+    if (fs.existsSync(legacyPath)) {
+      rmIfExists(legacyPath)
+      removed.push(legacy)
+    }
   }
 
   const claudeDir = path.join(repoRoot, '.claude')
@@ -705,31 +701,31 @@ function cmdDoctor () {
   }
 
   // Check team config
-  const teamConfigPath = path.join(repoRoot, '.claude', 'prove_it.json')
+  const teamConfigPath = path.join(repoRoot, '.claude', 'prove_it', 'config.json')
   if (fs.existsSync(teamConfigPath)) {
-    log('  [x] Team config exists: .claude/prove_it.json')
+    log('  [x] Team config exists: .claude/prove_it/config.json')
     const teamCfg = loadJson(teamConfigPath)
     const hookCount = (teamCfg.hooks || []).length
     log(`      ${hookCount} hook entries`)
 
     // Sub-check: is team config tracked by git?
     if (fs.existsSync(path.join(repoRoot, '.git'))) {
-      if (isTrackedByGit(repoRoot, '.claude/prove_it.json')) {
+      if (isTrackedByGit(repoRoot, '.claude/prove_it/config.json')) {
         log('      Tracked by git')
       } else {
         log('      [ ] Not tracked by git')
-        issues.push('Team config .claude/prove_it.json is not committed to git')
+        issues.push('Team config .claude/prove_it/config.json is not committed to git')
       }
     }
   } else {
-    log('  [ ] Team config missing: .claude/prove_it.json')
+    log('  [ ] Team config missing: .claude/prove_it/config.json')
     issues.push("Run 'prove_it init' to create project config")
   }
 
   // Check local config
-  const localConfigPath = path.join(repoRoot, '.claude', 'prove_it.local.json')
+  const localConfigPath = path.join(repoRoot, '.claude', 'prove_it', 'config.local.json')
   if (fs.existsSync(localConfigPath)) {
-    log('  [x] Local config exists: .claude/prove_it.local.json')
+    log('  [x] Local config exists: .claude/prove_it/config.local.json')
     const localConfig = loadJson(localConfigPath)
     if (localConfig?.runs) {
       const { runResult } = require('./lib/testing')
@@ -738,19 +734,22 @@ function cmdDoctor () {
       }
     }
   } else {
-    log('  [ ] Local config missing (optional): .claude/prove_it.local.json')
+    log('  [ ] Local config missing (optional): .claude/prove_it/config.local.json')
   }
 
-  // Check .gitignore
-  const gitignorePath = path.join(repoRoot, '.gitignore')
-  if (fs.existsSync(gitignorePath)) {
-    const gitignoreContent = fs.readFileSync(gitignorePath, 'utf8')
-    if (gitignoreContent.includes('prove_it.local.json')) {
-      log('  [x] .gitignore includes prove_it.local.json')
+  // Check .claude/prove_it/.gitignore
+  const proveItGitignorePath = path.join(repoRoot, '.claude', 'prove_it', '.gitignore')
+  if (fs.existsSync(proveItGitignorePath)) {
+    const gitignoreContent = fs.readFileSync(proveItGitignorePath, 'utf8')
+    if (gitignoreContent.includes('config.local.json')) {
+      log('  [x] .claude/prove_it/.gitignore includes config.local.json')
     } else {
-      log('  [ ] .gitignore missing prove_it.local.json')
-      issues.push('Add .claude/prove_it.local.json to .gitignore')
+      log('  [ ] .claude/prove_it/.gitignore missing config.local.json')
+      issues.push('Add config.local.json to .claude/prove_it/.gitignore')
     }
+  } else if (fs.existsSync(path.join(repoRoot, '.claude', 'prove_it'))) {
+    log('  [ ] .claude/prove_it/.gitignore missing')
+    issues.push("Run 'prove_it init' to create .claude/prove_it/.gitignore")
   }
 
   // Effective merged config
@@ -896,7 +895,7 @@ function cmdRecord () {
   const exitCode = hasResult ? resultCode : (pass ? 0 : 1)
   const result = pass ? 'pass' : 'fail'
 
-  const localCfgPath = path.join(process.cwd(), '.claude', 'prove_it.local.json')
+  const localCfgPath = path.join(process.cwd(), '.claude', 'prove_it', 'config.local.json')
   const runKey = name.replace(/[^a-zA-Z0-9_-]/g, '_')
   saveRunData(localCfgPath, runKey, { at: Date.now(), result })
 
@@ -997,7 +996,7 @@ Init options:
   --[no-]git-hooks                Install git hooks (pre-commit, pre-push) (default: yes)
   --[no-]default-checks           Include code review, coverage review (default: yes)
   --[no-]automatic-git-hook-merge Merge with existing git hooks (default: yes)
-  --[no-]overwrite                Overwrite customized prove_it.json with defaults
+  --[no-]overwrite                Overwrite customized config with defaults
 
   With no flags and a TTY, prove_it init asks interactively.
   With no flags and no TTY, all defaults apply (equivalent to all features on).

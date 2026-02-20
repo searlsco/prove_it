@@ -116,8 +116,8 @@ describe('init/deinit', () => {
     assert.strictEqual(result.exitCode, 0)
 
     // Check files exist
-    assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.json')))
-    assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.local.json')))
+    assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json')))
+    assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it', 'config.local.json')))
     assert.ok(fs.existsSync(path.join(tmpDir, 'script', 'test')))
     assert.ok(fs.existsSync(path.join(tmpDir, 'script', 'test_fast')))
 
@@ -126,19 +126,19 @@ describe('init/deinit', () => {
     assert.ok(stat.mode & fs.constants.S_IXUSR, 'script/test should be executable')
 
     // Check config format
-    const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), 'utf8'))
+    const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json'), 'utf8'))
     assert.ok(Array.isArray(cfg.hooks), 'hooks should be an array')
   })
 
   it('init is non-destructive for legacy configs without hash', () => {
-    // Create a custom prove_it.json first (no _generatedHash = legacy)
-    fs.mkdirSync(path.join(tmpDir, '.claude'), { recursive: true })
-    fs.writeFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), '{"custom": true}')
+    // Create a custom config first (no _generatedHash = legacy)
+    fs.mkdirSync(path.join(tmpDir, '.claude', 'prove_it'), { recursive: true })
+    fs.writeFileSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json'), '{"custom": true}')
 
     runCli(['init'], { cwd: tmpDir })
 
     // Custom content should be preserved (non-interactive → no overwrite prompt)
-    const content = fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), 'utf8')
+    const content = fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json'), 'utf8')
     assert.strictEqual(content, '{"custom": true}')
   })
 
@@ -164,7 +164,7 @@ describe('init/deinit', () => {
     // Init to create config with hash
     runCli(['init'], { cwd: tmpDir })
     // Modify the config
-    const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+    const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
     cfg.sources = ['src/**/*.js']
     fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
@@ -178,7 +178,7 @@ describe('init/deinit', () => {
     // Init to create config with hash
     runCli(['init'], { cwd: tmpDir })
     // Modify the config
-    const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+    const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
     cfg.sources = ['src/**/*.js']
     fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
@@ -196,7 +196,7 @@ describe('init/deinit', () => {
     // Init with defaults (includes default checks)
     runCli(['init'], { cwd: tmpDir })
     // Modify the config so it's "edited"
-    const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+    const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
     cfg.sources = ['src/**/*.js']
     fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
@@ -229,7 +229,7 @@ describe('init/deinit', () => {
     // Init first
     runCli(['init'], { cwd: tmpDir })
     // Customize sources
-    const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+    const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
     cfg.sources = ['src/**/*.js', 'test/**/*.js']
     fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
@@ -266,7 +266,7 @@ describe('init/deinit', () => {
   it('reinit removes and recreates prove_it files', () => {
     // Init first with custom content
     runCli(['init'], { cwd: tmpDir })
-    const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
+    const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
     assert.ok(fs.existsSync(cfgPath))
 
     // Manually delete the config to prove reinit recreates it
@@ -275,21 +275,21 @@ describe('init/deinit', () => {
 
     const result = runCli(['reinit'], { cwd: tmpDir })
     assert.strictEqual(result.exitCode, 0)
-    assert.ok(fs.existsSync(cfgPath), 'reinit should recreate prove_it.json')
+    assert.ok(fs.existsSync(cfgPath), 'reinit should recreate config.json')
   })
 
   it('deinit removes prove_it files', () => {
     // First init
     runCli(['init'], { cwd: tmpDir })
-    assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.local.json')))
+    assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it', 'config.local.json')))
 
     // Then deinit
     const result = runCli(['deinit'], { cwd: tmpDir })
     assert.strictEqual(result.exitCode, 0)
 
     // Files should be gone
-    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.json')))
-    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.local.json')))
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json')))
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it', 'config.local.json')))
   })
 
   it('deinit preserves customized script/test', () => {
@@ -349,6 +349,20 @@ describe('init/deinit', () => {
     runCli(['deinit'], { cwd: tmpDir })
     assert.ok(!fs.existsSync(proveItDir),
       '.claude/prove_it/ should be removed by deinit')
+  })
+
+  it('deinit removes legacy flat-file configs', () => {
+    // Simulate old-format files that might be left from pre-directory layout
+    fs.mkdirSync(path.join(tmpDir, '.claude'), { recursive: true })
+    fs.writeFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), '{"old": true}')
+    fs.writeFileSync(path.join(tmpDir, '.claude', 'prove_it.local.json'), '{"old": true}')
+
+    const result = runCli(['deinit'], { cwd: tmpDir })
+    assert.strictEqual(result.exitCode, 0)
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.json')),
+      'legacy prove_it.json should be removed')
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.local.json')),
+      'legacy prove_it.local.json should be removed')
   })
 })
 

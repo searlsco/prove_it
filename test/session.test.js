@@ -109,15 +109,15 @@ describe('session state functions', () => {
       assert.strictEqual(loadSessionState('session-B', 'last_review_snapshot'), 'msg-from-B')
     })
 
-    it('does not write to prove_it.local.json', () => {
+    it('does not write to prove_it/config.local.json', () => {
       const projectTmp = path.join(os.tmpdir(), 'prove_it_local_check_' + Date.now())
       fs.mkdirSync(path.join(projectTmp, '.claude'), { recursive: true })
-      const localCfgPath = path.join(projectTmp, '.claude', 'prove_it.local.json')
+      const localCfgPath = path.join(projectTmp, '.claude', 'prove_it/config.local.json')
 
       saveSessionState('test-no-local', 'last_review_snapshot', 'msg-xyz')
 
       assert.strictEqual(fs.existsSync(localCfgPath), false,
-        'saveSessionState should not create prove_it.local.json')
+        'saveSessionState should not create prove_it/config.local.json')
       assert.strictEqual(loadSessionState('test-no-local', 'last_review_snapshot'), 'msg-xyz')
 
       fs.rmSync(projectTmp, { recursive: true, force: true })

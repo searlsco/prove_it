@@ -97,16 +97,16 @@ describe('loadEffectiveConfig ancestor discovery', () => {
   function setup () {
     origProveItDir = process.env.PROVE_IT_DIR
     process.env.PROVE_IT_DIR = path.join(tmpBase, '_no_global_config')
-    fs.mkdirSync(path.join(tmpBase, '.claude'), { recursive: true })
-    fs.mkdirSync(path.join(tmpBase, 'child', '.claude'), { recursive: true })
+    fs.mkdirSync(path.join(tmpBase, '.claude', 'prove_it'), { recursive: true })
+    fs.mkdirSync(path.join(tmpBase, 'child', '.claude', 'prove_it'), { recursive: true })
     fs.mkdirSync(path.join(tmpBase, 'child', 'grandchild'), { recursive: true })
 
     fs.writeFileSync(
-      path.join(tmpBase, '.claude', 'prove_it.json'),
+      path.join(tmpBase, '.claude', 'prove_it', 'config.json'),
       JSON.stringify({ hooks: [], sources: ['root/**/*.js'] })
     )
     fs.writeFileSync(
-      path.join(tmpBase, 'child', '.claude', 'prove_it.json'),
+      path.join(tmpBase, 'child', '.claude', 'prove_it', 'config.json'),
       JSON.stringify({ hooks: [], sources: ['child/**/*.js'] })
     )
   }
@@ -151,9 +151,9 @@ describe('loadEffectiveConfig ancestor discovery', () => {
 
   it('cwd config wins over ancestors', () => {
     setup()
-    fs.mkdirSync(path.join(tmpBase, 'child', 'grandchild', '.claude'), { recursive: true })
+    fs.mkdirSync(path.join(tmpBase, 'child', 'grandchild', '.claude', 'prove_it'), { recursive: true })
     fs.writeFileSync(
-      path.join(tmpBase, 'child', 'grandchild', '.claude', 'prove_it.json'),
+      path.join(tmpBase, 'child', 'grandchild', '.claude', 'prove_it', 'config.json'),
       JSON.stringify({ hooks: [], sources: ['grandchild/**/*.js'] })
     )
     try {

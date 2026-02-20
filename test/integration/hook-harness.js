@@ -119,7 +119,7 @@ function createFastTestScript (dir, shouldPass = true) {
  * Write a prove_it config to a project directory.
  */
 function writeConfig (dir, config) {
-  const cfgPath = path.join(dir, '.claude', 'prove_it.json')
+  const cfgPath = path.join(dir, '.claude', 'prove_it/config.json')
   fs.mkdirSync(path.dirname(cfgPath), { recursive: true })
   fs.writeFileSync(cfgPath, JSON.stringify(config, null, 2), 'utf8')
 }

@@ -45,7 +45,7 @@ Run prove_it from the repo source (not the Homebrew install) to test hook behavi
    tmpdir=$(mktemp -d)
    cd "$tmpdir" && git init
    prove_it init --no-default-checks
-   cat .claude/prove_it.json
+   cat .claude/prove_it/config.json
    prove_it deinit
    rm -rf "$tmpdir"
    ```

@@ -20,7 +20,7 @@ const {
 /**
  * Mtime-based test skip optimization.
  *
- * The script check runner tracks run timestamps in prove_it.local.json and
+ * The script check runner tracks run timestamps in prove_it/config.local.json and
  * compares against file mtimes. If tests passed more recently than any tracked
  * file changed, the hook skips re-running and uses the cached result.
  */
@@ -72,7 +72,7 @@ describe('Mtime-based test skip', () => {
   })
 
   function writeRunData (runKey, data) {
-    const localCfgPath = path.join(tmpDir, '.claude', 'prove_it.local.json')
+    const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
     let existing = {}
     try { existing = JSON.parse(fs.readFileSync(localCfgPath, 'utf8')) } catch {}
     if (!existing.runs) existing.runs = {}

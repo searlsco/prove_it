@@ -2,7 +2,7 @@
 
 ## Architecture
 
-prove_it is a config-driven hook framework for Claude Code. It reads `.claude/prove_it.json` from a project directory and runs matching tasks when Claude Code fires lifecycle events (SessionStart, PreToolUse, Stop). It also dispatches git hooks (pre-commit, pre-push).
+prove_it is a config-driven hook framework for Claude Code. It reads `.claude/prove_it/config.json` from a project directory and runs matching tasks when Claude Code fires lifecycle events (SessionStart, PreToolUse, Stop). It also dispatches git hooks (pre-commit, pre-push).
 
 ### Key modules
 
@@ -65,11 +65,11 @@ dispatcher, so prove_it does nothing unless explicitly opted in.
 - **`install`/`uninstall`** manage global hook registrations in `~/.claude/settings.json`
   and global config in `~/.claude/prove_it/config.json` (which sets `enabled: true`).
   These never touch project files.
-- **`init`/`deinit`** manage project-level files only (`.claude/prove_it.json`, git shims).
+- **`init`/`deinit`** manage project-level files only (`.claude/prove_it/config.json`, git shims).
   These never touch `~/.claude/settings.json`.
 
 Because the global config sets `enabled: true`, prove_it runs in any project once
-installed globally. Deleting a project's `.claude/prove_it.json` does not stop
+installed globally. Deleting a project's `.claude/prove_it/config.json` does not stop
 prove_it if the global config has `enabled: true` — it just means no project-specific
 tasks are configured.
 

@@ -41,8 +41,10 @@ function initGitRepo (dir) {
 function writeTeamConfig (repoDir, cfg) {
   const claudeDir = path.join(repoDir, '.claude')
   fs.mkdirSync(claudeDir, { recursive: true })
+  const proveItDir = path.join(claudeDir, 'prove_it')
+  fs.mkdirSync(proveItDir, { recursive: true })
   fs.writeFileSync(
-    path.join(claudeDir, 'prove_it.json'),
+    path.join(proveItDir, 'config.json'),
     JSON.stringify(cfg)
   )
 }
@@ -228,7 +230,7 @@ describe('doctor', () => {
         sources: ['**/*.js'],
         hooks: []
       })
-      spawnSync('git', ['add', '.claude/prove_it.json'], { cwd: tmpRepo, stdio: 'ignore' })
+      spawnSync('git', ['add', '.claude/prove_it/config.json'], { cwd: tmpRepo, stdio: 'ignore' })
       spawnSync('git', ['commit', '-m', 'add config'], { cwd: tmpRepo, stdio: 'ignore' })
 
       const result = run()
@@ -433,13 +435,15 @@ describe('doctor', () => {
         hooks: []
       })
       // Commit config so isTrackedByGit passes
-      spawnSync('git', ['add', '.claude/prove_it.json'], { cwd: tmpRepo, stdio: 'ignore' })
+      spawnSync('git', ['add', '.claude/prove_it/config.json'], { cwd: tmpRepo, stdio: 'ignore' })
       spawnSync('git', ['commit', '-m', 'add config'], { cwd: tmpRepo, stdio: 'ignore' })
       // Create test scripts
       fs.mkdirSync(path.join(tmpRepo, 'script'), { recursive: true })
       fs.writeFileSync(path.join(tmpRepo, 'script', 'test'), '#!/bin/bash\nexit 0\n')
-      // Create .gitignore with local config
-      fs.writeFileSync(path.join(tmpRepo, '.gitignore'), 'prove_it.local.json\n')
+      // Create .claude/prove_it/.gitignore with local config
+      const proveItGitignore = path.join(tmpRepo, '.claude', 'prove_it', '.gitignore')
+      fs.mkdirSync(path.dirname(proveItGitignore), { recursive: true })
+      fs.writeFileSync(proveItGitignore, 'sessions/\nconfig.local.json\n')
       // Install /prove skill
       const skillDir = path.join(tmpHome, '.claude', 'skills', 'prove')
       fs.mkdirSync(skillDir, { recursive: true })
