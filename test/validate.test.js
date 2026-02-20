@@ -1,11 +1,10 @@
 const { describe, it } = require('node:test')
 const assert = require('node:assert')
-const { validateConfig, formatErrors, CURRENT_VERSION } = require('../lib/validate')
+const { validateConfig, formatErrors } = require('../lib/validate')
 
 describe('validateConfig', () => {
   function validConfig (overrides = {}) {
     return {
-      configVersion: 3,
       enabled: true,
       sources: ['**/*.js'],
       format: { maxOutputChars: 12000 },
@@ -23,43 +22,12 @@ describe('validateConfig', () => {
     }
   }
 
-  describe('version checks', () => {
-    it('passes with current version', () => {
+  describe('top-level validation', () => {
+    it('passes valid config', () => {
       const { errors } = validateConfig(validConfig())
       assert.strictEqual(errors.length, 0)
     })
 
-    it('errors on missing configVersion', () => {
-      const cfg = validConfig()
-      delete cfg.configVersion
-      const { errors } = validateConfig(cfg)
-      assert.strictEqual(errors.length, 1)
-      assert.ok(errors[0].includes('Missing "configVersion"'))
-    })
-
-    it('errors on v2 with coaching message', () => {
-      const { errors } = validateConfig(validConfig({ configVersion: 2 }))
-      assert.strictEqual(errors.length, 1)
-      assert.ok(errors[0].includes('version 3 is now required'))
-      assert.ok(errors[0].includes('"checks" was renamed to "tasks"'))
-      assert.ok(errors[0].includes('"mode" was removed'))
-    })
-
-    it('errors on unknown version', () => {
-      const { errors } = validateConfig(validConfig({ configVersion: 99 }))
-      assert.strictEqual(errors.length, 1)
-      assert.ok(errors[0].includes('99'))
-      assert.ok(errors[0].includes(`${CURRENT_VERSION}`))
-    })
-
-    it('short-circuits on wrong version (no structural errors)', () => {
-      const { errors } = validateConfig({ configVersion: 2, hooks: 'not-an-array' })
-      assert.strictEqual(errors.length, 1)
-      assert.ok(errors[0].includes('version 3'))
-    })
-  })
-
-  describe('top-level validation', () => {
     it('errors when enabled is not boolean', () => {
       const { errors } = validateConfig(validConfig({ enabled: 'yes' }))
       assert.ok(errors.some(e => e.includes('"enabled" must be a boolean')))
@@ -94,7 +62,7 @@ describe('validateConfig', () => {
       const cfg = validConfig()
       cfg.mode = 'strict'
       const { errors } = validateConfig(cfg)
-      assert.ok(errors.some(e => e.includes('"mode" was removed')))
+      assert.ok(errors.some(e => e.includes('"mode" is not supported')))
     })
 
     it('errors on legacy checks key at top level', () => {
@@ -154,6 +122,11 @@ describe('validateConfig', () => {
       assert.ok(errors.some(e => e.includes('Unknown key "customThing"')))
     })
 
+    it('accepts ignoredPaths without error', () => {
+      const { errors } = validateConfig(validConfig({ ignoredPaths: ['~/tmp'] }))
+      assert.strictEqual(errors.length, 0)
+    })
+
     it('errors when hooks is missing', () => {
       const cfg = validConfig()
       delete cfg.hooks
@@ -201,7 +174,7 @@ describe('validateConfig', () => {
       const { errors } = validateConfig(cfgWith({
         type: 'claude', event: 'Stop', checks: [{ name: 'a', type: 'script', command: 'x' }]
       }))
-      assert.ok(errors.some(e => e.includes('"checks" instead of "tasks"')))
+      assert.ok(errors.some(e => e.includes('Rename "checks" to "tasks"')))
     })
 
     it('errors on missing tasks', () => {
@@ -824,14 +797,13 @@ describe('validateConfig', () => {
 
     it('errors on non-object hook entry', () => {
       const { errors } = validateConfig({
-        configVersion: 3, hooks: ['not-an-object']
+        hooks: ['not-an-object']
       })
       assert.ok(errors.some(e => e.includes('hooks[0] must be an object')))
     })
 
     it('errors on non-object task', () => {
       const { errors } = validateConfig({
-        configVersion: 3,
         hooks: [{ type: 'claude', event: 'Stop', tasks: ['not-an-object'] }]
       })
       assert.ok(errors.some(e => e.includes('tasks[0] must be an object')))
@@ -840,7 +812,7 @@ describe('validateConfig', () => {
 })
 
 describe('formatErrors', () => {
-  it('formats errors with coaching message', () => {
+  it('formats errors with reinstall/reinit guidance', () => {
     const result = {
       errors: ['hooks[0] has "checks" instead of "tasks"'],
       warnings: []
@@ -848,7 +820,7 @@ describe('formatErrors', () => {
     const output = formatErrors(result)
     assert.ok(output.includes('prove_it: invalid config'))
     assert.ok(output.includes('hooks[0] has "checks"'))
-    assert.ok(output.includes('Fix these errors'))
+    assert.ok(output.includes('prove_it reinstall && prove_it reinit'))
   })
 
   it('indents multi-line errors', () => {
@@ -859,11 +831,5 @@ describe('formatErrors', () => {
     const output = formatErrors(result)
     assert.ok(output.includes('  - line one'))
     assert.ok(output.includes('    line two'))
-  })
-})
-
-describe('CURRENT_VERSION', () => {
-  it('is 3', () => {
-    assert.strictEqual(CURRENT_VERSION, 3)
   })
 })

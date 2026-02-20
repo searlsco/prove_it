@@ -224,7 +224,6 @@ describe('doctor', () => {
     it('shows "Tracked by git" when config is committed', () => {
       writeSettings(tmpHome, correctSettings())
       writeTeamConfig(tmpRepo, {
-        configVersion: 3,
         enabled: true,
         sources: ['**/*.js'],
         hooks: []
@@ -240,7 +239,6 @@ describe('doctor', () => {
     it('shows issue when config is not tracked by git', () => {
       writeSettings(tmpHome, correctSettings())
       writeTeamConfig(tmpRepo, {
-        configVersion: 3,
         enabled: true,
         sources: ['**/*.js'],
         hooks: []
@@ -257,7 +255,6 @@ describe('doctor', () => {
     it('shows issue when sources contain placeholder glob', () => {
       writeSettings(tmpHome, correctSettings())
       writeTeamConfig(tmpRepo, {
-        configVersion: 3,
         enabled: true,
         sources: ['**/*.*', 'replace/these/with/globs/of/your/source/and/test/files.*'],
         hooks: []
@@ -271,7 +268,6 @@ describe('doctor', () => {
     it('shows [x] Sources configured when sources are customized', () => {
       writeSettings(tmpHome, correctSettings())
       writeTeamConfig(tmpRepo, {
-        configVersion: 3,
         enabled: true,
         sources: ['src/**/*.js', 'test/**/*.js'],
         hooks: []
@@ -286,7 +282,6 @@ describe('doctor', () => {
     it('shows [x] when git hook shim is installed for config git hooks', () => {
       writeSettings(tmpHome, correctSettings())
       writeTeamConfig(tmpRepo, {
-        configVersion: 3,
         enabled: true,
         sources: ['**/*.js'],
         hooks: [
@@ -309,7 +304,6 @@ describe('doctor', () => {
     it('shows [ ] when git hook shim is missing', () => {
       writeSettings(tmpHome, correctSettings())
       writeTeamConfig(tmpRepo, {
-        configVersion: 3,
         enabled: true,
         sources: ['**/*.js'],
         hooks: [
@@ -325,7 +319,6 @@ describe('doctor', () => {
     it('shows [ ] when git hook exists but has no prove_it shim', () => {
       writeSettings(tmpHome, correctSettings())
       writeTeamConfig(tmpRepo, {
-        configVersion: 3,
         enabled: true,
         sources: ['**/*.js'],
         hooks: [
@@ -348,7 +341,6 @@ describe('doctor', () => {
     it('checks shims for all git hook types in config', () => {
       writeSettings(tmpHome, correctSettings())
       writeTeamConfig(tmpRepo, {
-        configVersion: 3,
         enabled: true,
         sources: ['**/*.js'],
         hooks: [
@@ -373,7 +365,6 @@ describe('doctor', () => {
     it('shows [!] when shim is after exec in git hook', () => {
       writeSettings(tmpHome, correctSettings())
       writeTeamConfig(tmpRepo, {
-        configVersion: 3,
         enabled: true,
         sources: ['**/*.js'],
         hooks: [
@@ -398,7 +389,6 @@ describe('doctor', () => {
     it('skips git hook checks when config has no git hooks', () => {
       writeSettings(tmpHome, correctSettings())
       writeTeamConfig(tmpRepo, {
-        configVersion: 3,
         enabled: true,
         sources: ['**/*.js'],
         hooks: [
@@ -416,7 +406,6 @@ describe('doctor', () => {
       writeSettings(tmpHome, correctSettings())
       // matcher on a Stop event triggers a warning
       writeTeamConfig(tmpRepo, {
-        configVersion: 3,
         enabled: true,
         sources: ['**/*.js'],
         hooks: [
@@ -439,7 +428,6 @@ describe('doctor', () => {
     it('reports "All checks passed" when everything is correct', () => {
       writeSettings(tmpHome, correctSettings())
       writeTeamConfig(tmpRepo, {
-        configVersion: 3,
         enabled: true,
         sources: ['src/**/*.js'],
         hooks: []

@@ -178,6 +178,8 @@ function cmdInstall () {
     if (existingGlobal.enabled === undefined) existingGlobal.enabled = true
     if (!existingGlobal.taskEnv) existingGlobal.taskEnv = {}
     Object.assign(existingGlobal.taskEnv, defaults.taskEnv)
+    // Strip legacy keys
+    delete existingGlobal.configVersion
     writeJson(globalCfgPath, existingGlobal)
   }
 
@@ -700,13 +702,8 @@ function cmdDoctor () {
   if (fs.existsSync(teamConfigPath)) {
     log('  [x] Team config exists: .claude/prove_it.json')
     const teamCfg = loadJson(teamConfigPath)
-    if (teamCfg?.configVersion === 3) {
-      const hookCount = (teamCfg.hooks || []).length
-      log(`      Config v3: ${hookCount} hook entries`)
-    } else {
-      log(`      Warning: config has configVersion ${teamCfg?.configVersion || 'missing'}, expected 3`)
-      issues.push('Config may need migration to v3 format')
-    }
+    const hookCount = (teamCfg.hooks || []).length
+    log(`      ${hookCount} hook entries`)
 
     // Sub-check: is team config tracked by git?
     if (fs.existsSync(path.join(repoRoot, '.git'))) {

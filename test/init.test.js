@@ -84,7 +84,7 @@ describe('init', () => {
   describe('buildConfig', () => {
     it('returns full config with defaults (all features)', () => {
       const cfg = buildConfig()
-      assert.strictEqual(cfg.configVersion, 3)
+      assert.ok(cfg.enabled)
       assert.ok(Array.isArray(cfg.hooks))
       // Should have git hooks
       assert.ok(cfg.hooks.some(h => h.type === 'git' && h.event === 'pre-commit'))
@@ -100,13 +100,13 @@ describe('init', () => {
 
     it('omits git hooks when gitHooks is false', () => {
       const cfg = buildConfig({ gitHooks: false })
-      assert.strictEqual(cfg.configVersion, 3)
+      assert.ok(cfg.enabled)
       assert.ok(!cfg.hooks.some(h => h.type === 'git'))
     })
 
     it('omits default checks when defaultChecks is false', () => {
       const cfg = buildConfig({ defaultChecks: false })
-      assert.strictEqual(cfg.configVersion, 3)
+      assert.ok(cfg.enabled)
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
       assert.ok(!allChecks.some(c => c.name === 'code-quality-review'))
       assert.ok(!allChecks.some(c => c.name === 'coverage-review'))
@@ -114,7 +114,7 @@ describe('init', () => {
 
     it('returns base-only config with both features off', () => {
       const cfg = buildConfig({ gitHooks: false, defaultChecks: false })
-      assert.strictEqual(cfg.configVersion, 3)
+      assert.ok(cfg.enabled)
       assert.ok(!cfg.hooks.some(h => h.type === 'git'))
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
       assert.ok(!allChecks.some(c => c.name === 'code-quality-review'))
@@ -439,24 +439,24 @@ describe('init', () => {
 
   describe('configHash', () => {
     it('returns consistent hash for same content', () => {
-      const cfg = { configVersion: 3, enabled: true, hooks: [] }
+      const cfg = { enabled: true, hooks: [] }
       assert.strictEqual(configHash(cfg), configHash(cfg))
     })
 
     it('returns different hash for different content', () => {
-      const cfg1 = { configVersion: 3, enabled: true, hooks: [] }
-      const cfg2 = { configVersion: 3, enabled: false, hooks: [] }
+      const cfg1 = { enabled: true, hooks: [] }
+      const cfg2 = { enabled: false, hooks: [] }
       assert.notStrictEqual(configHash(cfg1), configHash(cfg2))
     })
 
     it('ignores initSeed field', () => {
-      const cfg1 = { configVersion: 3, hooks: [] }
-      const cfg2 = { configVersion: 3, hooks: [], initSeed: 'abc123def456' }
+      const cfg1 = { hooks: [] }
+      const cfg2 = { hooks: [], initSeed: 'abc123def456' }
       assert.strictEqual(configHash(cfg1), configHash(cfg2))
     })
 
     it('returns a 12-character hex string', () => {
-      const hash = configHash({ configVersion: 3 })
+      const hash = configHash({ enabled: true })
       assert.strictEqual(hash.length, 12)
       assert.match(hash, /^[0-9a-f]{12}$/)
     })
@@ -642,7 +642,7 @@ describe('init', () => {
     it('sets edited for legacy configs with no initSeed', () => {
       const cfgPath = path.join(tmpDir, '.claude', 'prove_it.json')
       fs.mkdirSync(path.dirname(cfgPath), { recursive: true })
-      fs.writeFileSync(cfgPath, JSON.stringify({ configVersion: 3, hooks: [] }, null, 2) + '\n')
+      fs.writeFileSync(cfgPath, JSON.stringify({ hooks: [] }, null, 2) + '\n')
 
       const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
       assert.ok(results.teamConfig.existed)
@@ -672,7 +672,7 @@ describe('init', () => {
       overwriteTeamConfig(tmpDir, { gitHooks: false, defaultChecks: false })
       const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
       assert.ok(cfg.initSeed)
-      assert.strictEqual(cfg.configVersion, 3)
+      assert.ok(cfg.enabled)
       assert.ok(!cfg.custom)
     })
 

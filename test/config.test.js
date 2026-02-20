@@ -92,23 +92,28 @@ describe('loadEffectiveConfig ancestor discovery', () => {
   })
 
   const tmpBase = path.join(os.tmpdir(), 'prove_it_config_test_' + Date.now())
+  let origProveItDir
 
   function setup () {
+    origProveItDir = process.env.PROVE_IT_DIR
+    process.env.PROVE_IT_DIR = path.join(tmpBase, '_no_global_config')
     fs.mkdirSync(path.join(tmpBase, '.claude'), { recursive: true })
     fs.mkdirSync(path.join(tmpBase, 'child', '.claude'), { recursive: true })
     fs.mkdirSync(path.join(tmpBase, 'child', 'grandchild'), { recursive: true })
 
     fs.writeFileSync(
       path.join(tmpBase, '.claude', 'prove_it.json'),
-      JSON.stringify({ configVersion: 3, hooks: [], sources: ['root/**/*.js'] })
+      JSON.stringify({ hooks: [], sources: ['root/**/*.js'] })
     )
     fs.writeFileSync(
       path.join(tmpBase, 'child', '.claude', 'prove_it.json'),
-      JSON.stringify({ configVersion: 3, hooks: [], sources: ['child/**/*.js'] })
+      JSON.stringify({ hooks: [], sources: ['child/**/*.js'] })
     )
   }
 
   function cleanup () {
+    if (origProveItDir !== undefined) process.env.PROVE_IT_DIR = origProveItDir
+    else delete process.env.PROVE_IT_DIR
     fs.rmSync(tmpBase, { recursive: true, force: true })
   }
 
@@ -149,7 +154,7 @@ describe('loadEffectiveConfig ancestor discovery', () => {
     fs.mkdirSync(path.join(tmpBase, 'child', 'grandchild', '.claude'), { recursive: true })
     fs.writeFileSync(
       path.join(tmpBase, 'child', 'grandchild', '.claude', 'prove_it.json'),
-      JSON.stringify({ configVersion: 3, hooks: [], sources: ['grandchild/**/*.js'] })
+      JSON.stringify({ hooks: [], sources: ['grandchild/**/*.js'] })
     )
     try {
       const { cfg } = loadEffectiveConfig(path.join(tmpBase, 'child', 'grandchild'), defaultTestConfig)

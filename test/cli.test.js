@@ -125,9 +125,8 @@ describe('init/deinit', () => {
     const stat = fs.statSync(path.join(tmpDir, 'script', 'test'))
     assert.ok(stat.mode & fs.constants.S_IXUSR, 'script/test should be executable')
 
-    // Check config is v3 format
+    // Check config format
     const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), 'utf8'))
-    assert.strictEqual(cfg.configVersion, 3)
     assert.ok(Array.isArray(cfg.hooks), 'hooks should be an array')
   })
 
@@ -552,12 +551,12 @@ describe('install/uninstall', () => {
     assert.ok(!fs.existsSync(skillDir), 'Skill dir should be removed after uninstall')
   })
 
-  it('install creates global config with configVersion and initSeed', () => {
+  it('install creates global config with initSeed', () => {
     runCli(['install'], { env: { ...process.env, HOME: tmpDir } })
 
     const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
     const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-    assert.strictEqual(cfg.configVersion, 3, 'Should have configVersion 3')
+    assert.ok(cfg.enabled, 'Should have enabled: true')
     assert.ok(cfg.initSeed, 'Should have initSeed')
     assert.strictEqual(cfg.initSeed.length, 12, 'initSeed should be 12-char hex')
   })
@@ -568,7 +567,7 @@ describe('install/uninstall', () => {
 
     // Write an old-style global config that is self-consistent (hash matches seed)
     const { configHash } = require('../lib/config')
-    const oldConfig = { configVersion: 2, taskEnv: { OLD_VAR: '1' } }
+    const oldConfig = { taskEnv: { OLD_VAR: '1' } }
     oldConfig.initSeed = configHash(oldConfig)
     fs.mkdirSync(path.dirname(configPath), { recursive: true })
     fs.writeFileSync(configPath, JSON.stringify(oldConfig, null, 2) + '\n')
@@ -577,7 +576,6 @@ describe('install/uninstall', () => {
     runCli(['install'], { env })
 
     const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-    assert.strictEqual(cfg.configVersion, 3, 'Should be upgraded to v3')
     assert.strictEqual(cfg.taskEnv.TURBOCOMMIT_DISABLED, '1', 'Should have current defaults')
     assert.ok(!cfg.taskEnv.OLD_VAR, 'Old taskEnv should be replaced')
     assert.strictEqual(cfg.initSeed, configHash(cfg), 'initSeed should match content')
@@ -628,6 +626,27 @@ describe('install/uninstall', () => {
       'Should add default taskEnv vars')
     assert.ok(!updated.initSeed,
       'Should not inject initSeed into edited config')
+  })
+
+  it('install strips configVersion from edited global config', () => {
+    const env = { ...process.env, HOME: tmpDir }
+    const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+
+    // Write a legacy config with configVersion (no initSeed = treated as edited)
+    fs.mkdirSync(path.dirname(configPath), { recursive: true })
+    fs.writeFileSync(configPath, JSON.stringify({
+      configVersion: 3,
+      ignoredPaths: ['~/legacy'],
+      taskEnv: { CUSTOM: 'yes' }
+    }, null, 2) + '\n')
+
+    runCli(['install'], { env })
+
+    const updated = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    assert.ok(!('configVersion' in updated),
+      'Should strip configVersion from edited config')
+    assert.deepStrictEqual(updated.ignoredPaths, ['~/legacy'],
+      'Should preserve other custom fields')
   })
 })
 

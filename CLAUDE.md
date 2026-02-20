@@ -77,5 +77,5 @@ tasks are configured.
 
 - No dependencies beyond Node.js stdlib (devDependencies: standard for linting only)
 - Linter: `npx standard --fix` (run automatically by `./script/test_fast`)
-- Config format: v3 schema with `configVersion: 3` and `hooks` array containing `tasks`
+- Config format: `hooks` array containing `tasks`
 - Builtins are invoked via `prove_it run_builtin <namespace>:<name>`

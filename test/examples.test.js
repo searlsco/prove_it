@@ -16,7 +16,6 @@ describe('example projects', () => {
         const cfgPath = path.join(dir, '.claude', 'prove_it.json')
         assert.ok(fs.existsSync(cfgPath), `${cfgPath} should exist`)
         const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
-        assert.strictEqual(cfg.configVersion, 3)
         assert.ok(Array.isArray(cfg.hooks), 'hooks should be an array')
         assert.ok(cfg.hooks.length > 0, 'hooks should not be empty')
 

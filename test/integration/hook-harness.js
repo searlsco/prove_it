@@ -125,11 +125,10 @@ function writeConfig (dir, config) {
 }
 
 /**
- * Create a minimal v3 config with specified hooks.
+ * Create a minimal config with specified hooks.
  */
 function makeConfig (hooks, overrides = {}) {
   return {
-    configVersion: 3,
     enabled: true,
     hooks,
     ...overrides

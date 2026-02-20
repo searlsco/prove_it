@@ -106,7 +106,6 @@ prove_it is configured with a `hooks` array in `.claude/prove_it.json`. Each hoo
 
 ```json
 {
-  "configVersion": 3,
   "enabled": true,
   "sources": ["src/**/*.js", "lib/**/*.js", "test/**/*.js"],
   "hooks": [
@@ -287,7 +286,6 @@ By default, prove_it tracks Claude's built-in editing tools (`Edit`, `Write`, `N
 
 ```json
 {
-  "configVersion": 3,
   "fileEditingTools": ["XcodeEdit"],
   "sources": ["**/*.swift", "**/*.m"],
   "hooks": [...]
@@ -334,7 +332,6 @@ When prove_it spawns reviewer subagents or runs script tasks, other hooks instal
 
 ```json
 {
-  "configVersion": 3,
   "taskEnv": {
     "TURBOCOMMIT_DISABLED": "1"
   },

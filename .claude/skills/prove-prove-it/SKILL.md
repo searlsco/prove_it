@@ -66,7 +66,6 @@ focused config that isolates the reviewer you're testing:
 ```javascript
 // For testing review:test_investment specifically:
 {
-  "configVersion": 3,
   "enabled": true,
   "sources": ["src/**/*.js", "test/**/*.js"],
   "hooks": [{
