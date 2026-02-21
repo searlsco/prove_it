@@ -301,6 +301,68 @@ describe('agent check', () => {
     )
     assert.strictEqual(result.pass, true)
   })
+
+  // ---------- Story: verbose data in log entries ----------
+  it('logs verbose data (prompt, response, model) on PASS, FAIL, and SKIP verdicts', () => {
+    const origDir = process.env.PROVE_IT_DIR
+    process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
+    const SID = 'test-session-verbose'
+
+    function readLogEntries () {
+      const logFile = path.join(tmpDir, 'prove_it_state', 'sessions', `${SID}.jsonl`)
+      if (!fs.existsSync(logFile)) return []
+      return fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    }
+
+    try {
+      // PASS — verbose should have prompt, response, model
+      const passPath = writeReviewer(tmpDir, 'v_pass.sh', 'echo "PASS: looks good"')
+      runAgentCheck(
+        { name: 'verbose-pass', command: passPath, prompt: 'Review {{project_dir}}', model: 'haiku' },
+        ctx(tmpDir, { sessionId: SID, hookEvent: 'Stop' })
+      )
+      const passEntries = readLogEntries().filter(e => e.reviewer === 'verbose-pass')
+      const passRunning = passEntries.filter(e => e.status === 'RUNNING')
+      const passResult = passEntries.filter(e => e.status === 'PASS')
+      assert.strictEqual(passRunning.length, 1)
+      assert.strictEqual(passResult.length, 1)
+      assert.ok(passResult[0].verbose, 'PASS entry should have verbose data')
+      assert.strictEqual(typeof passResult[0].verbose.prompt, 'string')
+      assert.ok(passResult[0].verbose.prompt.includes('Review'), 'verbose prompt should contain user prompt')
+      assert.strictEqual(passResult[0].verbose.response, 'PASS: looks good')
+      assert.strictEqual(passResult[0].verbose.model, 'haiku')
+      assert.strictEqual(passResult[0].verbose.backchannel, false)
+      assert.strictEqual(passRunning[0].verbose, undefined, 'RUNNING entry should not have verbose data')
+
+      // FAIL — verbose should have prompt, response, model
+      const failPath = writeReviewer(tmpDir, 'v_fail.sh', 'echo "FAIL: missing tests"')
+      runAgentCheck(
+        { name: 'verbose-fail', command: failPath, prompt: 'Check tests' },
+        ctx(tmpDir, { sessionId: SID, hookEvent: 'Stop' })
+      )
+      const failEntries = readLogEntries().filter(e => e.reviewer === 'verbose-fail')
+      const failResult = failEntries.filter(e => e.status === 'FAIL')
+      assert.strictEqual(failResult.length, 1)
+      assert.ok(failResult[0].verbose, 'FAIL entry should have verbose data')
+      assert.strictEqual(typeof failResult[0].verbose.prompt, 'string')
+      assert.strictEqual(failResult[0].verbose.response, 'FAIL: missing tests')
+
+      // SKIP — verbose should have prompt, response, model
+      const skipPath = writeReviewer(tmpDir, 'v_skip.sh', 'echo "SKIP: unrelated"')
+      runAgentCheck(
+        { name: 'verbose-skip', command: skipPath, prompt: 'Review this' },
+        ctx(tmpDir, { sessionId: SID, hookEvent: 'Stop' })
+      )
+      const skipEntries = readLogEntries().filter(e => e.reviewer === 'verbose-skip')
+      const skipResult = skipEntries.filter(e => e.status === 'SKIP')
+      assert.strictEqual(skipResult.length, 1)
+      assert.ok(skipResult[0].verbose, 'SKIP entry should have verbose data')
+      assert.strictEqual(skipResult[0].verbose.response, 'SKIP: unrelated')
+    } finally {
+      if (origDir === undefined) delete process.env.PROVE_IT_DIR
+      else process.env.PROVE_IT_DIR = origDir
+    }
+  })
 })
 
 describe('backchannel', () => {
