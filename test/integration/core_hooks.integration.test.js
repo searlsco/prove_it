@@ -531,6 +531,165 @@ describe('v2 dispatcher: core hook behaviors', () => {
     })
   })
 
+  describe('quiet task output suppression', () => {
+    it('quiet task pass reason is excluded from PreToolUse output', () => {
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Edit|Write',
+          tasks: [
+            { name: 'lock-config', type: 'script', command: 'prove_it run_builtin config:lock', quiet: true }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Edit',
+        tool_input: { file_path: path.join(tmpDir, 'README.md'), old_string: 'a', new_string: 'b' },
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, 'Hook should produce JSON output')
+      assert.strictEqual(
+        result.output.hookSpecificOutput.permissionDecision,
+        'allow',
+        'Quiet passing task should allow'
+      )
+      // The summary should be "all checks passed", not the task's individual reason
+      assert.ok(
+        result.output.hookSpecificOutput.permissionDecisionReason.includes('all checks passed'),
+        `Summary should be "all checks passed" when only quiet tasks ran, got: ${result.output.hookSpecificOutput.permissionDecisionReason}`
+      )
+      assert.ok(
+        !result.output.hookSpecificOutput.permissionDecisionReason.includes('config:lock'),
+        `Quiet task reason should NOT appear in output, got: ${result.output.hookSpecificOutput.permissionDecisionReason}`
+      )
+    })
+
+    it('quiet task pass reason is excluded from Stop output', () => {
+      createFastTestScript(tmpDir, true)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'quiet-check', type: 'script', command: './script/test_fast', quiet: true }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: 'test-quiet-stop',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, 'Hook should produce JSON output')
+      assert.strictEqual(result.output.decision, 'approve')
+      assert.ok(
+        result.output.reason.includes('all checks passed'),
+        `Summary should be "all checks passed" for quiet-only tasks, got: ${result.output.reason}`
+      )
+      assert.ok(
+        !result.output.reason.includes('test_fast passed'),
+        `Quiet task reason should NOT appear in output, got: ${result.output.reason}`
+      )
+    })
+
+    it('non-quiet task output appears alongside quiet task', () => {
+      createFastTestScript(tmpDir, true)
+      createTestScript(tmpDir, true)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'quiet-check', type: 'script', command: './script/test_fast', quiet: true },
+            { name: 'loud-check', type: 'script', command: './script/test' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: 'test-quiet-mixed',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, 'Hook should produce JSON output')
+      assert.strictEqual(result.output.decision, 'approve')
+      // loud-check output should appear
+      assert.ok(
+        result.output.reason.includes('./script/test passed'),
+        `Non-quiet task reason should appear in output, got: ${result.output.reason}`
+      )
+      // quiet-check output should NOT appear
+      assert.ok(
+        !result.output.reason.includes('test_fast passed'),
+        `Quiet task reason should NOT appear in output, got: ${result.output.reason}`
+      )
+    })
+
+    function readSessionLog (tmpDir, sessionId) {
+      const logFile = path.join(tmpDir, '.prove_it_test', 'sessions', `${sessionId}.jsonl`)
+      if (!fs.existsSync(logFile)) return []
+      return fs.readFileSync(logFile, 'utf8').trim().split('\n')
+        .filter(l => l).map(l => JSON.parse(l))
+    }
+
+    it('quiet task suppresses session log for PASS but not for FAIL', () => {
+      createFastTestScript(tmpDir, false)
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Edit|Write',
+          tasks: [
+            { name: 'lock-config', type: 'script', command: 'prove_it run_builtin config:lock', quiet: true }
+          ]
+        },
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'failing-quiet', type: 'script', command: './script/test_fast', quiet: true }
+          ]
+        }
+      ]))
+
+      // First: PreToolUse pass — quiet task should not log
+      const sid = 'test-quiet-log'
+      invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Edit',
+        tool_input: { file_path: path.join(tmpDir, 'README.md'), old_string: 'a', new_string: 'b' },
+        session_id: sid,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      const afterPass = readSessionLog(tmpDir, sid)
+      assert.strictEqual(afterPass.filter(e => e.reviewer === 'lock-config').length, 0,
+        'Quiet passing task should produce no session log entries')
+
+      // Second: Stop fail — quiet task should still log FAIL
+      invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: sid,
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      const afterFail = readSessionLog(tmpDir, sid)
+      const failEntries = afterFail.filter(e => e.reviewer === 'failing-quiet' && e.status === 'FAIL')
+      assert.ok(failEntries.length > 0,
+        'Quiet failing task should still log FAIL entry')
+    })
+  })
+
   describe('non-git directory', () => {
     it('runs hooks in non-git directory when config exists', () => {
       const nonGitDir = createTempDir('prove_it_nongit_')
