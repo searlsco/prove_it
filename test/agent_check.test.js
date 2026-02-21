@@ -406,6 +406,32 @@ describe('agent check', () => {
     assert.ok(!entries.some(e => e.status === 'RUNNING'), 'Quiet agent should not log RUNNING')
   })
 
+  it('suppresses SKIP log when quiet: true', () => {
+    const reviewerPath = path.join(tmpDir, 'skip_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "SKIP: unrelated changes"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    const origDir = process.env.PROVE_IT_DIR
+    process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
+    const sid = 'test-session-quiet-agent-skip'
+
+    const result = runAgentCheck(
+      { name: 'quiet-review', command: reviewerPath, prompt: 'Review this', quiet: true },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId: sid, toolInput: null, testOutput: '' }
+    )
+
+    const logFile = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sid}.jsonl`)
+    const entries = fs.existsSync(logFile)
+      ? fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+      : []
+
+    if (origDir === undefined) delete process.env.PROVE_IT_DIR
+    else process.env.PROVE_IT_DIR = origDir
+
+    assert.strictEqual(result.skipped, true)
+    assert.strictEqual(entries.length, 0, 'Quiet agent skip should produce no log entries')
+  })
+
   it('passes configEnv through to reviewer subprocess', () => {
     const reviewerPath = path.join(tmpDir, 'env_reviewer.sh')
     fs.writeFileSync(reviewerPath, [

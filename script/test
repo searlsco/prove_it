@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -e
-trap 'prove_it record --name full-tests --result $?' EXIT
+trap 'command -v prove_it >/dev/null 2>&1 && prove_it record --name full-tests --result $?' EXIT
 "$(dirname "$0")/test_fast"
 npm run test:integration
