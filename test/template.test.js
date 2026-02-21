@@ -2,8 +2,8 @@ const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
-const os = require('os')
 const { spawnSync } = require('child_process')
+const { freshRepo } = require('./helpers')
 const { expandTemplate, makeResolvers, KNOWN_VARS, SESSION_VARS, getUnknownVars, getSessionVars } = require('../lib/template')
 const { recordFileEdit, saveSessionState } = require('../lib/session')
 
@@ -215,13 +215,9 @@ describe('template', () => {
       let tmpDir
 
       beforeEach(() => {
-        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_tpl_'))
-        spawnSync('git', ['init'], { cwd: tmpDir })
-        spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
-        spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
-        fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'initial\n')
-        spawnSync('git', ['add', '.'], { cwd: tmpDir })
-        spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+        tmpDir = freshRepo((dir) => {
+          fs.writeFileSync(path.join(dir, 'file.txt'), 'initial\n')
+        })
       })
 
       afterEach(() => {
@@ -382,17 +378,12 @@ describe('template', () => {
       let origProveItDir
 
       beforeEach(() => {
-        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_sdgf_'))
+        tmpDir = freshRepo((dir) => {
+          fs.mkdirSync(path.join(dir, 'src'), { recursive: true })
+          fs.writeFileSync(path.join(dir, 'src', 'app.js'), 'original\n')
+        })
         origProveItDir = process.env.PROVE_IT_DIR
         process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
-
-        spawnSync('git', ['init'], { cwd: tmpDir })
-        spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
-        spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
-        fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true })
-        fs.writeFileSync(path.join(tmpDir, 'src', 'app.js'), 'original\n')
-        spawnSync('git', ['add', '.'], { cwd: tmpDir })
-        spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
       })
 
       afterEach(() => {

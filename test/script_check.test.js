@@ -2,9 +2,9 @@ const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
-const os = require('os')
 const { spawnSync } = require('child_process')
 const { isBuiltin, getBuiltinName, runScriptCheck } = require('../lib/checks/script')
+const { freshRepo } = require('./helpers')
 
 describe('script check', () => {
   describe('isBuiltin', () => {
@@ -44,15 +44,9 @@ describe('script check', () => {
     let origProveItDir
 
     beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_script_test_'))
+      tmpDir = freshRepo()
       origProveItDir = process.env.PROVE_IT_DIR
       process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
-      spawnSync('git', ['init'], { cwd: tmpDir })
-      spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
-      spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
-      fs.writeFileSync(path.join(tmpDir, '.gitkeep'), '')
-      spawnSync('git', ['add', '.'], { cwd: tmpDir })
-      spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
     })
 
     afterEach(() => {

@@ -2,21 +2,15 @@ const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
-const os = require('os')
 const { spawnSync } = require('child_process')
 const { defaultModel, runAgentCheck, backchannelDir, backchannelReadmePath, createBackchannel } = require('../lib/checks/agent')
+const { freshRepo } = require('./helpers')
 
 describe('agent check', () => {
   let tmpDir
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_agent_test_'))
-    spawnSync('git', ['init'], { cwd: tmpDir })
-    spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
-    spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
-    fs.writeFileSync(path.join(tmpDir, '.gitkeep'), '')
-    spawnSync('git', ['add', '.'], { cwd: tmpDir })
-    spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+    tmpDir = freshRepo()
   })
 
   afterEach(() => {
@@ -459,15 +453,9 @@ describe('backchannel', () => {
   const sessionId = 'test-session-abc123'
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_bc_test_'))
+    tmpDir = freshRepo()
     origProveItDir = process.env.PROVE_IT_DIR
     process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
-    spawnSync('git', ['init'], { cwd: tmpDir })
-    spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
-    spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
-    fs.writeFileSync(path.join(tmpDir, '.gitkeep'), '')
-    spawnSync('git', ['add', '.'], { cwd: tmpDir })
-    spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
   })
 
   afterEach(() => {

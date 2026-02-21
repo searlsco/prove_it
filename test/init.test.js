@@ -2,8 +2,7 @@ const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
-const os = require('os')
-const { spawnSync } = require('child_process')
+const { freshRepo } = require('./helpers')
 const { configHash } = require('../lib/config')
 const {
   isScriptTestStub,
@@ -24,10 +23,7 @@ describe('init', () => {
   let tmpDir
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_init_test_'))
-    spawnSync('git', ['init'], { cwd: tmpDir })
-    spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
-    spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
+    tmpDir = freshRepo()
   })
 
   afterEach(() => {

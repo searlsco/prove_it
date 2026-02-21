@@ -2,10 +2,10 @@ const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
-const os = require('os')
 const { spawnSync } = require('child_process')
 const { defaultConfig, matchGitEntries, runGitTasks } = require('../lib/dispatcher/git')
 const { readRef, churnSinceRef, sanitizeRefName } = require('../lib/git')
+const { freshRepo } = require('./helpers')
 
 describe('git dispatcher', () => {
   describe('defaultConfig', () => {
@@ -74,14 +74,9 @@ describe('git dispatcher', () => {
     let tmpDir
 
     beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_git_test_'))
-      spawnSync('git', ['init'], { cwd: tmpDir })
-      spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
-      spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
-      fs.writeFileSync(path.join(tmpDir, '.gitkeep'), '')
-      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'initial\n')
-      spawnSync('git', ['add', '.'], { cwd: tmpDir })
-      spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+      tmpDir = freshRepo((dir) => {
+        fs.writeFileSync(path.join(dir, 'app.js'), 'initial\n')
+      })
     })
 
     afterEach(() => {

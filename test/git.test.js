@@ -5,20 +5,19 @@ const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
 const { gitDiffFiles, sanitizeRefName, readRef, updateRef, snapshotWorkingTree, deleteAllRefs, churnSinceRef, advanceChurnRef, readCounterBlob, writeCounterRef, readGrossCounter, incrementGross, grossChurnSince, advanceGrossSnapshot, computeWriteLines } = require('../lib/git')
+const { freshRepo } = require('./helpers')
+
+function setupDiffFiles (dir) {
+  fs.writeFileSync(path.join(dir, 'a.js'), 'original a\n')
+  fs.writeFileSync(path.join(dir, 'b.js'), 'original b\n')
+  fs.writeFileSync(path.join(dir, 'c.js'), 'original c\n')
+}
 
 describe('gitDiffFiles', () => {
   let tmpDir
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_gdf_'))
-    spawnSync('git', ['init'], { cwd: tmpDir })
-    spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
-    spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
-    fs.writeFileSync(path.join(tmpDir, 'a.js'), 'original a\n')
-    fs.writeFileSync(path.join(tmpDir, 'b.js'), 'original b\n')
-    fs.writeFileSync(path.join(tmpDir, 'c.js'), 'original c\n')
-    spawnSync('git', ['add', '.'], { cwd: tmpDir })
-    spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+    tmpDir = freshRepo(setupDiffFiles)
   })
 
   afterEach(() => {
@@ -74,10 +73,8 @@ describe('gitDiffFiles', () => {
   })
 })
 
-function initGitRepo (dir) {
-  spawnSync('git', ['init'], { cwd: dir })
-  spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir })
-  spawnSync('git', ['config', 'user.name', 'Test'], { cwd: dir })
+function setupFileJs (dir) {
+  fs.writeFileSync(path.join(dir, 'file.js'), 'initial\n')
 }
 
 function commit (dir, msg) {
@@ -110,10 +107,7 @@ describe('readRef / updateRef', () => {
   let tmpDir
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_ref_'))
-    initGitRepo(tmpDir)
-    fs.writeFileSync(path.join(tmpDir, 'file.js'), 'initial\n')
-    commit(tmpDir, 'init')
+    tmpDir = freshRepo(setupFileJs)
   })
 
   afterEach(() => {
@@ -148,10 +142,7 @@ describe('churnSinceRef', () => {
   let tmpDir
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_churn_'))
-    initGitRepo(tmpDir)
-    fs.writeFileSync(path.join(tmpDir, 'file.js'), 'initial\n')
-    commit(tmpDir, 'init')
+    tmpDir = freshRepo(setupFileJs)
   })
 
   afterEach(() => {
@@ -262,10 +253,7 @@ describe('snapshotWorkingTree', () => {
   let tmpDir
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_snap_'))
-    initGitRepo(tmpDir)
-    fs.writeFileSync(path.join(tmpDir, 'file.js'), 'initial\n')
-    commit(tmpDir, 'init')
+    tmpDir = freshRepo(setupFileJs)
   })
 
   afterEach(() => {
@@ -406,10 +394,7 @@ describe('deleteAllRefs', () => {
   let tmpDir
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_delrefs_'))
-    initGitRepo(tmpDir)
-    fs.writeFileSync(path.join(tmpDir, 'file.js'), 'initial\n')
-    commit(tmpDir, 'init')
+    tmpDir = freshRepo(setupFileJs)
   })
 
   afterEach(() => {
@@ -451,10 +436,7 @@ describe('advanceChurnRef', () => {
   let tmpDir
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_acr_'))
-    initGitRepo(tmpDir)
-    fs.writeFileSync(path.join(tmpDir, 'file.js'), 'initial\n')
-    commit(tmpDir, 'init')
+    tmpDir = freshRepo(setupFileJs)
   })
 
   afterEach(() => {
@@ -593,10 +575,7 @@ describe('readCounterBlob / writeCounterRef', () => {
   let tmpDir
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_blob_'))
-    initGitRepo(tmpDir)
-    fs.writeFileSync(path.join(tmpDir, 'file.js'), 'initial\n')
-    commit(tmpDir, 'init')
+    tmpDir = freshRepo(setupFileJs)
   })
 
   afterEach(() => {
@@ -636,10 +615,7 @@ describe('incrementGross', () => {
   let tmpDir
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_incr_'))
-    initGitRepo(tmpDir)
-    fs.writeFileSync(path.join(tmpDir, 'file.js'), 'initial\n')
-    commit(tmpDir, 'init')
+    tmpDir = freshRepo(setupFileJs)
   })
 
   afterEach(() => {
@@ -797,10 +773,7 @@ describe('grossChurnSince', () => {
   let tmpDir
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_gcs_'))
-    initGitRepo(tmpDir)
-    fs.writeFileSync(path.join(tmpDir, 'file.js'), 'initial\n')
-    commit(tmpDir, 'init')
+    tmpDir = freshRepo(setupFileJs)
   })
 
   afterEach(() => {

@@ -4,6 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
+const { freshRepo } = require('./helpers')
 const { matchesHookEntry, evaluateWhen, defaultConfig, BUILTIN_EDIT_TOOLS, PREREQUISITE_KEYS, TRIGGER_KEYS } = require('../lib/dispatcher/claude')
 const { recordFileEdit, resetTurnTracking } = require('../lib/session')
 const { updateRef, churnSinceRef, sanitizeRefName, incrementGross, grossChurnSince } = require('../lib/git')
@@ -142,13 +143,9 @@ describe('claude dispatcher', () => {
       let tmpDir
 
       beforeEach(() => {
-        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_vp_'))
-        spawnSync('git', ['init'], { cwd: tmpDir })
-        spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
-        spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
-        fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'initial\n')
-        spawnSync('git', ['add', '.'], { cwd: tmpDir })
-        spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+        tmpDir = freshRepo((dir) => {
+          fs.writeFileSync(path.join(dir, 'file.txt'), 'initial\n')
+        })
       })
 
       afterEach(() => {
@@ -210,13 +207,9 @@ describe('claude dispatcher', () => {
     let tmpDir
 
     beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_lwslr_'))
-      spawnSync('git', ['init'], { cwd: tmpDir })
-      spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
-      spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
-      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'initial\n')
-      spawnSync('git', ['add', '.'], { cwd: tmpDir })
-      spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+      tmpDir = freshRepo((dir) => {
+        fs.writeFileSync(path.join(dir, 'app.js'), 'initial\n')
+      })
     })
 
     afterEach(() => {
@@ -348,13 +341,9 @@ describe('claude dispatcher', () => {
     let tmpDir
 
     beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_lcslr_'))
-      spawnSync('git', ['init'], { cwd: tmpDir })
-      spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
-      spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
-      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'initial\n')
-      spawnSync('git', ['add', '.'], { cwd: tmpDir })
-      spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+      tmpDir = freshRepo((dir) => {
+        fs.writeFileSync(path.join(dir, 'app.js'), 'initial\n')
+      })
     })
 
     afterEach(() => {
@@ -758,13 +747,9 @@ describe('claude dispatcher', () => {
     let tmpDir
 
     beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_pts_'))
-      spawnSync('git', ['init'], { cwd: tmpDir })
-      spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
-      spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
-      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'initial\n')
-      spawnSync('git', ['add', '.'], { cwd: tmpDir })
-      spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+      tmpDir = freshRepo((dir) => {
+        fs.writeFileSync(path.join(dir, 'app.js'), 'initial\n')
+      })
     })
 
     afterEach(() => {
