@@ -41,6 +41,7 @@
         {
           "name": "code-quality-review",
           "type": "agent",
+          "async": true,
           "prompt": "review:code_quality",
           "promptType": "reference",
           "model": "haiku",
@@ -52,6 +53,7 @@
         {
           "name": "coverage-review",
           "type": "agent",
+          "async": true,
           "prompt": "review:test_coverage",
           "promptType": "reference",
           "model": "haiku",

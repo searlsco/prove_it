@@ -267,8 +267,8 @@ describe('validateConfig', () => {
       assert.ok(errors.some(e => e.includes('mtime must be a boolean')))
     })
 
-    it('validates boolean task fields (enabled, resetOnFail, quiet)', () => {
-      for (const field of ['enabled', 'resetOnFail', 'quiet']) {
+    it('validates boolean task fields (enabled, resetOnFail, quiet, async)', () => {
+      for (const field of ['enabled', 'resetOnFail', 'quiet', 'async']) {
         // accepts true and false
         for (const val of [true, false]) {
           const { errors } = validateConfig(cfgWithTask({
@@ -284,6 +284,23 @@ describe('validateConfig', () => {
         assert.ok(errors.some(e => e.includes(`${field} must be a boolean`)),
           `Expected boolean error for ${field}`)
       }
+    })
+
+    it('warns when async: true is used on SessionStart', () => {
+      const { warnings } = validateConfig(validConfig({
+        hooks: [{
+          type: 'claude',
+          event: 'SessionStart',
+          tasks: [{ name: 'a', type: 'script', command: 'x', async: true }]
+        }]
+      }))
+      assert.ok(warnings.some(w => w.includes('async') && w.includes('SessionStart')))
+
+      // No warning on Stop
+      const stopResult = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', async: true
+      }))
+      assert.ok(!stopResult.warnings.some(w => w.includes('async')))
     })
 
     it('errors on unknown task keys', () => {

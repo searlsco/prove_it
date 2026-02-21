@@ -3,8 +3,8 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
-const { matchesHookEntry, evaluateWhen, defaultConfig, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
-const { recordFileEdit, resetTurnTracking } = require('../lib/session')
+const { matchesHookEntry, evaluateWhen, defaultConfig, settleTaskResult, harvestAsyncResults, cleanAsyncDir, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
+const { recordFileEdit, resetTurnTracking, getAsyncDir } = require('../lib/session')
 
 describe('claude dispatcher', () => {
   describe('matchesHookEntry', () => {
@@ -480,6 +480,198 @@ describe('claude dispatcher', () => {
       assert.strictEqual(config.enabled, false)
       assert.deepStrictEqual(config.hooks, [])
       assert.strictEqual(config.format, undefined)
+    })
+  })
+
+  describe('settleTaskResult', () => {
+    it('returns blocked with message on FAIL for Stop event', () => {
+      const outputs = []
+      const contextParts = []
+      const systemMessages = []
+      const task = { name: 'my-task', type: 'script', command: 'test' }
+      const result = { pass: false, reason: 'tests failed', output: '' }
+      const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null, latestSourceMtime: 0 }
+      const settlement = settleTaskResult(task, result, 'Stop', settlCtx, outputs, contextParts, systemMessages)
+      assert.strictEqual(settlement.blocked, true)
+      assert.ok(settlement.message.includes('my-task failed'))
+      assert.ok(settlement.message.includes('tests failed'))
+    })
+
+    it('pushes to systemMessages on FAIL for SessionStart (not blocked)', () => {
+      const outputs = []
+      const contextParts = []
+      const systemMessages = []
+      const task = { name: 'briefing', type: 'script', command: 'test' }
+      const result = { pass: false, reason: 'oops', output: '' }
+      const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null, latestSourceMtime: 0 }
+      const settlement = settleTaskResult(task, result, 'SessionStart', settlCtx, outputs, contextParts, systemMessages)
+      assert.strictEqual(settlement.blocked, false)
+      assert.ok(systemMessages.includes('oops'))
+      assert.ok(contextParts.includes('oops'))
+    })
+
+    it('collects output on SKIP when not quiet', () => {
+      const outputs = []
+      const task = { name: 'my-task', type: 'script', command: 'test' }
+      const result = { pass: true, reason: 'empty prompt — skipped', output: '', skipped: true }
+      const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null, latestSourceMtime: 0 }
+      const settlement = settleTaskResult(task, result, 'Stop', settlCtx, outputs, [], [])
+      assert.strictEqual(settlement.blocked, false)
+      assert.ok(outputs.includes('empty prompt — skipped'))
+    })
+
+    it('suppresses output on SKIP when quiet', () => {
+      const outputs = []
+      const task = { name: 'my-task', type: 'script', command: 'test', quiet: true }
+      const result = { pass: true, reason: 'skipped', output: '', skipped: true }
+      const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null, latestSourceMtime: 0 }
+      settleTaskResult(task, result, 'Stop', settlCtx, outputs, [], [])
+      assert.strictEqual(outputs.length, 0)
+    })
+
+    it('collects output on PASS when not quiet', () => {
+      const outputs = []
+      const task = { name: 'my-task', type: 'script', command: 'test' }
+      const result = { pass: true, reason: 'all good', output: '' }
+      const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null, latestSourceMtime: 0 }
+      const settlement = settleTaskResult(task, result, 'Stop', settlCtx, outputs, [], [])
+      assert.strictEqual(settlement.blocked, false)
+      assert.ok(outputs.includes('all good'))
+    })
+  })
+
+  describe('harvestAsyncResults', () => {
+    let tmpDir
+    let origProveItDir
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_harvest_'))
+      origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+    })
+
+    afterEach(() => {
+      if (origProveItDir === undefined) {
+        delete process.env.PROVE_IT_DIR
+      } else {
+        process.env.PROVE_IT_DIR = origProveItDir
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('returns empty array when no async dir exists', () => {
+      const results = harvestAsyncResults('nonexistent-session')
+      assert.deepStrictEqual(results, [])
+    })
+
+    it('returns empty array when no session id', () => {
+      const results = harvestAsyncResults(null)
+      assert.deepStrictEqual(results, [])
+    })
+
+    it('reads and deletes result files, skips context files', () => {
+      const sessionId = 'test-harvest'
+      const asyncDir = getAsyncDir(sessionId)
+      fs.mkdirSync(asyncDir, { recursive: true })
+
+      const resultData = {
+        taskName: 'coverage-review',
+        task: { name: 'coverage-review', type: 'agent' },
+        result: { pass: true, reason: 'PASS: all good', output: '', skipped: false },
+        completedAt: Date.now()
+      }
+      fs.writeFileSync(path.join(asyncDir, 'coverage-review.json'), JSON.stringify(resultData))
+      fs.writeFileSync(path.join(asyncDir, 'coverage-review.context.json'), '{}')
+
+      const results = harvestAsyncResults(sessionId)
+      assert.strictEqual(results.length, 1)
+      assert.strictEqual(results[0].taskName, 'coverage-review')
+      assert.strictEqual(results[0].result.pass, true)
+
+      // Result file should be deleted
+      assert.ok(!fs.existsSync(path.join(asyncDir, 'coverage-review.json')))
+      // Context file should remain (worker cleans it, not harvest)
+      assert.ok(fs.existsSync(path.join(asyncDir, 'coverage-review.context.json')))
+    })
+
+    it('handles multiple result files', () => {
+      const sessionId = 'test-harvest-multi'
+      const asyncDir = getAsyncDir(sessionId)
+      fs.mkdirSync(asyncDir, { recursive: true })
+
+      for (const name of ['task-a', 'task-b']) {
+        const data = {
+          taskName: name,
+          task: { name, type: 'script' },
+          result: { pass: true, reason: 'passed', output: '', skipped: false },
+          completedAt: Date.now()
+        }
+        fs.writeFileSync(path.join(asyncDir, `${name}.json`), JSON.stringify(data))
+      }
+
+      const results = harvestAsyncResults(sessionId)
+      assert.strictEqual(results.length, 2)
+      const names = results.map(r => r.taskName).sort()
+      assert.deepStrictEqual(names, ['task-a', 'task-b'])
+    })
+
+    it('skips corrupted files and deletes them', () => {
+      const sessionId = 'test-harvest-corrupt'
+      const asyncDir = getAsyncDir(sessionId)
+      fs.mkdirSync(asyncDir, { recursive: true })
+
+      fs.writeFileSync(path.join(asyncDir, 'bad.json'), 'not json{{{')
+      const goodData = {
+        taskName: 'good-task',
+        task: { name: 'good-task', type: 'script' },
+        result: { pass: true, reason: 'ok', output: '', skipped: false },
+        completedAt: Date.now()
+      }
+      fs.writeFileSync(path.join(asyncDir, 'good-task.json'), JSON.stringify(goodData))
+
+      const results = harvestAsyncResults(sessionId)
+      assert.strictEqual(results.length, 1)
+      assert.strictEqual(results[0].taskName, 'good-task')
+      // Corrupted file should be cleaned up
+      assert.ok(!fs.existsSync(path.join(asyncDir, 'bad.json')))
+    })
+  })
+
+  describe('cleanAsyncDir', () => {
+    let tmpDir
+    let origProveItDir
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_clean_'))
+      origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+    })
+
+    afterEach(() => {
+      if (origProveItDir === undefined) {
+        delete process.env.PROVE_IT_DIR
+      } else {
+        process.env.PROVE_IT_DIR = origProveItDir
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('removes async directory and its contents', () => {
+      const sessionId = 'test-clean'
+      const asyncDir = getAsyncDir(sessionId)
+      fs.mkdirSync(asyncDir, { recursive: true })
+      fs.writeFileSync(path.join(asyncDir, 'stale.json'), '{}')
+
+      cleanAsyncDir(sessionId)
+      assert.ok(!fs.existsSync(asyncDir))
+    })
+
+    it('does not throw when directory does not exist', () => {
+      assert.doesNotThrow(() => cleanAsyncDir('nonexistent-session'))
+    })
+
+    it('does nothing for null sessionId', () => {
+      assert.doesNotThrow(() => cleanAsyncDir(null))
     })
   })
 })

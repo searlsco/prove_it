@@ -65,23 +65,25 @@ describe('init', () => {
       assert.ok(allChecks.some(c => c.name === 'fast-tests'))
     })
 
-    it('code-quality-review uses type agent with promptType reference and gross churn threshold', () => {
+    it('code-quality-review uses type agent with promptType reference, async, and gross churn threshold', () => {
       const cfg = buildConfig()
       const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
       const codeQuality = allTasks.find(t => t.name === 'code-quality-review')
       assert.ok(codeQuality, 'Should have code-quality-review task')
       assert.strictEqual(codeQuality.type, 'agent')
+      assert.strictEqual(codeQuality.async, true)
       assert.strictEqual(codeQuality.promptType, 'reference')
       assert.strictEqual(codeQuality.prompt, 'review:code_quality')
       assert.strictEqual(codeQuality.when.linesWritten, 733)
     })
 
-    it('coverage-review uses type agent with promptType reference and net churn threshold', () => {
+    it('coverage-review uses type agent with promptType reference, async, and net churn threshold', () => {
       const cfg = buildConfig()
       const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
       const coverageReview = allTasks.find(t => t.name === 'coverage-review')
       assert.ok(coverageReview, 'Should have coverage-review task')
       assert.strictEqual(coverageReview.type, 'agent')
+      assert.strictEqual(coverageReview.async, true)
       assert.strictEqual(coverageReview.promptType, 'reference')
       assert.strictEqual(coverageReview.prompt, 'review:test_coverage')
       assert.strictEqual(coverageReview.when.linesChanged, 541)
