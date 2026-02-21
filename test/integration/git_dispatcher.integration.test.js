@@ -3,9 +3,9 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
-const { defaultConfig, matchGitEntries, runGitTasks } = require('../lib/dispatcher/git')
-const { readRef, churnSinceRef, sanitizeRefName } = require('../lib/git')
-const { freshRepo } = require('./helpers')
+const { defaultConfig, matchGitEntries, runGitTasks } = require('../../lib/dispatcher/git')
+const { readRef, churnSinceRef, sanitizeRefName } = require('../../lib/git')
+const { freshRepo } = require('../helpers')
 
 describe('git dispatcher', () => {
   describe('defaultConfig', () => {

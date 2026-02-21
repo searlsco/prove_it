@@ -5,7 +5,7 @@ const path = require('node:path')
 const os = require('node:os')
 const { spawnSync } = require('node:child_process')
 
-const CLI_PATH = path.join(__dirname, '..', 'cli.js')
+const CLI_PATH = path.join(__dirname, '..', '..', 'cli.js')
 
 function runDoctor (options = {}) {
   const result = spawnSync('node', [CLI_PATH, 'doctor'], {
@@ -448,7 +448,7 @@ describe('doctor', () => {
       const skillDir = path.join(tmpHome, '.claude', 'skills', 'prove')
       fs.mkdirSync(skillDir, { recursive: true })
       fs.copyFileSync(
-        path.join(__dirname, '..', 'lib', 'skills', 'prove.md'),
+        path.join(__dirname, '..', '..', 'lib', 'skills', 'prove.md'),
         path.join(skillDir, 'SKILL.md')
       )
 

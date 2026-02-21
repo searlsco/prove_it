@@ -4,8 +4,8 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
-const { gitDiffFiles, sanitizeRefName, readRef, updateRef, snapshotWorkingTree, deleteAllRefs, churnSinceRef, advanceChurnRef, readCounterBlob, writeCounterRef, readGrossCounter, incrementGross, grossChurnSince, advanceGrossSnapshot, computeWriteLines } = require('../lib/git')
-const { freshRepo } = require('./helpers')
+const { gitDiffFiles, sanitizeRefName, readRef, updateRef, snapshotWorkingTree, deleteAllRefs, churnSinceRef, advanceChurnRef, readCounterBlob, writeCounterRef, readGrossCounter, incrementGross, grossChurnSince, advanceGrossSnapshot, computeWriteLines } = require('../../lib/git')
+const { freshRepo } = require('../helpers')
 
 function setupDiffFiles (dir) {
   fs.writeFileSync(path.join(dir, 'a.js'), 'original a\n')
@@ -681,7 +681,7 @@ describe('incrementGross', () => {
   it('CAS rejects stale old-value (git update-ref with wrong expected SHA)', () => {
     // Directly verify that git update-ref fails when old-value is wrong.
     // This is the mechanism incrementGross relies on for retry.
-    const { tryRun, shellEscape } = require('../lib/io')
+    const { tryRun, shellEscape } = require('../../lib/io')
 
     incrementGross(tmpDir, 100)
     const currentSha = readRef(tmpDir, '__gross_lines')
@@ -725,7 +725,7 @@ describe('incrementGross', () => {
     const delta = 10
     const scriptFile = path.join(tmpDir, '_incr.js')
     fs.writeFileSync(scriptFile, `
-      const { incrementGross } = require(${JSON.stringify(path.join(__dirname, '..', 'lib', 'git'))});
+      const { incrementGross } = require(${JSON.stringify(path.join(__dirname, '..', '..', 'lib', 'git'))});
       incrementGross(${JSON.stringify(tmpDir)}, ${delta});
     `)
 
@@ -749,7 +749,7 @@ describe('incrementGross', () => {
     // We can't easily force 3 consecutive CAS failures in a unit test,
     // but we CAN verify the function doesn't throw even when the ref
     // is in an unexpected state. Corrupt the ref to point at a non-blob.
-    const { tryRun, shellEscape } = require('../lib/io')
+    const { tryRun, shellEscape } = require('../../lib/io')
 
     // Create the __gross ref pointing at a valid blob
     incrementGross(tmpDir, 50)

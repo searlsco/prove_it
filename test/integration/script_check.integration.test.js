@@ -3,8 +3,8 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
-const { isBuiltin, getBuiltinName, runScriptCheck } = require('../lib/checks/script')
-const { freshRepo } = require('./helpers')
+const { isBuiltin, getBuiltinName, runScriptCheck } = require('../../lib/checks/script')
+const { freshRepo } = require('../helpers')
 
 describe('script check', () => {
   describe('isBuiltin', () => {

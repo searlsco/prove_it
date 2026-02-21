@@ -5,7 +5,7 @@ const path = require('node:path')
 const os = require('node:os')
 const { spawnSync } = require('node:child_process')
 
-const CLI_PATH = path.join(__dirname, '..', 'cli.js')
+const CLI_PATH = path.join(__dirname, '..', '..', 'cli.js')
 
 function runCli (args, options = {}) {
   const result = spawnSync('node', [CLI_PATH, ...args], {
@@ -596,7 +596,7 @@ describe('install/uninstall', () => {
     const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
 
     // Write an old-style global config that is self-consistent (hash matches seed)
-    const { configHash } = require('../lib/config')
+    const { configHash } = require('../../lib/config')
     const oldConfig = { taskEnv: { OLD_VAR: '1' } }
     oldConfig.initSeed = configHash(oldConfig)
     fs.mkdirSync(path.dirname(configPath), { recursive: true })
@@ -682,7 +682,7 @@ describe('install/uninstall', () => {
 
 describe('skill source', () => {
   it('has valid frontmatter', () => {
-    const skillSource = path.join(__dirname, '..', 'lib', 'skills', 'prove.md')
+    const skillSource = path.join(__dirname, '..', '..', 'lib', 'skills', 'prove.md')
     const content = fs.readFileSync(skillSource, 'utf8')
 
     // Single opening --- (not double)

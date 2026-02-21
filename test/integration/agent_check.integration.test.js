@@ -3,8 +3,8 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
-const { defaultModel, runAgentCheck, backchannelDir, backchannelReadmePath, createBackchannel } = require('../lib/checks/agent')
-const { freshRepo } = require('./helpers')
+const { defaultModel, runAgentCheck, backchannelDir, backchannelReadmePath, createBackchannel } = require('../../lib/checks/agent')
+const { freshRepo } = require('../helpers')
 
 describe('agent check', () => {
   let tmpDir

@@ -33,9 +33,9 @@
   },
   "scripts": {
     "test": "node --test --test-reporter=dot test/*.test.js",
-    "test:integration": "node --test --test-reporter=dot test/integration/test_enforcement.integration.test.js test/integration/hook_contract.integration.test.js test/integration/core_hooks.integration.test.js test/integration/mtime_skip.integration.test.js test/integration/config_behavior.integration.test.js test/integration/reviewer_prompt.integration.test.js test/integration/session_start_types.integration.test.js test/integration/gross_churn.integration.test.js",
+    "test:integration": "node --test --test-reporter=dot $(ls test/integration/*.integration.test.js | grep -v reviewer.integration)",
     "test:reviewer": "node --test --test-reporter=dot test/integration/reviewer.integration.test.js",
-    "test:all": "node --test --test-reporter=dot test/*.test.js test/integration/*.test.js"
+    "test:all": "node --test --test-reporter=dot test/*.test.js test/integration/*.integration.test.js"
   },
   "devDependencies": {
     "standard": "^17.1.2"
