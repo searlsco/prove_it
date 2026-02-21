@@ -497,8 +497,8 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
       const entries = fs.readFileSync(path.join(sessionsDir, logFiles[0]), 'utf8')
         .trim().split('\n').filter(l => l).map(l => JSON.parse(l))
-      const taskEntry = entries.find(e => e.reviewer === 'full-tests')
-      assert.ok(taskEntry, 'Should have a log entry for full-tests')
+      const taskEntry = entries.find(e => e.reviewer === 'full-tests' && e.status !== 'RUNNING')
+      assert.ok(taskEntry, 'Should have a non-RUNNING log entry for full-tests')
       assert.strictEqual(typeof taskEntry.durationMs, 'number',
         `durationMs should be a number, got ${typeof taskEntry.durationMs}`)
       assert.ok(taskEntry.durationMs >= 0,

@@ -952,9 +952,13 @@ function cmdMonitor () {
   const args = process.argv.slice(3)
 
   const all = args.includes('--all')
+  const list = args.includes('--list')
+  const showSession = args.includes('--sessions')
+  const statusArg = args.find(a => a.startsWith('--status='))
+  const statusFilter = statusArg ? statusArg.slice('--status='.length).split(',').map(s => s.trim().toUpperCase()) : null
   const sessionId = args.find(a => !a.startsWith('--')) || null
 
-  monitor({ all, sessionId })
+  monitor({ all, list, showSession, statusFilter, sessionId })
 }
 
 // ============================================================================
@@ -982,9 +986,12 @@ Commands:
   -v, --version  Show version number
 
 Monitor options:
-  prove_it monitor             Tail most recent session
-  prove_it monitor --all       Tail all sessions and project logs
-  prove_it monitor <id>        Tail a specific session (prefix match OK)
+  prove_it monitor                     Tail most recent session
+  prove_it monitor --all               Tail all sessions and project logs
+  prove_it monitor --all --sessions    Show session IDs
+  prove_it monitor --list              List all sessions
+  prove_it monitor --status=FAIL,CRASH Filter by status
+  prove_it monitor <id>                Tail a specific session (prefix match OK)
 
 Record options:
   --name <name>    Check name to record (must match hook config)

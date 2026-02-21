@@ -376,10 +376,13 @@ describe('agent check', () => {
 
 describe('backchannel', () => {
   let tmpDir
+  let origProveItDir
   const sessionId = 'test-session-abc123'
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_bc_test_'))
+    origProveItDir = process.env.PROVE_IT_DIR
+    process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
     spawnSync('git', ['init'], { cwd: tmpDir })
     spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: tmpDir })
     spawnSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir })
@@ -389,6 +392,11 @@ describe('backchannel', () => {
   })
 
   afterEach(() => {
+    if (origProveItDir === undefined) {
+      delete process.env.PROVE_IT_DIR
+    } else {
+      process.env.PROVE_IT_DIR = origProveItDir
+    }
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
 
@@ -488,6 +496,116 @@ describe('backchannel', () => {
       'Prompt should contain backchannel content')
     assert.ok(captured.includes('--- End Developer Backchannel ---'),
       'Prompt should contain backchannel footer')
+  })
+
+  it('logs RUNNING entry before reviewer execution', () => {
+    const reviewerPath = path.join(tmpDir, 'pass_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS: all good"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId, toolInput: null, testOutput: '' }
+    )
+
+    const logFile = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sessionId}.jsonl`)
+    assert.ok(fs.existsSync(logFile), `Log file should exist at ${logFile}`)
+    const entries = fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    assert.strictEqual(entries.length, 2)
+    assert.strictEqual(entries[0].status, 'RUNNING')
+    assert.strictEqual(entries[0].reviewer, 'test-review')
+    assert.strictEqual(entries[1].status, 'PASS')
+    assert.strictEqual(entries[1].reviewer, 'test-review')
+  })
+
+  it('logs RUNNING then FAIL when reviewer fails', () => {
+    const reviewerPath = path.join(tmpDir, 'fail_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "FAIL: bad code"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId, toolInput: null, testOutput: '' }
+    )
+
+    const logFile = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sessionId}.jsonl`)
+    const entries = fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    assert.strictEqual(entries[0].status, 'RUNNING')
+    assert.strictEqual(entries[entries.length - 1].status, 'FAIL')
+  })
+
+  it('includes hookEvent in RUNNING entry', () => {
+    const reviewerPath = path.join(tmpDir, 'pass_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId, toolInput: null, testOutput: '', hookEvent: 'Stop' }
+    )
+
+    const logFile = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sessionId}.jsonl`)
+    const entries = fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    const running = entries.find(e => e.status === 'RUNNING')
+    assert.ok(running, 'Should have a RUNNING entry')
+    assert.strictEqual(running.hookEvent, 'Stop')
+  })
+
+  it('includes triggerProgress in RUNNING entry when present on context', () => {
+    const reviewerPath = path.join(tmpDir, 'pass_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId, toolInput: null, testOutput: '', _triggerProgress: 'linesChanged: 512/500' }
+    )
+
+    const logFile = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sessionId}.jsonl`)
+    const entries = fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    const running = entries.find(e => e.status === 'RUNNING')
+    assert.ok(running, 'Should have a RUNNING entry')
+    assert.strictEqual(running.triggerProgress, 'linesChanged: 512/500')
+  })
+
+  it('logs APPEAL entry when backchannel exists', () => {
+    const bcDir = backchannelDir(tmpDir, sessionId, 'test-review')
+    fs.mkdirSync(bcDir, { recursive: true })
+    fs.writeFileSync(path.join(bcDir, 'README.md'), 'I am doing planning work.\n')
+
+    const reviewerPath = path.join(tmpDir, 'pass_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS: acknowledged"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId, toolInput: null, testOutput: '' }
+    )
+
+    const logFile = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sessionId}.jsonl`)
+    assert.ok(fs.existsSync(logFile), `Log file should exist at ${logFile}`)
+    const entries = fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    const appealEntry = entries.find(e => e.status === 'APPEAL')
+    assert.ok(appealEntry, 'Should have an APPEAL entry')
+    assert.strictEqual(appealEntry.reviewer, 'test-review')
+    assert.strictEqual(appealEntry.reason, 'appealed via backchannel')
+  })
+
+  it('does not log APPEAL when no backchannel exists', () => {
+    const reviewerPath = path.join(tmpDir, 'pass_reviewer.sh')
+    fs.writeFileSync(reviewerPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS"\n')
+    fs.chmodSync(reviewerPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      { rootDir: tmpDir, projectDir: tmpDir, sessionId, toolInput: null, testOutput: '' }
+    )
+
+    const logFile = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sessionId}.jsonl`)
+    assert.ok(fs.existsSync(logFile), `Log file should exist at ${logFile}`)
+    const entries = fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    const appealEntry = entries.find(e => e.status === 'APPEAL')
+    assert.strictEqual(appealEntry, undefined, 'Should not have an APPEAL entry')
   })
 
   it('no backchannel section in prompt when none exists', () => {

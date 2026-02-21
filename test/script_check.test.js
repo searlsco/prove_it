@@ -350,10 +350,11 @@ describe('script check', () => {
         )
 
         const entries = readLogEntries(SESSION_ID)
-        assert.strictEqual(entries.length, 1)
-        assert.strictEqual(entries[0].status, 'PASS')
-        assert.strictEqual(entries[0].reviewer, 'my-test')
-        assert.ok(entries[0].reason.includes('passed'))
+        assert.strictEqual(entries.length, 2)
+        assert.strictEqual(entries[0].status, 'RUNNING')
+        assert.strictEqual(entries[1].status, 'PASS')
+        assert.strictEqual(entries[1].reviewer, 'my-test')
+        assert.ok(entries[1].reason.includes('passed'))
       })
 
       it('logs FAIL when script fails', () => {
@@ -368,9 +369,10 @@ describe('script check', () => {
         )
 
         const entries = readLogEntries(SESSION_ID)
-        assert.strictEqual(entries.length, 1)
-        assert.strictEqual(entries[0].status, 'FAIL')
-        assert.ok(entries[0].reason.includes('failed'))
+        assert.strictEqual(entries.length, 2)
+        assert.strictEqual(entries[0].status, 'RUNNING')
+        assert.strictEqual(entries[1].status, 'FAIL')
+        assert.ok(entries[1].reason.includes('failed'))
       })
 
       it('logs FAIL when script not found', () => {
@@ -385,7 +387,7 @@ describe('script check', () => {
         assert.ok(entries[0].reason.includes('Script not found'))
       })
 
-      it('logs SKIP for cached pass', () => {
+      it('logs SKIP for cached pass (no RUNNING entry)', () => {
         const scriptPath = path.join(tmpDir, 'script', 'test')
         fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
         fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nexit 0\n')
@@ -409,8 +411,10 @@ describe('script check', () => {
         )
 
         const entries = readLogEntries(SESSION_ID)
-        assert.strictEqual(entries.length, 1)
+        assert.strictEqual(entries.length, 1, 'Cached skip should not emit RUNNING')
         assert.strictEqual(entries[0].status, 'SKIP')
+        assert.ok(!entries.some(e => e.status === 'RUNNING'),
+          'RUNNING must not appear for mtime-cached results')
         assert.ok(entries[0].reason.includes('cached pass'))
       })
 

@@ -85,16 +85,29 @@ describe('init', () => {
       const cfg = buildConfig()
       assert.ok(cfg.enabled)
       assert.ok(Array.isArray(cfg.hooks))
+      // Should have SessionStart hook
+      assert.ok(cfg.hooks.some(h => h.type === 'claude' && h.event === 'SessionStart'),
+        'Should have SessionStart hook entry')
       // Should have git hooks
       assert.ok(cfg.hooks.some(h => h.type === 'git' && h.event === 'pre-commit'))
       assert.ok(!cfg.hooks.some(h => h.type === 'git' && h.event === 'pre-push'))
       // Should have default checks
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
+      assert.ok(allChecks.some(c => c.name === 'session-briefing'),
+        'Should have session-briefing task')
       assert.ok(allChecks.some(c => c.name === 'code-quality-review'))
       assert.ok(allChecks.some(c => c.name === 'coverage-review'))
       // commit-review and ensure-tests should NOT be in defaults
       assert.ok(!allChecks.some(c => c.name === 'commit-review'))
       assert.ok(!allChecks.some(c => c.name === 'ensure-tests'))
+    })
+
+    it('SessionStart entry is first in hooks array', () => {
+      const cfg = buildConfig()
+      assert.strictEqual(cfg.hooks[0].event, 'SessionStart',
+        'SessionStart should be the first hook entry')
+      assert.strictEqual(cfg.hooks[0].tasks[0].name, 'session-briefing')
+      assert.strictEqual(cfg.hooks[0].tasks[0].command, 'prove_it run_builtin session:briefing')
     })
 
     it('omits git hooks when gitHooks is false', () => {

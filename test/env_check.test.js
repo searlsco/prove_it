@@ -241,11 +241,12 @@ describe('runEnvTask', () => {
       )
 
       const entries = readLogEntries(SESSION_ID)
-      assert.strictEqual(entries.length, 1)
-      assert.strictEqual(entries[0].status, 'PASS')
-      assert.strictEqual(entries[0].reviewer, 'test-env')
-      assert.ok(entries[0].reason.includes('FOO'))
-      assert.ok(entries[0].reason.includes('BAZ'))
+      assert.strictEqual(entries.length, 2)
+      assert.strictEqual(entries[0].status, 'RUNNING')
+      assert.strictEqual(entries[1].status, 'PASS')
+      assert.strictEqual(entries[1].reviewer, 'test-env')
+      assert.ok(entries[1].reason.includes('FOO'))
+      assert.ok(entries[1].reason.includes('BAZ'))
     })
 
     it('logs PASS with "no vars" for empty output', () => {
@@ -259,9 +260,10 @@ describe('runEnvTask', () => {
       )
 
       const entries = readLogEntries(SESSION_ID)
-      assert.strictEqual(entries.length, 1)
-      assert.strictEqual(entries[0].status, 'PASS')
-      assert.strictEqual(entries[0].reason, 'no vars')
+      assert.strictEqual(entries.length, 2)
+      assert.strictEqual(entries[0].status, 'RUNNING')
+      assert.strictEqual(entries[1].status, 'PASS')
+      assert.strictEqual(entries[1].reason, 'no vars')
     })
 
     it('logs FAIL when command fails', () => {
@@ -275,9 +277,10 @@ describe('runEnvTask', () => {
       )
 
       const entries = readLogEntries(SESSION_ID)
-      assert.strictEqual(entries.length, 1)
-      assert.strictEqual(entries[0].status, 'FAIL')
-      assert.ok(entries[0].reason.includes('failed (exit 1)'))
+      assert.strictEqual(entries.length, 2)
+      assert.strictEqual(entries[0].status, 'RUNNING')
+      assert.strictEqual(entries[1].status, 'FAIL')
+      assert.ok(entries[1].reason.includes('failed (exit 1)'))
     })
 
     it('logs FAIL when output is unparseable', () => {
@@ -291,9 +294,10 @@ describe('runEnvTask', () => {
       )
 
       const entries = readLogEntries(SESSION_ID)
-      assert.strictEqual(entries.length, 1)
-      assert.strictEqual(entries[0].status, 'FAIL')
-      assert.ok(entries[0].reason.includes('failed to parse env output'))
+      assert.strictEqual(entries.length, 2)
+      assert.strictEqual(entries[0].status, 'RUNNING')
+      assert.strictEqual(entries[1].status, 'FAIL')
+      assert.ok(entries[1].reason.includes('failed to parse env output'))
     })
   })
 })

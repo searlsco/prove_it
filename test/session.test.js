@@ -208,6 +208,27 @@ describe('session state functions', () => {
       const entry = JSON.parse(fs.readFileSync(logFile, 'utf8').trim().split('\n').pop())
       assert.strictEqual('durationMs' in entry, false)
     })
+
+    it('includes hookEvent when provided', () => {
+      logReview(SESSION_ID, '/project', 'fast-tests', 'PASS', 'OK', 1234, 'Stop')
+      const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${SESSION_ID}.jsonl`)
+      const entry = JSON.parse(fs.readFileSync(logFile, 'utf8').trim().split('\n').pop())
+      assert.strictEqual(entry.hookEvent, 'Stop')
+    })
+
+    it('omits hookEvent when not provided', () => {
+      logReview(SESSION_ID, '/project', 'fast-tests', 'PASS', 'OK', 1234)
+      const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${SESSION_ID}.jsonl`)
+      const entry = JSON.parse(fs.readFileSync(logFile, 'utf8').trim().split('\n').pop())
+      assert.strictEqual('hookEvent' in entry, false)
+    })
+
+    it('includes extra fields when provided', () => {
+      logReview(SESSION_ID, '/project', 'commit-review', 'SKIP', 'skipped', null, 'Stop', { triggerProgress: 'linesChanged: 388/500' })
+      const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${SESSION_ID}.jsonl`)
+      const entry = JSON.parse(fs.readFileSync(logFile, 'utf8').trim().split('\n').pop())
+      assert.strictEqual(entry.triggerProgress, 'linesChanged: 388/500')
+    })
   })
 
   describe('getLatestSnapshot', () => {

@@ -89,6 +89,27 @@ describe('builtins', () => {
     })
   })
 
+  describe('session:briefing', () => {
+    const sessionBriefing = builtins['session:briefing']
+
+    it('returns pass with briefing text', () => {
+      const result = sessionBriefing({}, {
+        projectDir: process.cwd(),
+        rootDir: process.cwd()
+      })
+      assert.strictEqual(result.pass, true)
+      assert.ok(result.reason.includes('prove_it'), 'should contain prove_it in briefing')
+    })
+
+    it('always passes even with invalid projectDir', () => {
+      const result = sessionBriefing({}, {
+        projectDir: '/nonexistent/path',
+        rootDir: '/nonexistent/path'
+      })
+      assert.strictEqual(result.pass, true)
+    })
+  })
+
   describe('BUILTIN_PROMPTS', () => {
     const { BUILTIN_PROMPTS } = builtins
 
@@ -132,7 +153,8 @@ describe('builtins', () => {
 
   describe('exports all expected builtins', () => {
     const expectedFunctions = [
-      'config:lock'
+      'config:lock',
+      'session:briefing'
     ]
 
     for (const name of expectedFunctions) {
