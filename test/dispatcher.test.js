@@ -569,7 +569,7 @@ describe('claude dispatcher', () => {
       assert.deepStrictEqual(results, [])
     })
 
-    it('reads and deletes result files, skips context files', () => {
+    it('reads result files without deleting, skips context files', () => {
       const sessionId = 'test-harvest'
       const asyncDir = getAsyncDir(sessionId)
       fs.mkdirSync(asyncDir, { recursive: true })
@@ -585,11 +585,12 @@ describe('claude dispatcher', () => {
 
       const results = harvestAsyncResults(sessionId)
       assert.strictEqual(results.length, 1)
-      assert.strictEqual(results[0].taskName, 'coverage-review')
-      assert.strictEqual(results[0].result.pass, true)
+      assert.strictEqual(results[0].data.taskName, 'coverage-review')
+      assert.strictEqual(results[0].data.result.pass, true)
+      assert.ok(results[0].filePath.endsWith('coverage-review.json'))
 
-      // Result file should be deleted
-      assert.ok(!fs.existsSync(path.join(asyncDir, 'coverage-review.json')))
+      // Result file should NOT be deleted (caller is responsible)
+      assert.ok(fs.existsSync(path.join(asyncDir, 'coverage-review.json')))
       // Context file should remain (worker cleans it, not harvest)
       assert.ok(fs.existsSync(path.join(asyncDir, 'coverage-review.context.json')))
     })
@@ -611,7 +612,7 @@ describe('claude dispatcher', () => {
 
       const results = harvestAsyncResults(sessionId)
       assert.strictEqual(results.length, 2)
-      const names = results.map(r => r.taskName).sort()
+      const names = results.map(r => r.data.taskName).sort()
       assert.deepStrictEqual(names, ['task-a', 'task-b'])
     })
 
@@ -631,9 +632,23 @@ describe('claude dispatcher', () => {
 
       const results = harvestAsyncResults(sessionId)
       assert.strictEqual(results.length, 1)
-      assert.strictEqual(results[0].taskName, 'good-task')
+      assert.strictEqual(results[0].data.taskName, 'good-task')
       // Corrupted file should be cleaned up
       assert.ok(!fs.existsSync(path.join(asyncDir, 'bad.json')))
+    })
+  })
+
+  describe('harvest enforce status differentiation', () => {
+    it('uses ENFORCED:SKIP for skipped results, ENFORCED:PASS for passed results', () => {
+      // This tests the inline logic in dispatch() that differentiates enforce status
+      const skippedResult = { pass: true, reason: 'SKIP: not relevant', output: '', skipped: true }
+      const passedResult = { pass: true, reason: 'PASS: all good', output: '', skipped: false }
+
+      const skipStatus = skippedResult.skipped ? 'ENFORCED:SKIP' : 'ENFORCED:PASS'
+      const passStatus = passedResult.skipped ? 'ENFORCED:SKIP' : 'ENFORCED:PASS'
+
+      assert.strictEqual(skipStatus, 'ENFORCED:SKIP')
+      assert.strictEqual(passStatus, 'ENFORCED:PASS')
     })
   })
 

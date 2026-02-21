@@ -167,6 +167,70 @@ describe('async task lifecycle', () => {
     assert.ok(!fs.existsSync(asyncDir), 'Async dir should be cleaned on startup')
   })
 
+  it('second async failure survives when first blocks', () => {
+    // Two async tasks, both failing
+    for (const name of ['check-a', 'check-b']) {
+      const scriptPath = path.join(projectDir, 'script', name)
+      createFile(projectDir, `script/${name}`, `#!/usr/bin/env bash\necho "${name} failed" >&2\nexit 1\n`)
+      makeExecutable(scriptPath)
+    }
+
+    writeConfig(projectDir, makeConfig([
+      {
+        type: 'claude',
+        event: 'Stop',
+        tasks: [
+          { name: 'check-a', type: 'script', async: true, command: './script/check-a' },
+          { name: 'check-b', type: 'script', async: true, command: './script/check-b' }
+        ]
+      }
+    ]))
+
+    const sessionId = 'test-async-multi-fail-' + Date.now()
+    const asyncDir = path.join(env.PROVE_IT_DIR, 'sessions', sessionId, 'async')
+
+    // First Stop: spawns both async tasks
+    invokeHook('claude:Stop', {
+      hook_event_name: 'Stop',
+      session_id: sessionId
+    }, { projectDir, env })
+
+    // Wait for both results
+    for (let i = 0; i < 50; i++) {
+      const sab = new SharedArrayBuffer(4)
+      Atomics.wait(new Int32Array(sab), 0, 0, 100)
+      try {
+        const files = fs.readdirSync(asyncDir).filter(f => f.endsWith('.json') && !f.endsWith('.context.json'))
+        if (files.length >= 2) break
+      } catch {}
+    }
+
+    // Second Stop: blocks on first failure
+    const r2 = invokeHook('claude:Stop', {
+      hook_event_name: 'Stop',
+      session_id: sessionId
+    }, { projectDir, env })
+
+    assert.strictEqual(r2.output.decision, 'block')
+
+    // One file should be consumed, the other should survive for next harvest
+    const remaining = fs.readdirSync(asyncDir).filter(f => f.endsWith('.json') && !f.endsWith('.context.json'))
+    assert.strictEqual(remaining.length, 1,
+      `Expected 1 surviving result file, got ${remaining.length}: ${remaining.join(', ')}`)
+
+    // Third Stop: blocks on the surviving failure
+    const r3 = invokeHook('claude:Stop', {
+      hook_event_name: 'Stop',
+      session_id: sessionId
+    }, { projectDir, env })
+
+    assert.strictEqual(r3.output.decision, 'block', 'Third Stop should block on second failure')
+
+    // Now both are consumed
+    const finalRemaining = fs.readdirSync(asyncDir).filter(f => f.endsWith('.json') && !f.endsWith('.context.json'))
+    assert.strictEqual(finalRemaining.length, 0, 'All result files should be consumed')
+  })
+
   it('async: true on SessionStart tasks is ignored (runs synchronously)', () => {
     writeConfig(projectDir, makeConfig([
       {
