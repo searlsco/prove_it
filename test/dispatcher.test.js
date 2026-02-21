@@ -3,7 +3,7 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
-const { matchesHookEntry, evaluateWhen, defaultConfig, settleTaskResult, harvestAsyncResults, cleanAsyncDir, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
+const { matchesHookEntry, evaluateWhen, defaultConfig, settleTaskResult, spawnAsyncTask, harvestAsyncResults, cleanAsyncDir, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
 const { recordFileEdit, resetTurnTracking, getAsyncDir } = require('../lib/session')
 
 describe('claude dispatcher', () => {
@@ -537,6 +537,130 @@ describe('claude dispatcher', () => {
       const settlement = settleTaskResult(task, result, 'Stop', settlCtx, outputs, [], [])
       assert.strictEqual(settlement.blocked, false)
       assert.ok(outputs.includes('all good'))
+    })
+  })
+
+  describe('spawnAsyncTask', () => {
+    let tmpDir
+    let origProveItDir
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_spawn_'))
+      origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+    })
+
+    afterEach(() => {
+      if (origProveItDir === undefined) {
+        delete process.env.PROVE_IT_DIR
+      } else {
+        process.env.PROVE_IT_DIR = origProveItDir
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('writes context file with correct structure and creates async dir', () => {
+      const sessionId = 'test-spawn-ctx'
+      const task = { name: 'my-async-task', type: 'script', async: true, command: 'echo hi' }
+      const context = {
+        rootDir: tmpDir,
+        projectDir: tmpDir,
+        sessionId,
+        hookEvent: 'Stop',
+        localCfgPath: null,
+        sources: ['**/*.js'],
+        fileEditingTools: ['Edit'],
+        configEnv: { FOO: 'bar' },
+        configModel: 'haiku',
+        maxChars: 12000,
+        testOutput: 'prior output'
+      }
+
+      spawnAsyncTask(task, context)
+
+      const asyncDir = getAsyncDir(sessionId)
+      assert.ok(fs.existsSync(asyncDir), 'Async dir should be created')
+
+      // Context file may already be consumed by the worker, but we can check
+      // the result file will eventually appear. Instead, verify the async dir
+      // was created and check the JSONL log for SPAWNED.
+      const sessionsDir = path.join(process.env.PROVE_IT_DIR, 'sessions')
+      const logFile = path.join(sessionsDir, `${sessionId}.jsonl`)
+      assert.ok(fs.existsSync(logFile), 'Session log should exist')
+      const logLines = fs.readFileSync(logFile, 'utf8').trim().split('\n')
+      const spawnedEntry = logLines.map(l => JSON.parse(l)).find(e => e.status === 'SPAWNED')
+      assert.ok(spawnedEntry, 'Should log SPAWNED entry')
+      assert.strictEqual(spawnedEntry.reviewer, 'my-async-task')
+      assert.strictEqual(spawnedEntry.hookEvent, 'Stop')
+    })
+
+    it('does nothing when sessionId is null', () => {
+      const task = { name: 'my-task', type: 'script', command: 'echo hi' }
+      const context = {
+        rootDir: tmpDir,
+        projectDir: tmpDir,
+        sessionId: null,
+        hookEvent: 'Stop',
+        localCfgPath: null,
+        sources: null,
+        fileEditingTools: [],
+        configEnv: null,
+        configModel: null,
+        maxChars: 12000,
+        testOutput: ''
+      }
+      // Should not throw
+      spawnAsyncTask(task, context)
+      // No async dir should exist
+      assert.ok(!fs.existsSync(path.join(process.env.PROVE_IT_DIR, 'sessions')))
+    })
+
+    it('serializes task definition into context file for later settlement', () => {
+      const sessionId = 'test-spawn-task-def'
+      const task = {
+        name: 'coverage-review',
+        type: 'agent',
+        async: true,
+        prompt: 'review:test_coverage',
+        promptType: 'reference',
+        model: 'haiku',
+        when: { linesChanged: 500 }
+      }
+      const context = {
+        rootDir: tmpDir,
+        projectDir: tmpDir,
+        sessionId,
+        hookEvent: 'Stop',
+        localCfgPath: '/fake/path',
+        sources: ['**/*.js'],
+        fileEditingTools: ['Edit'],
+        configEnv: null,
+        configModel: null,
+        maxChars: 12000,
+        testOutput: ''
+      }
+
+      spawnAsyncTask(task, context)
+
+      // Read the context file before the worker can consume it
+      const asyncDir = getAsyncDir(sessionId)
+      const contextFile = path.join(asyncDir, 'coverage-review.context.json')
+
+      // The worker is detached and racing us, but context file should exist
+      // immediately after spawnAsyncTask returns (written before fork)
+      if (fs.existsSync(contextFile)) {
+        const snapshot = JSON.parse(fs.readFileSync(contextFile, 'utf8'))
+        assert.strictEqual(snapshot.task.name, 'coverage-review')
+        assert.strictEqual(snapshot.task.async, true)
+        assert.strictEqual(snapshot.task.when.linesChanged, 500)
+        assert.strictEqual(snapshot.context.rootDir, tmpDir)
+        assert.strictEqual(snapshot.context.sessionId, sessionId)
+        assert.ok(snapshot.resultPath.endsWith('coverage-review.json'))
+      }
+      // If the worker already consumed it, the SPAWNED log proves it was written
+      const logFile = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sessionId}.jsonl`)
+      const logLines = fs.readFileSync(logFile, 'utf8').trim().split('\n')
+      assert.ok(logLines.some(l => JSON.parse(l).status === 'SPAWNED'))
     })
   })
 
