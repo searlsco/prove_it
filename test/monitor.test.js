@@ -594,6 +594,30 @@ describe('monitor', () => {
       const files = findProjectLogFiles(path.join(tmpDir, 'nonexistent'), '/some/project')
       assert.strictEqual(files.length, 0)
     })
+
+    it('finds project log when given a relative path', () => {
+      const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
+      fs.mkdirSync(sessionsDir, { recursive: true })
+
+      // Simulate what session.js does: hash the absolute project dir.
+      // Use fs.realpathSync to resolve symlinks (e.g. /tmp → /private/tmp on macOS)
+      // so the hash matches what path.resolve produces from a chdir'd CWD.
+      const realTmpDir = fs.realpathSync(tmpDir)
+      const absoluteDir = path.join(realTmpDir, 'myproject')
+      const hash = projectHash(absoluteDir)
+      fs.writeFileSync(path.join(sessionsDir, `_project_${hash}.jsonl`), '{"at":1}\n')
+
+      // Look up using a relative path that resolves to the same absolute path
+      const origCwd = process.cwd()
+      process.chdir(realTmpDir)
+      try {
+        const files = findProjectLogFiles(sessionsDir, './myproject')
+        assert.strictEqual(files.length, 1, 'Should find project log via relative path')
+        assert.ok(files[0].includes(`_project_${hash}.jsonl`))
+      } finally {
+        process.chdir(origCwd)
+      }
+    })
   })
 
   describe('listSessions with project filter', () => {
