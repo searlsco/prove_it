@@ -26,6 +26,7 @@ describe('init', () => {
         'Should have session-briefing task')
       assert.ok(allChecks.some(c => c.name === 'code-quality-review'))
       assert.ok(allChecks.some(c => c.name === 'coverage-review'))
+      assert.ok(allChecks.some(c => c.name === 'signal-review'))
       // commit-review and ensure-tests should NOT be in defaults
       assert.ok(!allChecks.some(c => c.name === 'commit-review'))
       assert.ok(!allChecks.some(c => c.name === 'ensure-tests'))
@@ -51,6 +52,7 @@ describe('init', () => {
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
       assert.ok(!allChecks.some(c => c.name === 'code-quality-review'))
       assert.ok(!allChecks.some(c => c.name === 'coverage-review'))
+      assert.ok(!allChecks.some(c => c.name === 'signal-review'))
     })
 
     it('returns base-only config with both features off', () => {
@@ -60,6 +62,7 @@ describe('init', () => {
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
       assert.ok(!allChecks.some(c => c.name === 'code-quality-review'))
       assert.ok(!allChecks.some(c => c.name === 'coverage-review'))
+      assert.ok(!allChecks.some(c => c.name === 'signal-review'))
       // Should still have base checks
       assert.ok(allChecks.some(c => c.name === 'lock-config'))
       assert.ok(allChecks.some(c => c.name === 'fast-tests'))
@@ -89,7 +92,7 @@ describe('init', () => {
       assert.strictEqual(coverageReview.when.linesChanged, 541)
     })
 
-    it('code-quality-review and coverage-review are both in Stop entry', () => {
+    it('all default agent tasks are in Stop entry', () => {
       const cfg = buildConfig()
       const stopEntry = cfg.hooks.find(h => h.type === 'claude' && h.event === 'Stop')
       assert.ok(stopEntry, 'Should have Stop entry')
@@ -97,13 +100,28 @@ describe('init', () => {
         'code-quality-review should be in Stop entry')
       assert.ok(stopEntry.tasks.some(t => t.name === 'coverage-review'),
         'coverage-review should be in Stop entry')
+      assert.ok(stopEntry.tasks.some(t => t.name === 'signal-review'),
+        'signal-review should be in Stop entry')
+    })
+
+    it('signal-review uses signal when condition and is synchronous', () => {
+      const cfg = buildConfig()
+      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
+      const signalReview = allTasks.find(t => t.name === 'signal-review')
+      assert.ok(signalReview, 'Should have signal-review task')
+      assert.strictEqual(signalReview.type, 'agent')
+      assert.strictEqual(signalReview.promptType, 'reference')
+      assert.strictEqual(signalReview.prompt, 'review:code_quality')
+      assert.deepStrictEqual(signalReview.when, { signal: 'done' })
+      assert.strictEqual(signalReview.async, undefined,
+        'signal-review should be synchronous (no async property)')
     })
 
     it('all default agent tasks include ruleFile', () => {
       const cfg = buildConfig()
       const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
       const agentTasks = allTasks.filter(t => t.type === 'agent')
-      assert.ok(agentTasks.length >= 2, 'Should have at least 2 agent tasks')
+      assert.ok(agentTasks.length >= 3, 'Should have at least 3 agent tasks')
       for (const task of agentTasks) {
         assert.strictEqual(task.ruleFile, '.claude/rules/testing.md',
           `Agent task "${task.name}" should have ruleFile set`)
