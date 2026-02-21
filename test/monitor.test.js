@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 
-const { findLatestSession, listSessions, findProjectLogFiles, projectHash, formatEntry, formatVerbose, formatTime, formatDuration, useColor, stripAnsi, visualWidth } = require('../lib/monitor')
+const { findLatestSession, listSessions, findProjectLogFiles, projectHash, formatEntry, formatVerbose, formatTime, formatDuration, useColor, stripAnsi, visualWidth, normalizeHookTag, middleTruncatePath, truncateReason, progressiveTruncate } = require('../lib/monitor')
 
 describe('monitor', () => {
   let tmpDir
@@ -95,10 +95,10 @@ describe('monitor', () => {
   })
 
   describe('formatTime', () => {
-    it('formats epoch millis as HH:MM:SS', () => {
+    it('formats epoch millis as HH:MM', () => {
       const result = formatTime(0)
-      // Just check it matches HH:MM:SS pattern (timezone-dependent)
-      assert.match(result, /^\d{2}:\d{2}:\d{2}$/)
+      // Just check it matches HH:MM pattern (timezone-dependent)
+      assert.match(result, /^\d{2}:\d{2}$/)
     })
   })
 
@@ -162,20 +162,20 @@ describe('monitor', () => {
       assert.ok(line.includes('unknown'))
     })
 
-    it('includes or omits hookEvent in parens based on presence', () => {
+    it('shows hook tag as lowercase kebab-case at end of line', () => {
       const base = { at: Date.now(), reviewer: 'fast-tests', status: 'PASS', reason: 'OK' }
 
       const withStop = formatEntry({ ...base, hookEvent: 'Stop' })
-      assert.ok(withStop.includes('(Stop)'), `Expected (Stop) in: ${withStop}`)
+      assert.ok(withStop.includes('stop'), `Expected stop in: ${withStop}`)
 
       const withPreCommit = formatEntry({ ...base, hookEvent: 'pre-commit' })
-      assert.ok(withPreCommit.includes('(pre-commit)'), `Expected (pre-commit) in: ${withPreCommit}`)
+      assert.ok(withPreCommit.includes('pre-commit'), `Expected pre-commit in: ${withPreCommit}`)
 
       const without = formatEntry(base)
-      assert.ok(!without.includes('('), `Should not have parens in: ${without}`)
+      assert.ok(!without.includes('stop'), `Should not have hook tag in: ${without}`)
     })
 
-    it('pads RUNNING status to 7 chars', () => {
+    it('displays RUNNING as EXEC', () => {
       const entry = {
         at: Date.now(),
         reviewer: 'fast-tests',
@@ -183,7 +183,8 @@ describe('monitor', () => {
         reason: 'starting'
       }
       const line = formatEntry(entry)
-      assert.ok(line.includes('RUNNING'), `Expected RUNNING in: ${line}`)
+      assert.ok(line.includes('EXEC'), `Expected EXEC in: ${line}`)
+      assert.ok(!line.includes('RUNNING'), `Should not show RUNNING in: ${line}`)
     })
 
     it('formats APPEAL status', () => {
@@ -199,34 +200,20 @@ describe('monitor', () => {
       assert.ok(line.includes('appealed via backchannel'), `Expected reason in: ${line}`)
     })
 
-    it('includes or omits triggerProgress based on presence', () => {
-      const withProgress = formatEntry({
+    it('does not display triggerProgress', () => {
+      const entry = {
         at: Date.now(),
         reviewer: 'commit-review',
         status: 'SKIP',
-        reason: 'Skipped because only 388 of 500 lines changed',
+        reason: 'Skipped',
         triggerProgress: 'linesChanged: 388/500'
-      })
-      assert.ok(withProgress.includes('{linesChanged: 388/500}'), `Expected trigger progress in: ${withProgress}`)
-
-      const withRunning = formatEntry({
-        at: Date.now(),
-        reviewer: 'commit-review',
-        status: 'RUNNING',
-        triggerProgress: 'linesWritten: 512/500'
-      })
-      assert.ok(withRunning.includes('{linesWritten: 512/500}'), `Expected trigger progress in: ${withRunning}`)
-
-      const without = formatEntry({
-        at: Date.now(),
-        reviewer: 'fast-tests',
-        status: 'PASS',
-        reason: 'OK'
-      })
-      assert.ok(!without.includes('{'), `Should not have trigger progress in: ${without}`)
+      }
+      const line = formatEntry(entry)
+      assert.ok(!line.includes('linesChanged'), `Should not show triggerProgress: ${line}`)
+      assert.ok(line.includes('Skipped'), `Should show reason: ${line}`)
     })
 
-    it('includes or omits duration bracket based on durationMs presence', () => {
+    it('shows plain duration without brackets', () => {
       const withDuration = formatEntry({
         at: Date.now(),
         reviewer: 'fast-tests',
@@ -234,7 +221,8 @@ describe('monitor', () => {
         reason: 'OK',
         durationMs: 3200
       })
-      assert.ok(withDuration.includes('[3.2s]'), `Expected [3.2s] in: ${withDuration}`)
+      assert.ok(withDuration.includes('3.2s'), `Expected 3.2s in: ${withDuration}`)
+      assert.ok(!withDuration.includes('[3.2s]'), `Should not have brackets around duration: ${withDuration}`)
 
       const without = formatEntry({
         at: Date.now(),
@@ -242,7 +230,7 @@ describe('monitor', () => {
         status: 'PASS',
         reason: 'OK'
       })
-      assert.ok(!without.includes('['), `Should not have duration bracket in: ${without}`)
+      assert.ok(!without.includes('3.2s'), `Should not have duration in: ${without}`)
     })
   })
 
@@ -758,6 +746,104 @@ describe('monitor', () => {
       const args = ['--all']
       const verbose = args.includes('--verbose')
       assert.strictEqual(verbose, false)
+    })
+  })
+
+  describe('normalizeHookTag', () => {
+    ;[
+      ['Stop', 'stop'],
+      ['PreToolUse', 'pre-tool-use'],
+      ['SessionStart', 'session-start'],
+      ['pre-commit', 'pre-commit'],
+      ['pre-push', 'pre-push']
+    ].forEach(([input, expected]) => {
+      it(`converts ${input} to ${expected}`, () => {
+        assert.strictEqual(normalizeHookTag(input), expected)
+      })
+    })
+  })
+
+  describe('middleTruncatePath', () => {
+    it('returns path unchanged if it fits', () => {
+      assert.strictEqual(middleTruncatePath('/foo/bar.js', 20), '/foo/bar.js')
+    })
+
+    it('keeps start and filename with ellipsis in middle', () => {
+      const result = middleTruncatePath('/var/folders/long/path/to/file.js', 20)
+      assert.ok(result.length <= 20, `Should be <= 20 chars: ${result}`)
+      assert.ok(result.includes('\u2026'), 'Should have ellipsis')
+      assert.ok(result.endsWith('/file.js'), `Should keep filename: ${result}`)
+    })
+
+    it('hard-truncates when maxLen is very small', () => {
+      const result = middleTruncatePath('/very/long/path', 3)
+      assert.ok(result.length <= 3)
+      assert.ok(result.includes('\u2026'))
+    })
+
+    it('hard-truncates when filename alone exceeds maxLen', () => {
+      const result = middleTruncatePath('/dir/very-long-filename.test.js', 10)
+      assert.ok(result.length <= 10, `Should be <= 10: ${result}`)
+      assert.ok(result.includes('\u2026'))
+    })
+  })
+
+  describe('truncateReason', () => {
+    it('returns reason unchanged if it fits', () => {
+      assert.strictEqual(truncateReason('short', 20), 'short')
+    })
+
+    it('hard-truncates non-path text with ellipsis', () => {
+      const result = truncateReason('a very long reason text', 10)
+      assert.ok(result.length <= 10)
+      assert.ok(result.endsWith('\u2026'))
+    })
+
+    it('middle-truncates file paths', () => {
+      const result = truncateReason('/var/folders/long/path/to/file.js', 20)
+      assert.ok(result.length <= 20)
+      assert.ok(result.endsWith('/file.js'))
+    })
+
+    it('returns empty string when available is zero', () => {
+      assert.strictEqual(truncateReason('anything', 0), '')
+    })
+  })
+
+  describe('progressiveTruncate', () => {
+    it('fits everything including hook tag', () => {
+      const result = progressiveTruncate('short reason', 20, 'stop', 80)
+      assert.strictEqual(result.reason, 'short reason')
+      assert.strictEqual(result.showHookTag, true)
+    })
+
+    it('drops hook tag when reason is long', () => {
+      // prefixWidth=20, reason=50 chars, hookTag='pre-commit' (10 chars + 2 gap = 12)
+      // 20 + 50 + 12 = 82 > 60, so drop tag. 20 + 50 = 70 > 60, so also truncate.
+      // But let's pick sizes where reason fits without tag
+      const result = progressiveTruncate('x'.repeat(35), 20, 'pre-commit', 60)
+      // 20 + 35 = 55 <= 60, fits without tag. 20 + 35 + 12 = 67 > 60, doesn't fit with tag.
+      assert.strictEqual(result.reason, 'x'.repeat(35))
+      assert.strictEqual(result.showHookTag, false)
+    })
+
+    it('truncates reason when it exceeds available width', () => {
+      const result = progressiveTruncate('x'.repeat(100), 20, '', 50)
+      assert.ok(result.reason.length <= 30, `Should truncate: ${result.reason}`)
+      assert.ok(result.reason.includes('\u2026'), 'Should have ellipsis')
+    })
+
+    it('returns empty reason unchanged', () => {
+      const result = progressiveTruncate('', 20, 'stop', 80)
+      assert.strictEqual(result.reason, '')
+      assert.strictEqual(result.showHookTag, true)
+    })
+
+    it('middle-truncates file paths before hard-truncating', () => {
+      const longPath = '/var/folders/rl/3xp9q8594jgb/T/prove_it_test/file.js'
+      const result = progressiveTruncate(longPath, 20, '', 50)
+      assert.ok(result.reason.includes('\u2026'), 'Should have ellipsis')
+      assert.ok(result.reason.endsWith('/file.js'), `Should keep filename: ${result.reason}`)
     })
   })
 
