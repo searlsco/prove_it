@@ -270,6 +270,13 @@ describe('script check', () => {
       assert.strictEqual(passRunning.length, 1)
       assert.strictEqual(passResult.length, 1)
       assert.ok(passResult[0].reason.includes('passed'))
+      // Verbose data on final verdict
+      assert.ok(passResult[0].verbose, 'PASS entry should have verbose data')
+      assert.strictEqual(passResult[0].verbose.command, './script/test')
+      assert.strictEqual(passResult[0].verbose.exitCode, 0)
+      assert.strictEqual(typeof passResult[0].verbose.output, 'string')
+      // RUNNING entry should NOT have verbose data
+      assert.strictEqual(passRunning[0].verbose, undefined, 'RUNNING entry should not have verbose data')
 
       // FAIL
       makeScript('failing', 'exit 1')
@@ -282,6 +289,10 @@ describe('script check', () => {
       assert.strictEqual(failEntries[0].status, 'RUNNING')
       assert.strictEqual(failEntries[1].status, 'FAIL')
       assert.ok(failEntries[1].reason.includes('failed'))
+      // Verbose data on FAIL verdict
+      assert.ok(failEntries[1].verbose, 'FAIL entry should have verbose data')
+      assert.strictEqual(failEntries[1].verbose.command, './script/failing')
+      assert.strictEqual(failEntries[1].verbose.exitCode, 1)
 
       // FAIL — script not found (no RUNNING entry)
       runScriptCheck(

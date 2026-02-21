@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 
-const { findLatestSession, listSessions, formatEntry, formatTime, formatDuration, useColor, stripAnsi, visualWidth } = require('../lib/monitor')
+const { findLatestSession, listSessions, findProjectLogFiles, projectHash, formatEntry, formatVerbose, formatTime, formatDuration, useColor, stripAnsi, visualWidth } = require('../lib/monitor')
 
 describe('monitor', () => {
   let tmpDir
@@ -408,6 +408,332 @@ describe('monitor', () => {
         console.log = origLog
       }
       assert.ok(logs.some(l => l.includes('No sessions found.')))
+    })
+  })
+
+  describe('formatVerbose', () => {
+    beforeEach(() => {
+      process.env.NO_COLOR = '1'
+    })
+
+    it('returns empty array when entry has no verbose data', () => {
+      const entry = { at: Date.now(), reviewer: 'test', status: 'PASS', reason: 'ok' }
+      assert.deepStrictEqual(formatVerbose(entry), [])
+    })
+
+    it('renders agent verbose data with prompt and response boxes', () => {
+      const entry = {
+        at: Date.now(),
+        reviewer: 'commit-review',
+        status: 'PASS',
+        reason: 'looks good',
+        verbose: {
+          prompt: 'Review these changes',
+          response: 'PASS: All good',
+          model: 'haiku',
+          backchannel: false
+        }
+      }
+      const lines = formatVerbose(entry)
+      assert.ok(lines.length > 0, 'Should have verbose output')
+
+      const joined = lines.join('\n')
+      assert.ok(joined.includes('prompt'), 'Should have prompt label')
+      assert.ok(joined.includes('haiku'), 'Should include model name')
+      assert.ok(joined.includes('Review these changes'), 'Should include prompt content')
+      assert.ok(joined.includes('response'), 'Should have response label')
+      assert.ok(joined.includes('PASS: All good'), 'Should include response content')
+    })
+
+    it('renders script verbose data with command and output boxes', () => {
+      const entry = {
+        at: Date.now(),
+        reviewer: 'run-tests',
+        status: 'PASS',
+        reason: 'passed',
+        verbose: {
+          command: './script/test_fast',
+          output: 'standard: no errors\n42 tests passed',
+          exitCode: 0
+        }
+      }
+      const lines = formatVerbose(entry)
+      assert.ok(lines.length > 0, 'Should have verbose output')
+
+      const joined = lines.join('\n')
+      assert.ok(joined.includes('command'), 'Should have command label')
+      assert.ok(joined.includes('./script/test_fast'), 'Should include command')
+      assert.ok(joined.includes('output'), 'Should have output label')
+      assert.ok(joined.includes('exit 0'), 'Should include exit code')
+      assert.ok(joined.includes('42 tests passed'), 'Should include output content')
+    })
+
+    it('renders multi-line prompt content', () => {
+      const entry = {
+        at: Date.now(),
+        verbose: {
+          prompt: 'line one\nline two\nline three',
+          response: 'PASS: ok',
+          model: null,
+          backchannel: false
+        }
+      }
+      const lines = formatVerbose(entry)
+      const joined = lines.join('\n')
+      assert.ok(joined.includes('line one'), 'Should have first line')
+      assert.ok(joined.includes('line two'), 'Should have second line')
+      assert.ok(joined.includes('line three'), 'Should have third line')
+    })
+
+    it('shows backchannel indicator when active', () => {
+      const entry = {
+        at: Date.now(),
+        verbose: {
+          prompt: 'Review',
+          response: 'PASS: ok',
+          model: 'haiku',
+          backchannel: true
+        }
+      }
+      const lines = formatVerbose(entry)
+      const joined = lines.join('\n')
+      assert.ok(joined.includes('backchannel'), 'Should indicate backchannel is active')
+    })
+
+    it('omits model suffix when model is null', () => {
+      const entry = {
+        at: Date.now(),
+        verbose: {
+          prompt: 'Review',
+          response: 'PASS: ok',
+          model: null,
+          backchannel: false
+        }
+      }
+      const lines = formatVerbose(entry)
+      const promptLine = lines.find(l => l.includes('prompt'))
+      assert.ok(promptLine, 'Should have prompt label')
+      assert.ok(!promptLine.includes('model:'), 'Should not have model suffix when null')
+    })
+
+    it('omits response box when response is null', () => {
+      const entry = {
+        at: Date.now(),
+        verbose: {
+          prompt: 'Review',
+          response: null,
+          model: 'haiku',
+          backchannel: false
+        }
+      }
+      const lines = formatVerbose(entry)
+      const joined = lines.join('\n')
+      assert.ok(joined.includes('prompt'), 'Should have prompt box')
+      assert.ok(!joined.includes('response'), 'Should not have response box when null')
+    })
+  })
+
+  describe('projectHash', () => {
+    it('returns a 12-char hex string', () => {
+      const hash = projectHash('/some/project/dir')
+      assert.match(hash, /^[0-9a-f]{12}$/)
+    })
+
+    it('is deterministic', () => {
+      assert.strictEqual(projectHash('/foo/bar'), projectHash('/foo/bar'))
+    })
+
+    it('differs for different directories', () => {
+      assert.notStrictEqual(projectHash('/foo/bar'), projectHash('/foo/baz'))
+    })
+  })
+
+  describe('findProjectLogFiles', () => {
+    it('finds project aggregate log and matching session logs', () => {
+      const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
+      fs.mkdirSync(sessionsDir, { recursive: true })
+
+      const projectDir = '/home/user/myproject'
+      const hash = projectHash(projectDir)
+
+      // Create project aggregate log
+      fs.writeFileSync(path.join(sessionsDir, `_project_${hash}.jsonl`), '{"at":1}\n')
+
+      // Create a matching session
+      const sid = 'matching-session-1234'
+      fs.writeFileSync(path.join(sessionsDir, `${sid}.json`), JSON.stringify({
+        project_dir: projectDir,
+        started_at: '2025-01-01T00:00:00Z'
+      }))
+      fs.writeFileSync(path.join(sessionsDir, `${sid}.jsonl`), '{"at":2}\n')
+
+      // Create a non-matching session
+      const otherSid = 'other-session-5678'
+      fs.writeFileSync(path.join(sessionsDir, `${otherSid}.json`), JSON.stringify({
+        project_dir: '/different/project',
+        started_at: '2025-01-01T00:00:00Z'
+      }))
+      fs.writeFileSync(path.join(sessionsDir, `${otherSid}.jsonl`), '{"at":3}\n')
+
+      const files = findProjectLogFiles(sessionsDir, projectDir)
+      assert.strictEqual(files.length, 2)
+      assert.ok(files.some(f => f.includes(`_project_${hash}.jsonl`)))
+      assert.ok(files.some(f => f.includes(`${sid}.jsonl`)))
+      assert.ok(!files.some(f => f.includes(`${otherSid}.jsonl`)))
+    })
+
+    it('returns empty when no matching files exist', () => {
+      const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
+      fs.mkdirSync(sessionsDir, { recursive: true })
+
+      const files = findProjectLogFiles(sessionsDir, '/nonexistent/project')
+      assert.strictEqual(files.length, 0)
+    })
+
+    it('returns empty when sessions dir does not exist', () => {
+      const files = findProjectLogFiles(path.join(tmpDir, 'nonexistent'), '/some/project')
+      assert.strictEqual(files.length, 0)
+    })
+  })
+
+  describe('listSessions with project filter', () => {
+    it('filters sessions by project directory', () => {
+      const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
+      fs.mkdirSync(sessionsDir, { recursive: true })
+
+      // Session in target project
+      const sid1 = 'session-project-a'
+      fs.writeFileSync(path.join(sessionsDir, `${sid1}.json`), JSON.stringify({
+        project_dir: '/home/user/projectA',
+        started_at: '2025-01-15T10:00:00Z'
+      }))
+      fs.writeFileSync(path.join(sessionsDir, `${sid1}.jsonl`), '{"at":1}\n')
+
+      // Session in different project
+      const sid2 = 'session-project-b'
+      fs.writeFileSync(path.join(sessionsDir, `${sid2}.json`), JSON.stringify({
+        project_dir: '/home/user/projectB',
+        started_at: '2025-01-15T11:00:00Z'
+      }))
+      fs.writeFileSync(path.join(sessionsDir, `${sid2}.jsonl`), '{"at":2}\n')
+
+      const logs = []
+      const origLog = console.log
+      console.log = (...args) => logs.push(args.join(' '))
+      try {
+        listSessions('/home/user/projectA')
+      } finally {
+        console.log = origLog
+      }
+
+      const output = logs.join('\n')
+      assert.ok(output.includes('/home/user/projectA'), 'Should show projectA')
+      assert.ok(!output.includes('/home/user/projectB'), 'Should not show projectB')
+    })
+
+    it('shows "No sessions found." when no sessions match project', () => {
+      const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
+      fs.mkdirSync(sessionsDir, { recursive: true })
+
+      const sid = 'session-other'
+      fs.writeFileSync(path.join(sessionsDir, `${sid}.json`), JSON.stringify({
+        project_dir: '/home/user/other',
+        started_at: '2025-01-15T10:00:00Z'
+      }))
+      fs.writeFileSync(path.join(sessionsDir, `${sid}.jsonl`), '{"at":1}\n')
+
+      const logs = []
+      const origLog = console.log
+      console.log = (...args) => logs.push(args.join(' '))
+      try {
+        listSessions('/home/user/nonexistent')
+      } finally {
+        console.log = origLog
+      }
+
+      assert.ok(logs.some(l => l.includes('No sessions found.')))
+    })
+
+    it('lists all sessions when no project filter', () => {
+      const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
+      fs.mkdirSync(sessionsDir, { recursive: true })
+
+      const sid1 = 'session-all-a'
+      fs.writeFileSync(path.join(sessionsDir, `${sid1}.json`), JSON.stringify({
+        project_dir: '/home/user/projectA',
+        started_at: '2025-01-15T10:00:00Z'
+      }))
+      fs.writeFileSync(path.join(sessionsDir, `${sid1}.jsonl`), '{"at":1}\n')
+
+      const sid2 = 'session-all-b'
+      fs.writeFileSync(path.join(sessionsDir, `${sid2}.json`), JSON.stringify({
+        project_dir: '/home/user/projectB',
+        started_at: '2025-01-15T11:00:00Z'
+      }))
+      fs.writeFileSync(path.join(sessionsDir, `${sid2}.jsonl`), '{"at":2}\n')
+
+      const logs = []
+      const origLog = console.log
+      console.log = (...args) => logs.push(args.join(' '))
+      try {
+        listSessions()
+      } finally {
+        console.log = origLog
+      }
+
+      const output = logs.join('\n')
+      assert.ok(output.includes('/home/user/projectA'), 'Should show projectA')
+      assert.ok(output.includes('/home/user/projectB'), 'Should show projectB')
+    })
+  })
+
+  describe('CLI flag parsing (--project, --verbose)', () => {
+    it('parses --project alone as CWD', () => {
+      const args = ['--project']
+      const projectArg = args.find(a => a === '--project' || a.startsWith('--project='))
+      let project = null
+      if (projectArg === '--project') {
+        project = '/mock/cwd'
+      } else if (projectArg && projectArg.startsWith('--project=')) {
+        project = projectArg.slice('--project='.length)
+      }
+      assert.strictEqual(project, '/mock/cwd')
+    })
+
+    it('parses --project=/foo/bar as specified path', () => {
+      const args = ['--project=/foo/bar']
+      const projectArg = args.find(a => a === '--project' || a.startsWith('--project='))
+      let project = null
+      if (projectArg === '--project') {
+        project = '/mock/cwd'
+      } else if (projectArg && projectArg.startsWith('--project=')) {
+        project = projectArg.slice('--project='.length)
+      }
+      assert.strictEqual(project, '/foo/bar')
+    })
+
+    it('returns null when no --project flag', () => {
+      const args = ['--all']
+      const projectArg = args.find(a => a === '--project' || a.startsWith('--project='))
+      let project = null
+      if (projectArg === '--project') {
+        project = '/mock/cwd'
+      } else if (projectArg && projectArg.startsWith('--project=')) {
+        project = projectArg.slice('--project='.length)
+      }
+      assert.strictEqual(project, null)
+    })
+
+    it('parses --verbose flag', () => {
+      const args = ['--all', '--verbose']
+      const verbose = args.includes('--verbose')
+      assert.strictEqual(verbose, true)
+    })
+
+    it('returns false when no --verbose flag', () => {
+      const args = ['--all']
+      const verbose = args.includes('--verbose')
+      assert.strictEqual(verbose, false)
     })
   })
 

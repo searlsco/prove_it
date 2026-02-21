@@ -997,11 +997,22 @@ function cmdMonitor () {
   const all = args.includes('--all')
   const list = args.includes('--list')
   const showSession = args.includes('--sessions')
+  const verbose = args.includes('--verbose')
   const statusArg = args.find(a => a.startsWith('--status='))
   const statusFilter = statusArg ? statusArg.slice('--status='.length).split(',').map(s => s.trim().toUpperCase()) : null
+
+  // --project alone → CWD, --project=/path → specified path
+  const projectArg = args.find(a => a === '--project' || a.startsWith('--project='))
+  let project = null
+  if (projectArg === '--project') {
+    project = process.cwd()
+  } else if (projectArg && projectArg.startsWith('--project=')) {
+    project = projectArg.slice('--project='.length)
+  }
+
   const sessionId = args.find(a => !a.startsWith('--')) || null
 
-  monitor({ all, list, showSession, statusFilter, sessionId })
+  monitor({ all, list, showSession, verbose, statusFilter, project, sessionId })
 }
 
 // ============================================================================
@@ -1035,6 +1046,9 @@ Monitor options:
   prove_it monitor --all --sessions    Show session IDs
   prove_it monitor --list              List all sessions
   prove_it monitor --status=FAIL,CRASH Filter by status
+  prove_it monitor --project           Scope to current project directory
+  prove_it monitor --project=/foo/bar  Scope to specific project directory
+  prove_it monitor --verbose           Show full prompts, responses, and output
   prove_it monitor <id>                Tail a specific session (prefix match OK)
 
 Signal options:
