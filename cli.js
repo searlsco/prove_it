@@ -11,6 +11,7 @@
  *   monitor   - Tail hook results in real time
  *   hook      - Run a hook dispatcher (claude:<Event> or git:<event>)
  *   run_builtin - Run a builtin check directly
+ *   signal    - Declare a lifecycle signal (done, stuck, idle)
  *   record    - Record a test run result for mtime caching
  */
 const fs = require('fs')
@@ -944,6 +945,48 @@ function cmdRunCheck () {
 }
 
 // ============================================================================
+// Signal command
+// ============================================================================
+
+function cmdSignal () {
+  const { VALID_SIGNALS } = require('./lib/session')
+  const args = process.argv.slice(3)
+  const type = args[0]
+
+  if (!type) {
+    console.error('Usage: prove_it signal <done|stuck|idle|clear> [--message "..."]')
+    process.exit(1)
+  }
+
+  if (type === 'clear') {
+    log('prove_it: signal cleared')
+    process.exit(0)
+  }
+
+  if (!VALID_SIGNALS.includes(type)) {
+    console.error(`Unknown signal type: ${type}`)
+    console.error(`Valid types: ${VALID_SIGNALS.join(', ')}, clear`)
+    process.exit(1)
+  }
+
+  // Parse --message / -m
+  let message = null
+  for (let i = 1; i < args.length; i++) {
+    if ((args[i] === '--message' || args[i] === '-m') && i + 1 < args.length) {
+      message = args[i + 1]
+      break
+    }
+  }
+
+  if (message) {
+    log(`prove_it: signal "${type}" recorded (${message})`)
+  } else {
+    log(`prove_it: signal "${type}" recorded`)
+  }
+  process.exit(0)
+}
+
+// ============================================================================
 // Monitor command
 // ============================================================================
 
@@ -978,6 +1021,7 @@ Commands:
   deinit      Remove prove_it files from current repository
   reinit      Deinit and re-init current repository
   doctor      Check installation status and report issues
+  signal      Declare a lifecycle signal (done, stuck, idle, clear)
   monitor     Tail hook results in real time (run in a separate terminal)
   hook        Run a hook dispatcher (claude:<Event> or git:<event>)
   run_builtin   Run a builtin check directly (e.g. prove_it run_builtin config:lock)
@@ -992,6 +1036,13 @@ Monitor options:
   prove_it monitor --list              List all sessions
   prove_it monitor --status=FAIL,CRASH Filter by status
   prove_it monitor <id>                Tail a specific session (prefix match OK)
+
+Signal options:
+  prove_it signal done                   Declare coherent work complete
+  prove_it signal stuck                  Declare stuck / cycling
+  prove_it signal idle                   Declare idle / between tasks
+  prove_it signal done -m "Ready for review"  Include a message
+  prove_it signal clear                  Clear the active signal
 
 Record options:
   --name <name>    Check name to record (must match hook config)
@@ -1068,6 +1119,9 @@ function main () {
       break
     case 'run_builtin':
       cmdRunCheck()
+      break
+    case 'signal':
+      cmdSignal()
       break
     case 'monitor':
       cmdMonitor()

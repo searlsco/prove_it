@@ -269,6 +269,84 @@ describe('claude dispatcher', () => {
     })
   })
 
+  describe('evaluateWhen — signal', () => {
+    let tmpDir
+    let origProveItDir
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_signal_'))
+      origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+    })
+
+    afterEach(() => {
+      if (origProveItDir === undefined) {
+        delete process.env.PROVE_IT_DIR
+      } else {
+        process.env.PROVE_IT_DIR = origProveItDir
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('passes when signal matches', () => {
+      const { setSignal } = require('../lib/session')
+      setSignal('signal-test-1', 'done', null)
+      const result = evaluateWhen(
+        { signal: 'done' },
+        { rootDir: tmpDir, sessionId: 'signal-test-1' }
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('skips when signal does not match', () => {
+      const { setSignal } = require('../lib/session')
+      setSignal('signal-test-2', 'stuck', null)
+      const result = evaluateWhen(
+        { signal: 'done' },
+        { rootDir: tmpDir, sessionId: 'signal-test-2' }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('signal "done" is not active'))
+    })
+
+    it('skips when no signal is active', () => {
+      const result = evaluateWhen(
+        { signal: 'done' },
+        { rootDir: tmpDir, sessionId: 'no-signal-session' }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('signal "done" is not active'))
+    })
+
+    it('signal + trigger: both must pass', () => {
+      // Signal is a prerequisite (AND), linesChanged is a trigger.
+      // With no signal active, the prerequisite fails before triggers are checked.
+      const result = evaluateWhen(
+        { signal: 'done', linesChanged: 10 },
+        { rootDir: tmpDir, sessionId: 'no-signal-combo' }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('signal "done" is not active'))
+    })
+
+    it('signal prerequisite passes, trigger still evaluated', () => {
+      const { setSignal } = require('../lib/session')
+      setSignal('signal-combo', 'done', null)
+      // Signal matches, but linesChanged trigger may skip. Using a sourcesModifiedSinceLastRun
+      // trigger that always fires on first run to test the combination.
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), 'code\n')
+      const { getLatestMtime } = require('../lib/testing')
+      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.local.json')
+      fs.mkdirSync(path.dirname(localCfgPath), { recursive: true })
+      const result = evaluateWhen(
+        { signal: 'done', sourcesModifiedSinceLastRun: true },
+        { rootDir: tmpDir, sessionId: 'signal-combo', localCfgPath, latestSourceMtime: getLatestMtime(tmpDir, ['**/*.js']) },
+        'combo-task'
+      )
+      assert.strictEqual(result, true)
+    })
+  })
+
   describe('evaluateWhen — toolsUsed', () => {
     let tmpDir
     let origProveItDir

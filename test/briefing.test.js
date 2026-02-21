@@ -153,6 +153,33 @@ describe('briefing', () => {
       assert.ok(!text.includes('How reviews work'), 'should not include review section')
     })
 
+    it('includes signaling section when signal-gated tasks exist', () => {
+      const cfg = {
+        hooks: [{
+          type: 'claude',
+          event: 'Stop',
+          tasks: [{ name: 'signal-review', type: 'agent', when: { signal: 'done' } }]
+        }]
+      }
+      const text = renderBriefing(cfg)
+      assert.ok(text.includes('Signaling:'), 'should include signaling section')
+      assert.ok(text.includes('prove_it signal'), 'should mention signal command')
+      assert.ok(text.includes('done'), 'should list configured signal type')
+      assert.ok(text.includes('prove_it signal clear'), 'should mention clear')
+    })
+
+    it('omits signaling section when no signal-gated tasks', () => {
+      const cfg = {
+        hooks: [{
+          type: 'claude',
+          event: 'Stop',
+          tasks: [{ name: 'tests', type: 'script', command: './script/test' }]
+        }]
+      }
+      const text = renderBriefing(cfg)
+      assert.ok(!text.includes('Signaling:'), 'should not include signaling section')
+    })
+
     it('handles buildConfig() output correctly', () => {
       const cfg = buildConfig()
       const text = renderBriefing(cfg)
@@ -162,8 +189,10 @@ describe('briefing', () => {
       assert.ok(text.includes('full-tests'), 'should include full-tests')
       assert.ok(text.includes('code-quality-review'), 'should include code-quality-review')
       assert.ok(text.includes('coverage-review'), 'should include coverage-review')
+      assert.ok(text.includes('signal-review'), 'should include signal-review')
       assert.ok(!text.includes('session-briefing'), 'should not mention session-briefing')
       assert.ok(text.includes('How reviews work'), 'should include review section for default config')
+      assert.ok(text.includes('Signaling:'), 'should include signaling section for default config')
     })
 
     it('handles empty hooks gracefully', () => {
@@ -279,6 +308,10 @@ describe('briefing', () => {
 
     it('describes envNotSet', () => {
       assert.strictEqual(whenDescription({ envNotSet: 'SKIP' }), 'requires $SKIP unset')
+    })
+
+    it('describes signal', () => {
+      assert.strictEqual(whenDescription({ signal: 'done' }), 'on "done" signal')
     })
 
     it('describes toolsUsed', () => {

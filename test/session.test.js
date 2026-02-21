@@ -13,7 +13,11 @@ const {
   generateDiffsSince,
   recordFileEdit,
   getFileEdits,
-  resetTurnTracking
+  resetTurnTracking,
+  VALID_SIGNALS,
+  setSignal,
+  getSignal,
+  clearSignal
 } = require('../lib/session')
 const { recordSessionBaseline } = require('../lib/dispatcher/claude')
 
@@ -556,6 +560,63 @@ describe('session state functions', () => {
       const editsY = getFileEdits('session-Y')
       assert.deepStrictEqual(editsX.files, ['x.js'])
       assert.deepStrictEqual(editsY.files, ['y.js'])
+    })
+  })
+
+  describe('signal state', () => {
+    it('set/get round-trips a signal', () => {
+      assert.strictEqual(setSignal(SESSION_ID, 'done', null), true)
+      const signal = getSignal(SESSION_ID)
+      assert.strictEqual(signal.type, 'done')
+      assert.strictEqual(signal.message, null)
+      assert.strictEqual(typeof signal.at, 'number')
+    })
+
+    it('persists message when provided', () => {
+      setSignal(SESSION_ID, 'stuck', 'Cannot figure out async path')
+      const signal = getSignal(SESSION_ID)
+      assert.strictEqual(signal.type, 'stuck')
+      assert.strictEqual(signal.message, 'Cannot figure out async path')
+    })
+
+    it('rejects unknown signal types', () => {
+      assert.strictEqual(setSignal(SESSION_ID, 'bogus', null), false)
+      assert.strictEqual(getSignal(SESSION_ID), null)
+    })
+
+    it('returns false for null sessionId', () => {
+      assert.strictEqual(setSignal(null, 'done', null), false)
+    })
+
+    it('getSignal returns null when no signal set', () => {
+      assert.strictEqual(getSignal('no-signal-session'), null)
+    })
+
+    it('getSignal returns null for null sessionId', () => {
+      assert.strictEqual(getSignal(null), null)
+    })
+
+    it('clearSignal removes active signal', () => {
+      setSignal(SESSION_ID, 'done', null)
+      assert.notStrictEqual(getSignal(SESSION_ID), null)
+      clearSignal(SESSION_ID)
+      assert.strictEqual(getSignal(SESSION_ID), null)
+    })
+
+    it('clearSignal is safe with null sessionId', () => {
+      clearSignal(null) // should not throw
+    })
+
+    it('overwrite replaces previous signal', () => {
+      setSignal(SESSION_ID, 'done', 'first')
+      setSignal(SESSION_ID, 'stuck', 'second')
+      const signal = getSignal(SESSION_ID)
+      assert.strictEqual(signal.type, 'stuck')
+      assert.strictEqual(signal.message, 'second')
+    })
+
+    it('VALID_SIGNALS contains expected types', () => {
+      assert.deepStrictEqual(VALID_SIGNALS, ['done', 'stuck', 'idle'])
     })
   })
 

@@ -517,6 +517,68 @@ describe('validateConfig', () => {
       assert.ok(warnings.some(w => w.includes('toolsUsed') && w.includes('git')))
     })
 
+    it('validates signal when key', () => {
+      // valid signal passes
+      const valid = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'agent',
+        prompt: 'review:code_quality',
+        when: { signal: 'done' }
+      }))
+      assert.strictEqual(valid.errors.length, 0)
+
+      // invalid signal value errors
+      const bad = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'agent',
+        prompt: 'review:code_quality',
+        when: { signal: 'bogus' }
+      }))
+      assert.ok(bad.errors.some(e => e.includes('when.signal must be one of')))
+
+      // non-string errors
+      const nonString = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'agent',
+        prompt: 'review:code_quality',
+        when: { signal: true }
+      }))
+      assert.ok(nonString.errors.some(e => e.includes('when.signal must be one of')))
+    })
+
+    it('warns when signal is used on wrong event types', () => {
+      // git hook
+      const { warnings: gitWarnings } = validateConfig(validConfig({
+        hooks: [{
+          type: 'git',
+          event: 'pre-commit',
+          tasks: [{ name: 'a', type: 'script', command: 'x', when: { signal: 'done' } }]
+        }]
+      }))
+      assert.ok(gitWarnings.some(w => w.includes('signal') && w.includes('git')))
+
+      // SessionStart
+      const { warnings: ssWarnings } = validateConfig(validConfig({
+        hooks: [{
+          type: 'claude',
+          event: 'SessionStart',
+          tasks: [{ name: 'a', type: 'script', command: 'x', when: { signal: 'done' } }]
+        }]
+      }))
+      assert.ok(ssWarnings.some(w => w.includes('signal') && w.includes('SessionStart')))
+
+      // PreToolUse
+      const { warnings: ptuWarnings } = validateConfig(validConfig({
+        hooks: [{
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Bash',
+          tasks: [{ name: 'a', type: 'script', command: 'x', when: { signal: 'done' } }]
+        }]
+      }))
+      assert.ok(ptuWarnings.some(w => w.includes('signal') && w.includes('PreToolUse')))
+    })
+
     it('validates variablesPresent when key', () => {
       // valid array passes
       const valid = validateConfig(cfgWithTask({

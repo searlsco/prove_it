@@ -91,13 +91,66 @@ describe('template', () => {
     })
   })
 
+  describe('signal_message variable', () => {
+    const fs = require('fs')
+    const path = require('path')
+    const os = require('os')
+
+    it('resolves signal_message from session state', () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_sig_tpl_'))
+      const origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+      try {
+        const { setSignal } = require('../lib/session')
+        setSignal('tpl-sig-1', 'done', 'Ready for review')
+        const context = { rootDir: '.', projectDir: '.', sessionId: 'tpl-sig-1', toolInput: null }
+        const result = expandTemplate('msg: {{signal_message}}', context)
+        assert.strictEqual(result, 'msg: Ready for review')
+      } finally {
+        if (origProveItDir === undefined) delete process.env.PROVE_IT_DIR
+        else process.env.PROVE_IT_DIR = origProveItDir
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    it('returns empty string when no signal is active', () => {
+      const context = { rootDir: '.', projectDir: '.', sessionId: 'no-signal', toolInput: null }
+      const result = expandTemplate('msg: {{signal_message}}', context)
+      assert.strictEqual(result, 'msg: ')
+    })
+
+    it('works in conditional blocks', () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_sig_tpl_'))
+      const origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+      try {
+        const { setSignal } = require('../lib/session')
+        setSignal('tpl-sig-2', 'stuck', 'Help me')
+        const context = { rootDir: '.', projectDir: '.', sessionId: 'tpl-sig-2', toolInput: null }
+        const result = expandTemplate('{{#signal_message}}Note: {{signal_message}}{{/signal_message}}', context)
+        assert.strictEqual(result, 'Note: Help me')
+      } finally {
+        if (origProveItDir === undefined) delete process.env.PROVE_IT_DIR
+        else process.env.PROVE_IT_DIR = origProveItDir
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    it('conditional block stripped when message is empty', () => {
+      const context = { rootDir: '.', projectDir: '.', sessionId: 'no-msg', toolInput: null }
+      const result = expandTemplate('a{{#signal_message}}Note: {{signal_message}}{{/signal_message}}b', context)
+      assert.strictEqual(result, 'ab')
+    })
+  })
+
   describe('KNOWN_VARS', () => {
-    it('has all 16 expected keys', () => {
+    it('has all 17 expected keys', () => {
       const expected = [
         'staged_diff', 'staged_files', 'working_diff', 'changed_files',
         'session_diff', 'test_output', 'tool_command', 'file_path',
         'project_dir', 'root_dir', 'session_id', 'git_head',
-        'git_status', 'recent_commits', 'recently_edited_files', 'sources'
+        'git_status', 'recent_commits', 'recently_edited_files', 'sources',
+        'signal_message'
       ]
       assert.deepStrictEqual(KNOWN_VARS, expected)
     })
@@ -112,8 +165,8 @@ describe('template', () => {
   })
 
   describe('SESSION_VARS', () => {
-    it('contains session_diff and session_id', () => {
-      assert.deepStrictEqual(SESSION_VARS, ['session_diff', 'session_id'])
+    it('contains session_diff, session_id, and signal_message', () => {
+      assert.deepStrictEqual(SESSION_VARS, ['session_diff', 'session_id', 'signal_message'])
     })
 
     it('is a subset of KNOWN_VARS', () => {
