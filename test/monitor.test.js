@@ -64,37 +64,22 @@ describe('monitor', () => {
       assert.strictEqual(result, 'bbb-newer')
     })
 
-    it('excludes test-session files', () => {
-      const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
-      fs.mkdirSync(sessionsDir, { recursive: true })
-
-      fs.writeFileSync(path.join(sessionsDir, 'test-session-abc.jsonl'), '{"at":1}\n')
-      fs.writeFileSync(path.join(sessionsDir, 'real-session.jsonl'), '{"at":2}\n')
-
-      const result = findLatestSession(sessionsDir)
-      assert.strictEqual(result, 'real-session')
-    })
-
-    it('excludes _project_ files', () => {
-      const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
-      fs.mkdirSync(sessionsDir, { recursive: true })
-
-      fs.writeFileSync(path.join(sessionsDir, '_project_abc123.jsonl'), '{"at":1}\n')
-      fs.writeFileSync(path.join(sessionsDir, 'my-session.jsonl'), '{"at":2}\n')
-
-      const result = findLatestSession(sessionsDir)
-      assert.strictEqual(result, 'my-session')
-    })
-
-    it('returns null when only excluded files exist', () => {
+    it('excludes test-session and _project_ files, returning null when only those exist', () => {
       const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
       fs.mkdirSync(sessionsDir, { recursive: true })
 
       fs.writeFileSync(path.join(sessionsDir, 'test-session-abc.jsonl'), '{"at":1}\n')
       fs.writeFileSync(path.join(sessionsDir, '_project_abc123.jsonl'), '{"at":2}\n')
+      fs.writeFileSync(path.join(sessionsDir, 'real-session.jsonl'), '{"at":3}\n')
 
+      // real-session is the only non-excluded file
       const result = findLatestSession(sessionsDir)
-      assert.strictEqual(result, null)
+      assert.strictEqual(result, 'real-session')
+
+      // Remove the real session, only excluded files remain
+      fs.unlinkSync(path.join(sessionsDir, 'real-session.jsonl'))
+      const resultExcludedOnly = findLatestSession(sessionsDir)
+      assert.strictEqual(resultExcludedOnly, null)
     })
 
     it('ignores non-jsonl files', () => {
@@ -118,54 +103,19 @@ describe('monitor', () => {
   })
 
   describe('formatEntry', () => {
-    it('formats a PASS entry', () => {
-      const entry = {
-        at: Date.now(),
-        reviewer: 'fast-tests',
-        status: 'PASS',
-        reason: './script/test_fast passed (2.3s)'
-      }
-      const line = formatEntry(entry)
-      assert.ok(line.includes('PASS'))
-      assert.ok(line.includes('fast-tests'))
-      assert.ok(line.includes('passed (2.3s)'))
-    })
-
-    it('formats a FAIL entry', () => {
-      const entry = {
-        at: Date.now(),
-        reviewer: 'full-tests',
-        status: 'FAIL',
-        reason: './script/test failed (exit 1, 4.2s)'
-      }
-      const line = formatEntry(entry)
-      assert.ok(line.includes('FAIL'))
-      assert.ok(line.includes('full-tests'))
-      assert.ok(line.includes('failed'))
-    })
-
-    it('formats a SKIP entry', () => {
-      const entry = {
-        at: Date.now(),
-        reviewer: 'fast-tests',
-        status: 'SKIP',
-        reason: 'cached pass (no code changes)'
-      }
-      const line = formatEntry(entry)
-      assert.ok(line.includes('SKIP'))
-      assert.ok(line.includes('cached pass'))
-    })
-
-    it('handles null reason', () => {
-      const entry = {
-        at: Date.now(),
-        reviewer: 'lock-config',
-        status: 'PASS',
-        reason: null
-      }
-      const line = formatEntry(entry)
-      assert.ok(line.includes('PASS'))
-      assert.ok(line.includes('lock-config'))
+    ;[
+      ['PASS', 'fast-tests', './script/test_fast passed (2.3s)', ['PASS', 'fast-tests', 'passed (2.3s)']],
+      ['FAIL', 'full-tests', './script/test failed (exit 1, 4.2s)', ['FAIL', 'full-tests', 'failed']],
+      ['SKIP', 'fast-tests', 'cached pass (no code changes)', ['SKIP', 'cached pass']],
+      ['PASS with null reason', 'lock-config', null, ['PASS', 'lock-config']]
+    ].forEach(([label, reviewer, reason, expectedSubstrings]) => {
+      it(`formats a ${label} entry`, () => {
+        const entry = { at: Date.now(), reviewer, status: label.split(' ')[0], reason }
+        const line = formatEntry(entry)
+        expectedSubstrings.forEach(sub => {
+          assert.ok(line.includes(sub), `Expected "${sub}" in: ${line}`)
+        })
+      })
     })
 
     it('truncates long reason to terminal width', () => {
@@ -212,39 +162,17 @@ describe('monitor', () => {
       assert.ok(line.includes('unknown'))
     })
 
-    it('shows hookEvent in parens when present', () => {
-      const entry = {
-        at: Date.now(),
-        reviewer: 'fast-tests',
-        status: 'PASS',
-        reason: 'OK',
-        hookEvent: 'Stop'
-      }
-      const line = formatEntry(entry)
-      assert.ok(line.includes('(Stop)'), `Expected (Stop) in: ${line}`)
-    })
+    it('includes or omits hookEvent in parens based on presence', () => {
+      const base = { at: Date.now(), reviewer: 'fast-tests', status: 'PASS', reason: 'OK' }
 
-    it('shows git hook event in parens', () => {
-      const entry = {
-        at: Date.now(),
-        reviewer: 'full-tests',
-        status: 'PASS',
-        reason: 'OK',
-        hookEvent: 'pre-commit'
-      }
-      const line = formatEntry(entry)
-      assert.ok(line.includes('(pre-commit)'), `Expected (pre-commit) in: ${line}`)
-    })
+      const withStop = formatEntry({ ...base, hookEvent: 'Stop' })
+      assert.ok(withStop.includes('(Stop)'), `Expected (Stop) in: ${withStop}`)
 
-    it('omits hookEvent parens when not present', () => {
-      const entry = {
-        at: Date.now(),
-        reviewer: 'fast-tests',
-        status: 'PASS',
-        reason: 'OK'
-      }
-      const line = formatEntry(entry)
-      assert.ok(!line.includes('('), `Should not have parens in: ${line}`)
+      const withPreCommit = formatEntry({ ...base, hookEvent: 'pre-commit' })
+      assert.ok(withPreCommit.includes('(pre-commit)'), `Expected (pre-commit) in: ${withPreCommit}`)
+
+      const without = formatEntry(base)
+      assert.ok(!without.includes('('), `Should not have parens in: ${without}`)
     })
 
     it('pads RUNNING status to 7 chars', () => {
@@ -271,95 +199,67 @@ describe('monitor', () => {
       assert.ok(line.includes('appealed via backchannel'), `Expected reason in: ${line}`)
     })
 
-    it('shows triggerProgress when present', () => {
-      const entry = {
+    it('includes or omits triggerProgress based on presence', () => {
+      const withProgress = formatEntry({
         at: Date.now(),
         reviewer: 'commit-review',
         status: 'SKIP',
         reason: 'Skipped because only 388 of 500 lines changed',
         triggerProgress: 'linesChanged: 388/500'
-      }
-      const line = formatEntry(entry)
-      assert.ok(line.includes('{linesChanged: 388/500}'), `Expected trigger progress in: ${line}`)
-    })
+      })
+      assert.ok(withProgress.includes('{linesChanged: 388/500}'), `Expected trigger progress in: ${withProgress}`)
 
-    it('shows triggerProgress on RUNNING entry', () => {
-      const entry = {
+      const withRunning = formatEntry({
         at: Date.now(),
         reviewer: 'commit-review',
         status: 'RUNNING',
         triggerProgress: 'linesWritten: 512/500'
-      }
-      const line = formatEntry(entry)
-      assert.ok(line.includes('{linesWritten: 512/500}'), `Expected trigger progress in: ${line}`)
-    })
+      })
+      assert.ok(withRunning.includes('{linesWritten: 512/500}'), `Expected trigger progress in: ${withRunning}`)
 
-    it('omits triggerProgress when not present', () => {
-      const entry = {
+      const without = formatEntry({
         at: Date.now(),
         reviewer: 'fast-tests',
         status: 'PASS',
         reason: 'OK'
-      }
-      const line = formatEntry(entry)
-      assert.ok(!line.includes('{'), `Should not have trigger progress in: ${line}`)
+      })
+      assert.ok(!without.includes('{'), `Should not have trigger progress in: ${without}`)
     })
 
-    it('shows duration when durationMs is present', () => {
-      const entry = {
+    it('includes or omits duration bracket based on durationMs presence', () => {
+      const withDuration = formatEntry({
         at: Date.now(),
         reviewer: 'fast-tests',
         status: 'PASS',
         reason: 'OK',
         durationMs: 3200
-      }
-      const line = formatEntry(entry)
-      assert.ok(line.includes('[3.2s]'), `Expected [3.2s] in: ${line}`)
-    })
+      })
+      assert.ok(withDuration.includes('[3.2s]'), `Expected [3.2s] in: ${withDuration}`)
 
-    it('omits duration bracket when durationMs is absent', () => {
-      const entry = {
+      const without = formatEntry({
         at: Date.now(),
         reviewer: 'fast-tests',
         status: 'PASS',
         reason: 'OK'
-      }
-      const line = formatEntry(entry)
-      assert.ok(!line.includes('['), `Should not have duration bracket in: ${line}`)
+      })
+      assert.ok(!without.includes('['), `Should not have duration bracket in: ${without}`)
     })
   })
 
   describe('formatDuration', () => {
-    it('formats sub-second as milliseconds', () => {
-      assert.strictEqual(formatDuration(450), '450ms')
-    })
-
-    it('formats seconds with one decimal', () => {
-      assert.strictEqual(formatDuration(3200), '3.2s')
-    })
-
-    it('returns empty string for null', () => {
-      assert.strictEqual(formatDuration(null), '')
-    })
-
-    it('returns empty string for undefined', () => {
-      assert.strictEqual(formatDuration(undefined), '')
-    })
-
-    it('formats exactly 60s as 1m00s', () => {
-      assert.strictEqual(formatDuration(60000), '1m00s')
-    })
-
-    it('formats 93s as 1m33s', () => {
-      assert.strictEqual(formatDuration(93000), '1m33s')
-    })
-
-    it('formats 5m2s as 5m02s (zero-padded seconds)', () => {
-      assert.strictEqual(formatDuration(302000), '5m02s')
-    })
-
-    it('formats 59.9s as seconds not minutes', () => {
-      assert.strictEqual(formatDuration(59900), '59.9s')
+    ;[
+      [450, '450ms'],
+      [3200, '3.2s'],
+      [null, ''],
+      [undefined, ''],
+      [60000, '1m00s'],
+      [93000, '1m33s'],
+      [302000, '5m02s'],
+      [59900, '59.9s']
+    ].forEach(([input, expected]) => {
+      it(`formats ${input} as "${expected}"`, () => {
+        assert.strictEqual(formatDuration(input), expected)
+      })
     })
   })
 
@@ -547,12 +447,9 @@ describe('monitor', () => {
       assert.strictEqual(useColor(), true)
     })
 
-    it('stripAnsi removes ANSI escape codes', () => {
+    it('stripAnsi removes ANSI escape codes and passes through plain text', () => {
       assert.strictEqual(stripAnsi('\x1b[32mPASS\x1b[0m'), 'PASS')
       assert.strictEqual(stripAnsi('\x1b[2m(Stop)\x1b[0m'), '(Stop)')
-    })
-
-    it('stripAnsi passes through plain text', () => {
       assert.strictEqual(stripAnsi('hello world'), 'hello world')
     })
 

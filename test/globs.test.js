@@ -13,123 +13,70 @@ const {
 } = require('../lib/globs')
 
 describe('local config write protection', () => {
-  describe('blocks Write/Edit tools', () => {
-    it('blocks Write to prove_it.json', () => {
-      assert.strictEqual(isConfigFileEdit('Write', { file_path: '/project/.claude/prove_it.json' }), true)
+  describe('isConfigFileEdit', () => {
+    const blockCases = [
+      ['Write to prove_it.json', 'Write', { file_path: '/project/.claude/prove_it.json' }],
+      ['Write to prove_it.local.json', 'Write', { file_path: '/project/.claude/prove_it.local.json' }],
+      ['Edit to prove_it.json', 'Edit', { file_path: '.claude/prove_it.json' }],
+      ['Edit to prove_it.local.json', 'Edit', { file_path: '.claude/prove_it.local.json' }],
+      ['Write to global prove_it/config.json', 'Write', { file_path: '/Users/me/.claude/prove_it/config.json' }],
+      ['Edit to global prove_it/config.json', 'Edit', { file_path: '/home/user/.claude/prove_it/config.json' }],
+      ['Write to prove_it/config.local.json', 'Write', { file_path: '/project/.claude/prove_it/config.local.json' }],
+      ['Edit to prove_it/config.local.json', 'Edit', { file_path: '.claude/prove_it/config.local.json' }]
+    ]
+
+    blockCases.forEach(([label, tool, input]) => {
+      it(`blocks ${label}`, () => {
+        assert.strictEqual(isConfigFileEdit(tool, input), true)
+      })
     })
 
-    it('blocks Write to prove_it.local.json', () => {
-      assert.strictEqual(isConfigFileEdit('Write', { file_path: '/project/.claude/prove_it.local.json' }), true)
-    })
+    const allowCases = [
+      ['Write to other files', 'Write', { file_path: '/project/src/index.js' }],
+      ['Edit to other files', 'Edit', { file_path: '.claude/settings.json' }],
+      ['Read tool on config', 'Read', { file_path: '.claude/prove_it.json' }],
+      ['Bash tool on config', 'Bash', { command: 'cat .claude/prove_it.json' }]
+    ]
 
-    it('blocks Edit to prove_it.json', () => {
-      assert.strictEqual(isConfigFileEdit('Edit', { file_path: '.claude/prove_it.json' }), true)
-    })
-
-    it('blocks Edit to prove_it.local.json', () => {
-      assert.strictEqual(isConfigFileEdit('Edit', { file_path: '.claude/prove_it.local.json' }), true)
-    })
-
-    it('blocks Write to global prove_it/config.json', () => {
-      assert.strictEqual(isConfigFileEdit('Write', { file_path: '/Users/me/.claude/prove_it/config.json' }), true)
-    })
-
-    it('blocks Edit to global prove_it/config.json', () => {
-      assert.strictEqual(isConfigFileEdit('Edit', { file_path: '/home/user/.claude/prove_it/config.json' }), true)
-    })
-
-    it('blocks Write to prove_it/config.local.json', () => {
-      assert.strictEqual(isConfigFileEdit('Write', { file_path: '/project/.claude/prove_it/config.local.json' }), true)
-    })
-
-    it('blocks Edit to prove_it/config.local.json', () => {
-      assert.strictEqual(isConfigFileEdit('Edit', { file_path: '.claude/prove_it/config.local.json' }), true)
-    })
-
-    it('allows Write to other files', () => {
-      assert.strictEqual(isConfigFileEdit('Write', { file_path: '/project/src/index.js' }), false)
-    })
-
-    it('allows Edit to other files', () => {
-      assert.strictEqual(isConfigFileEdit('Edit', { file_path: '.claude/settings.json' }), false)
-    })
-
-    it('allows Read tool', () => {
-      assert.strictEqual(isConfigFileEdit('Read', { file_path: '.claude/prove_it.json' }), false)
-    })
-
-    it('allows Bash tool', () => {
-      assert.strictEqual(isConfigFileEdit('Bash', { command: 'cat .claude/prove_it.json' }), false)
+    allowCases.forEach(([label, tool, input]) => {
+      it(`allows ${label}`, () => {
+        assert.strictEqual(isConfigFileEdit(tool, input), false)
+      })
     })
   })
 
-  describe('blocks writes', () => {
-    it('blocks echo redirect', () => {
-      assert.strictEqual(isLocalConfigWrite('echo \'{"suiteGate":{"require":false}}\' > .claude/prove_it.local.json'), true)
+  describe('isLocalConfigWrite', () => {
+    const blockCases = [
+      ['echo redirect', "echo '{\"suiteGate\":{\"require\":false}}' > .claude/prove_it.local.json"],
+      ['append redirect', 'echo foo >> .claude/prove_it.local.json'],
+      ['tee', 'echo foo | tee .claude/prove_it.local.json'],
+      ['tee -a', 'echo foo | tee -a .claude/prove_it.local.json'],
+      ['full path redirect', 'echo foo > /Users/justin/project/.claude/prove_it.local.json'],
+      ['mkdir && echo combo', "mkdir -p .claude && echo '{\"suiteGate\":{\"require\":false}}' > .claude/prove_it.local.json"],
+      ['redirect to prove_it.json', 'echo {} > .claude/prove_it.json'],
+      ['redirect to global prove_it/config.json', 'echo {} > ~/.claude/prove_it/config.json'],
+      ['redirect to prove_it/config.local.json', 'echo {} > .claude/prove_it/config.local.json'],
+      ['tee to prove_it/config.local.json', 'echo foo | tee .claude/prove_it/config.local.json']
+    ]
+
+    blockCases.forEach(([label, command]) => {
+      it(`blocks ${label}`, () => {
+        assert.strictEqual(isLocalConfigWrite(command), true)
+      })
     })
 
-    it('blocks append redirect', () => {
-      assert.strictEqual(isLocalConfigWrite('echo foo >> .claude/prove_it.local.json'), true)
-    })
+    const allowCases = [
+      ['cat', 'cat .claude/prove_it.local.json'],
+      ['grep', 'grep require .claude/prove_it.local.json'],
+      ['jq', 'jq . .claude/prove_it.local.json'],
+      ['input redirect (reading)', 'jq . < .claude/prove_it.local.json'],
+      ['writing to other json files', 'echo {} > .claude/other.json']
+    ]
 
-    it('blocks tee', () => {
-      assert.strictEqual(isLocalConfigWrite('echo foo | tee .claude/prove_it.local.json'), true)
-    })
-
-    it('blocks tee -a', () => {
-      assert.strictEqual(isLocalConfigWrite('echo foo | tee -a .claude/prove_it.local.json'), true)
-    })
-
-    it('blocks with full path', () => {
-      assert.strictEqual(isLocalConfigWrite('echo foo > /Users/justin/project/.claude/prove_it.local.json'), true)
-    })
-
-    it('blocks mkdir && echo combo', () => {
-      assert.strictEqual(isLocalConfigWrite('mkdir -p .claude && echo \'{"suiteGate":{"require":false}}\' > .claude/prove_it.local.json'), true)
-    })
-
-    it('blocks redirect to prove_it.json', () => {
-      assert.strictEqual(isLocalConfigWrite('echo {} > .claude/prove_it.json'), true)
-    })
-
-    it('blocks redirect to global prove_it/config.json', () => {
-      assert.strictEqual(isLocalConfigWrite('echo {} > ~/.claude/prove_it/config.json'), true)
-    })
-
-    it('blocks redirect to prove_it/config.local.json', () => {
-      assert.strictEqual(isLocalConfigWrite('echo {} > .claude/prove_it/config.local.json'), true)
-    })
-
-    it('blocks tee to prove_it/config.local.json', () => {
-      assert.strictEqual(isLocalConfigWrite('echo foo | tee .claude/prove_it/config.local.json'), true)
-    })
-  })
-
-  describe('allows reads', () => {
-    it('allows cat', () => {
-      assert.strictEqual(isLocalConfigWrite('cat .claude/prove_it.local.json'), false)
-    })
-
-    it('allows grep', () => {
-      assert.strictEqual(isLocalConfigWrite('grep require .claude/prove_it.local.json'), false)
-    })
-
-    it('allows jq', () => {
-      assert.strictEqual(isLocalConfigWrite('jq . .claude/prove_it.local.json'), false)
-    })
-
-    it('allows input redirect (reading)', () => {
-      assert.strictEqual(isLocalConfigWrite('jq . < .claude/prove_it.local.json'), false)
-    })
-  })
-
-  describe('ignores other files', () => {
-    it('allows writing to other json files', () => {
-      assert.strictEqual(isLocalConfigWrite('echo {} > .claude/other.json'), false)
-    })
-
-    it('blocks writing to global prove_it/config.json', () => {
-      assert.strictEqual(isLocalConfigWrite('echo {} > ~/.claude/prove_it/config.json'), true)
+    allowCases.forEach(([label, command]) => {
+      it(`allows ${label}`, () => {
+        assert.strictEqual(isLocalConfigWrite(command), false)
+      })
     })
   })
 })
@@ -138,42 +85,35 @@ describe('isSourceFile', () => {
   const rootDir = '/repo'
   const sources = ['lib/**/*.js', 'src/**/*.js', 'cli.js', 'test/**/*.js']
 
-  it('matches files in lib/', () => {
-    assert.strictEqual(isSourceFile('/repo/lib/shared.js', rootDir, sources), true)
-    assert.strictEqual(isSourceFile('/repo/lib/hooks/prove_it_edit.js', rootDir, sources), true)
+  const matchCases = [
+    ['file in lib/', '/repo/lib/shared.js'],
+    ['nested file in lib/', '/repo/lib/hooks/prove_it_edit.js'],
+    ['file in src/', '/repo/src/index.js'],
+    ['root-level source file', '/repo/cli.js'],
+    ['test file', '/repo/test/config.test.js'],
+    ['relative path in lib/', 'lib/shared.js']
+  ]
+
+  matchCases.forEach(([label, filePath]) => {
+    it(`matches ${label}`, () => {
+      assert.strictEqual(isSourceFile(filePath, rootDir, sources), true)
+    })
   })
 
-  it('matches files in src/', () => {
-    assert.strictEqual(isSourceFile('/repo/src/index.js', rootDir, sources), true)
-  })
+  const noMatchCases = [
+    ['README', '/repo/README.md'],
+    ['docs', '/repo/docs/guide.md'],
+    ['config file (prove_it.json)', '/repo/.claude/prove_it.json'],
+    ['config file (package.json)', '/repo/package.json'],
+    ['non-js file in lib/', '/repo/lib/README.md'],
+    ['file outside the repo', '/other/repo/lib/foo.js'],
+    ['relative non-source path', 'README.md']
+  ]
 
-  it('matches root-level source files', () => {
-    assert.strictEqual(isSourceFile('/repo/cli.js', rootDir, sources), true)
-  })
-
-  it('matches test files', () => {
-    assert.strictEqual(isSourceFile('/repo/test/config.test.js', rootDir, sources), true)
-  })
-
-  it('does not match README', () => {
-    assert.strictEqual(isSourceFile('/repo/README.md', rootDir, sources), false)
-  })
-
-  it('does not match docs', () => {
-    assert.strictEqual(isSourceFile('/repo/docs/guide.md', rootDir, sources), false)
-  })
-
-  it('does not match config files', () => {
-    assert.strictEqual(isSourceFile('/repo/.claude/prove_it.json', rootDir, sources), false)
-    assert.strictEqual(isSourceFile('/repo/package.json', rootDir, sources), false)
-  })
-
-  it('does not match non-js files in lib/', () => {
-    assert.strictEqual(isSourceFile('/repo/lib/README.md', rootDir, sources), false)
-  })
-
-  it('does not match files outside the repo', () => {
-    assert.strictEqual(isSourceFile('/other/repo/lib/foo.js', rootDir, sources), false)
+  noMatchCases.forEach(([label, filePath]) => {
+    it(`does not match ${label}`, () => {
+      assert.strictEqual(isSourceFile(filePath, rootDir, sources), false)
+    })
   })
 
   it('treats all files as source when sources is null', () => {
@@ -183,56 +123,51 @@ describe('isSourceFile', () => {
   it('treats all files as source when sources is empty', () => {
     assert.strictEqual(isSourceFile('/repo/README.md', rootDir, []), true)
   })
-
-  it('works with relative paths', () => {
-    assert.strictEqual(isSourceFile('lib/shared.js', rootDir, sources), true)
-    assert.strictEqual(isSourceFile('README.md', rootDir, sources), false)
-  })
 })
 
 describe('globToRegex', () => {
-  it('matches simple wildcard', () => {
-    const re = globToRegex('*.js')
-    assert.strictEqual(re.test('foo.js'), true)
-    assert.strictEqual(re.test('bar.js'), true)
-    assert.strictEqual(re.test('foo.ts'), false)
-    assert.strictEqual(re.test('dir/foo.js'), false, 'Single * should not match path separators')
-  })
+  const cases = [
+    ['simple wildcard', '*.js', [
+      ['foo.js', true],
+      ['bar.js', true],
+      ['foo.ts', false],
+      ['dir/foo.js', false, 'Single * should not match path separators']
+    ]],
+    ['globstar (**)', '**/*.js', [
+      ['foo.js', true, '**/ should match zero directory segments (root-level)'],
+      ['src/foo.js', true],
+      ['src/deep/foo.js', true],
+      ['src/foo.ts', false]
+    ]],
+    ['globstar with prefix (lib/**/*.js)', 'lib/**/*.js', [
+      ['lib/shared.js', true, 'Should match files directly in lib/'],
+      ['lib/hooks/edit.js', true, 'Should match nested files'],
+      ['lib/shared.ts', false, 'Should not match wrong extension'],
+      ['src/shared.js', false, 'Should not match wrong prefix']
+    ]],
+    ['single character wildcard (?)', 'file?.js', [
+      ['file1.js', true],
+      ['fileA.js', true],
+      ['file12.js', false, '? should match exactly one character']
+    ]],
+    ['regex special characters', 'file.test.js', [
+      ['file.test.js', true],
+      ['fileXtestXjs', false, 'Dots should be literal, not regex wildcards']
+    ]],
+    ['exact filename without wildcards', 'package.json', [
+      ['package.json', true],
+      ['other.json', false],
+      ['dir/package.json', false]
+    ]]
+  ]
 
-  it('matches globstar (**)', () => {
-    const re = globToRegex('**/*.js')
-    assert.strictEqual(re.test('foo.js'), true, '**/ should match zero directory segments (root-level)')
-    assert.strictEqual(re.test('src/foo.js'), true)
-    assert.strictEqual(re.test('src/deep/foo.js'), true)
-    assert.strictEqual(re.test('src/foo.ts'), false)
-  })
-
-  it('matches globstar with prefix (lib/**/*.js)', () => {
-    const re = globToRegex('lib/**/*.js')
-    assert.strictEqual(re.test('lib/shared.js'), true, 'Should match files directly in lib/')
-    assert.strictEqual(re.test('lib/hooks/edit.js'), true, 'Should match nested files')
-    assert.strictEqual(re.test('lib/shared.ts'), false, 'Should not match wrong extension')
-    assert.strictEqual(re.test('src/shared.js'), false, 'Should not match wrong prefix')
-  })
-
-  it('matches single character wildcard (?)', () => {
-    const re = globToRegex('file?.js')
-    assert.strictEqual(re.test('file1.js'), true)
-    assert.strictEqual(re.test('fileA.js'), true)
-    assert.strictEqual(re.test('file12.js'), false, '? should match exactly one character')
-  })
-
-  it('escapes regex special characters', () => {
-    const re = globToRegex('file.test.js')
-    assert.strictEqual(re.test('file.test.js'), true)
-    assert.strictEqual(re.test('fileXtestXjs'), false, 'Dots should be literal, not regex wildcards')
-  })
-
-  it('matches exact filename without wildcards', () => {
-    const re = globToRegex('package.json')
-    assert.strictEqual(re.test('package.json'), true)
-    assert.strictEqual(re.test('other.json'), false)
-    assert.strictEqual(re.test('dir/package.json'), false)
+  cases.forEach(([label, glob, assertions]) => {
+    it(`matches ${label}`, () => {
+      const re = globToRegex(glob)
+      assertions.forEach(([testString, expected, message]) => {
+        assert.strictEqual(re.test(testString), expected, message)
+      })
+    })
   })
 })
 

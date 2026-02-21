@@ -10,369 +10,155 @@ const FIXTURES_DIR = path.join(__dirname, '..', 'fixtures')
 describe('runReviewer with fixture shims', () => {
   const tmpDir = path.join(require('os').tmpdir(), 'prove_it_reviewer_shim_' + Date.now())
   const fraudePath = path.join(FIXTURES_DIR, 'fraude')
-  function setup () {
-    fs.mkdirSync(tmpDir, { recursive: true })
-  }
+  function setup () { fs.mkdirSync(tmpDir, { recursive: true }) }
+  function cleanup () { delete process.env.FRAUDE_RESPONSE; fs.rmSync(tmpDir, { recursive: true, force: true }) }
 
-  function cleanup () {
-    delete process.env.FRAUDE_RESPONSE
-    fs.rmSync(tmpDir, { recursive: true, force: true })
-  }
+  // ---------- Story: model support ----------
+  // claude → codex → custom → null
+  it('appends --model for claude/codex, omits for custom/null', () => {
+    setup()
+    // Claude: --model haiku
+    const claudePath = path.join(tmpDir, 'claude')
+    fs.writeFileSync(claudePath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
+    fs.chmodSync(claudePath, 0o755)
+    const r1 = runReviewer(tmpDir, { command: `${claudePath} -p`, model: 'haiku' }, 'test')
+    assert.ok(r1.pass && r1.reason.includes('--model') && r1.reason.includes('haiku'))
 
-  describe('fraude (text mode)', () => {
-    it('returns PASS', () => {
-      setup()
-      process.env.FRAUDE_RESPONSE = 'PASS'
-      const review = runReviewer(tmpDir, {
-        command: `${fraudePath} -p`
-      }, 'test prompt')
+    // Codex: --model gpt-5.3-codex
+    const codexPath = path.join(tmpDir, 'codex')
+    fs.writeFileSync(codexPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
+    fs.chmodSync(codexPath, 0o755)
+    const r2 = runReviewer(tmpDir, { command: `${codexPath} exec -`, model: 'gpt-5.3-codex' }, 'test')
+    assert.ok(r2.pass && r2.reason.includes('gpt-5.3-codex'))
 
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true)
-      cleanup()
-    })
+    // Custom: no --model
+    const customPath = path.join(tmpDir, 'custom_reviewer')
+    fs.writeFileSync(customPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
+    fs.chmodSync(customPath, 0o755)
+    const r3 = runReviewer(tmpDir, { command: customPath, model: 'haiku' }, 'test')
+    assert.ok(!r3.reason.includes('--model'))
 
-    it('returns FAIL with reason', () => {
-      setup()
-      process.env.FRAUDE_RESPONSE = 'FAIL: no tests for new function'
-      const review = runReviewer(tmpDir, {
-        command: `${fraudePath} -p`
-      }, 'test prompt')
+    // Null model: no --model
+    process.env.FRAUDE_RESPONSE = 'PASS: no model'
+    const r4 = runReviewer(tmpDir, { command: `${fraudePath} -p`, model: null }, 'test')
+    assert.ok(r4.pass)
 
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, false)
-      assert.strictEqual(review.reason, 'no tests for new function')
-      cleanup()
-    })
+    cleanup()
   })
 
-  describe('binary availability', () => {
-    it('returns available: false when binary not found', () => {
-      setup()
-      const review = runReviewer(tmpDir, {
-        command: 'nonexistent_binary_xyz'
-      }, 'test')
+  // ---------- Story: environment isolation ----------
+  it('sets LC_ALL=C and clears CLAUDECODE', () => {
+    setup()
 
-      assert.strictEqual(review.available, false)
-      assert.strictEqual(review.binary, 'nonexistent_binary_xyz')
-      cleanup()
-    })
+    // LC_ALL=C
+    const lcPath = path.join(tmpDir, 'lc_check.sh')
+    fs.writeFileSync(lcPath, [
+      '#!/usr/bin/env bash', 'cat > /dev/null',
+      'if [ "$LC_ALL" = "C" ]; then echo "PASS: LC_ALL=C"; else echo "FAIL: LC_ALL not C"; fi'
+    ].join('\n'))
+    fs.chmodSync(lcPath, 0o755)
+    assert.strictEqual(runReviewer(tmpDir, { command: lcPath }, 'test').pass, true)
+
+    // CLAUDECODE cleared
+    const ccPath = path.join(tmpDir, 'cc_check.sh')
+    fs.writeFileSync(ccPath, [
+      '#!/usr/bin/env bash', 'cat > /dev/null',
+      'if [ -n "$CLAUDECODE" ]; then echo "FAIL: CLAUDECODE set"; else echo "PASS: cleared"; fi'
+    ].join('\n'))
+    fs.chmodSync(ccPath, 0o755)
+    const orig = process.env.CLAUDECODE
+    process.env.CLAUDECODE = '1'
+    assert.strictEqual(runReviewer(tmpDir, { command: ccPath }, 'test').pass, true)
+    if (orig === undefined) delete process.env.CLAUDECODE; else process.env.CLAUDECODE = orig
+
+    cleanup()
   })
 
-  describe('defaults', () => {
-    it('uses fraude as default when configured, proving default plumbing works', () => {
-      setup()
-      process.env.FRAUDE_RESPONSE = 'PASS'
-      // Prove that if the default command were fraude, text mode works end-to-end
-      const review = runReviewer(tmpDir, {
-        command: `${fraudePath} -p`
-      }, 'test')
+  // ---------- Story: configEnv ----------
+  it('makes configEnv available, protects PROVE_IT_DISABLED/CLAUDECODE, handles null', () => {
+    setup()
 
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true)
-      cleanup()
-    })
+    // Custom var available
+    const p1 = path.join(tmpDir, 'env1.sh')
+    fs.writeFileSync(p1, [
+      '#!/usr/bin/env bash', 'cat > /dev/null',
+      'if [ "$TURBOCOMMIT_DISABLED" = "1" ]; then echo "PASS"; else echo "FAIL"; fi'
+    ].join('\n'))
+    fs.chmodSync(p1, 0o755)
+    assert.strictEqual(runReviewer(tmpDir, { command: p1, configEnv: { TURBOCOMMIT_DISABLED: '1' } }, 'test').pass, true)
+
+    // PROVE_IT_DISABLED cannot be overridden (it's always 1 in reviewer subprocess)
+    const p2 = path.join(tmpDir, 'env2.sh')
+    fs.writeFileSync(p2, [
+      '#!/usr/bin/env bash', 'cat > /dev/null',
+      'if [ "$PROVE_IT_DISABLED" = "1" ]; then echo "PASS"; else echo "FAIL"; fi'
+    ].join('\n'))
+    fs.chmodSync(p2, 0o755)
+    assert.strictEqual(runReviewer(tmpDir, { command: p2, configEnv: { PROVE_IT_DISABLED: '0' } }, 'test').pass, true)
+
+    // CLAUDECODE cannot be set via configEnv
+    const p3 = path.join(tmpDir, 'env3.sh')
+    fs.writeFileSync(p3, [
+      '#!/usr/bin/env bash', 'cat > /dev/null',
+      'if [ -z "$CLAUDECODE" ]; then echo "PASS"; else echo "FAIL"; fi'
+    ].join('\n'))
+    fs.chmodSync(p3, 0o755)
+    assert.strictEqual(runReviewer(tmpDir, { command: p3, configEnv: { CLAUDECODE: 'yes' } }, 'test').pass, true)
+
+    // Null configEnv works fine
+    process.env.FRAUDE_RESPONSE = 'PASS: null configEnv'
+    assert.strictEqual(runReviewer(tmpDir, { command: `${fraudePath} -p`, configEnv: null }, 'test').pass, true)
+
+    cleanup()
   })
 
-  describe('model support', () => {
-    it('appends --model to claude commands', () => {
-      setup()
-      // Create a shim that echoes its own command-line args so we can verify --model was passed
-      const shimPath = path.join(tmpDir, 'claude')
-      fs.writeFileSync(shimPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
-      fs.chmodSync(shimPath, 0o755)
+  it('basic PASS/FAIL, missing binary, timeout, and codex auto-switch', () => {
+    setup()
 
-      const review = runReviewer(tmpDir, {
-        command: `${shimPath} -p`,
-        model: 'haiku'
-      }, 'test prompt')
+    // PASS
+    process.env.FRAUDE_RESPONSE = 'PASS'
+    assert.strictEqual(runReviewer(tmpDir, { command: `${fraudePath} -p` }, 'test').pass, true)
 
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true)
-      assert.ok(review.reason.includes('--model') && review.reason.includes('haiku'),
-        `Expected --model haiku in args, got: ${review.reason}`)
-      cleanup()
-    })
+    // FAIL
+    process.env.FRAUDE_RESPONSE = 'FAIL: no tests for new function'
+    const fail = runReviewer(tmpDir, { command: `${fraudePath} -p` }, 'test')
+    assert.strictEqual(fail.pass, false)
+    assert.strictEqual(fail.reason, 'no tests for new function')
 
-    it('appends --model to codex commands', () => {
-      setup()
-      const shimPath = path.join(tmpDir, 'codex')
-      fs.writeFileSync(shimPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
-      fs.chmodSync(shimPath, 0o755)
+    // Missing binary
+    const missing = runReviewer(tmpDir, { command: 'nonexistent_binary_xyz' }, 'test')
+    assert.strictEqual(missing.available, false)
 
-      const review = runReviewer(tmpDir, {
-        command: `${shimPath} exec -`,
-        model: 'gpt-5.3-codex'
-      }, 'test prompt')
+    // Timeout from config
+    const shimPath = path.join(tmpDir, 'slow.sh')
+    fs.writeFileSync(shimPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS"\n')
+    fs.chmodSync(shimPath, 0o755)
+    assert.strictEqual(runReviewer(tmpDir, { command: shimPath, timeout: 30000 }, 'test').pass, true)
 
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true)
-      assert.ok(review.reason.includes('--model') && review.reason.includes('gpt-5.3-codex'),
-        `Expected --model gpt-5.3-codex in args, got: ${review.reason}`)
-      cleanup()
-    })
+    // Codex auto-switch for gpt- models
+    const shimDir = path.join(tmpDir, 'bin')
+    fs.mkdirSync(shimDir, { recursive: true })
+    const codexShim = path.join(shimDir, 'codex')
+    fs.writeFileSync(codexShim, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
+    fs.chmodSync(codexShim, 0o755)
+    const claudeShim = path.join(shimDir, 'claude')
+    fs.writeFileSync(claudeShim, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
+    fs.chmodSync(claudeShim, 0o755)
 
-    it('does not append --model to non-claude/non-codex commands', () => {
-      setup()
-      const shimPath = path.join(tmpDir, 'custom_reviewer')
-      fs.writeFileSync(shimPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
-      fs.chmodSync(shimPath, 0o755)
+    const origPath = process.env.PATH
+    process.env.PATH = `${shimDir}:${origPath}`
 
-      const review = runReviewer(tmpDir, {
-        command: shimPath,
-        model: 'haiku'
-      }, 'test prompt')
+    const gpt = runReviewer(tmpDir, { model: 'gpt-5.3-codex' }, 'test')
+    assert.ok(gpt.reason.includes('gpt-5.3-codex'))
+    const haiku = runReviewer(tmpDir, { model: 'haiku' }, 'test')
+    assert.ok(haiku.reason.includes('haiku'))
 
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true)
-      assert.ok(!review.reason.includes('--model'),
-        `Expected no --model in args, got: ${review.reason}`)
-      cleanup()
-    })
+    // Explicit command not overridden by gpt model
+    process.env.FRAUDE_RESPONSE = 'PASS: custom command'
+    const explicit = runReviewer(tmpDir, { command: `${fraudePath} -p`, model: 'gpt-5.3-codex' }, 'test')
+    assert.strictEqual(explicit.reason, 'custom command')
 
-    it('does not append --model when model is null', () => {
-      setup()
-      process.env.FRAUDE_RESPONSE = 'PASS: no model'
-      const review = runReviewer(tmpDir, {
-        command: `${fraudePath} -p`,
-        model: null
-      }, 'test prompt')
-
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true)
-      cleanup()
-    })
-  })
-
-  describe('environment isolation', () => {
-    it('sets LC_ALL=C so macOS sed handles non-UTF-8 bytes in diffs', () => {
-      setup()
-      const shimPath = path.join(tmpDir, 'lc_check.sh')
-      fs.writeFileSync(shimPath, [
-        '#!/usr/bin/env bash',
-        'cat > /dev/null',
-        'if [ "$LC_ALL" = "C" ]; then',
-        '  echo "PASS: LC_ALL is C"',
-        'else',
-        '  echo "FAIL: LC_ALL was not C"',
-        'fi'
-      ].join('\n'))
-      fs.chmodSync(shimPath, 0o755)
-
-      const review = runReviewer(tmpDir, {
-        command: shimPath
-      }, 'test prompt')
-
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true, `Expected PASS but got: ${review.reason || review.error}`)
-      cleanup()
-    })
-
-    it('clears CLAUDECODE so reviewer is not rejected as a nested session', () => {
-      setup()
-      // Shim that fails if CLAUDECODE is set (mimics real claude behavior)
-      const shimPath = path.join(tmpDir, 'claude_env_check.sh')
-      fs.writeFileSync(shimPath, [
-        '#!/usr/bin/env bash',
-        'cat > /dev/null',
-        'if [ -n "$CLAUDECODE" ]; then',
-        '  echo "Error: Claude Code cannot be launched inside another Claude Code session." >&2',
-        '  exit 1',
-        'fi',
-        'echo "PASS: CLAUDECODE was cleared"'
-      ].join('\n'))
-      fs.chmodSync(shimPath, 0o755)
-
-      // Simulate being inside a Claude Code session
-      const origClaudeCode = process.env.CLAUDECODE
-      process.env.CLAUDECODE = '1'
-
-      const review = runReviewer(tmpDir, {
-        command: shimPath
-      }, 'test prompt')
-
-      if (origClaudeCode === undefined) {
-        delete process.env.CLAUDECODE
-      } else {
-        process.env.CLAUDECODE = origClaudeCode
-      }
-
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true, `Expected PASS but got error: ${review.error || 'none'}`)
-      cleanup()
-    })
-  })
-
-  describe('configEnv merging', () => {
-    it('makes config env vars available in subprocess', () => {
-      setup()
-      const shimPath = path.join(tmpDir, 'env_check.sh')
-      fs.writeFileSync(shimPath, [
-        '#!/usr/bin/env bash',
-        'cat > /dev/null',
-        'if [ "$TURBOCOMMIT_DISABLED" = "1" ]; then',
-        '  echo "PASS: TURBOCOMMIT_DISABLED is set"',
-        'else',
-        '  echo "FAIL: TURBOCOMMIT_DISABLED was not set"',
-        'fi'
-      ].join('\n'))
-      fs.chmodSync(shimPath, 0o755)
-
-      const review = runReviewer(tmpDir, {
-        command: shimPath,
-        configEnv: { TURBOCOMMIT_DISABLED: '1' }
-      }, 'test prompt')
-
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true, `Expected PASS but got: ${review.reason || review.error}`)
-      cleanup()
-    })
-
-    it('does not let configEnv override PROVE_IT_DISABLED', () => {
-      setup()
-      const shimPath = path.join(tmpDir, 'forced_check.sh')
-      fs.writeFileSync(shimPath, [
-        '#!/usr/bin/env bash',
-        'cat > /dev/null',
-        'if [ "$PROVE_IT_DISABLED" = "1" ]; then',
-        '  echo "PASS: PROVE_IT_DISABLED is still 1"',
-        'else',
-        '  echo "FAIL: PROVE_IT_DISABLED was overridden to $PROVE_IT_DISABLED"',
-        'fi'
-      ].join('\n'))
-      fs.chmodSync(shimPath, 0o755)
-
-      const review = runReviewer(tmpDir, {
-        command: shimPath,
-        configEnv: { PROVE_IT_DISABLED: '0' }
-      }, 'test prompt')
-
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true, `Expected PASS but got: ${review.reason || review.error}`)
-      cleanup()
-    })
-
-    it('does not let configEnv override CLAUDECODE', () => {
-      setup()
-      const shimPath = path.join(tmpDir, 'claude_check.sh')
-      fs.writeFileSync(shimPath, [
-        '#!/usr/bin/env bash',
-        'cat > /dev/null',
-        'if [ -z "$CLAUDECODE" ]; then',
-        '  echo "PASS: CLAUDECODE was cleared"',
-        'else',
-        '  echo "FAIL: CLAUDECODE was set to $CLAUDECODE"',
-        'fi'
-      ].join('\n'))
-      fs.chmodSync(shimPath, 0o755)
-
-      const review = runReviewer(tmpDir, {
-        command: shimPath,
-        configEnv: { CLAUDECODE: 'should-be-overridden' }
-      }, 'test prompt')
-
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true, `Expected PASS but got: ${review.reason || review.error}`)
-      cleanup()
-    })
-
-    it('produces same behavior when configEnv is null', () => {
-      setup()
-      process.env.FRAUDE_RESPONSE = 'PASS: no configEnv'
-      const review = runReviewer(tmpDir, {
-        command: `${fraudePath} -p`,
-        configEnv: null
-      }, 'test prompt')
-
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true)
-      cleanup()
-    })
-  })
-
-  describe('timeout from config', () => {
-    it('uses timeout from reviewerCfg', () => {
-      setup()
-      // Create a script that sleeps briefly — if timeout were 1ms it would fail
-      const shimPath = path.join(tmpDir, 'slow_reviewer.sh')
-      fs.writeFileSync(shimPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS"\n')
-      fs.chmodSync(shimPath, 0o755)
-
-      const review = runReviewer(tmpDir, {
-        command: shimPath,
-        timeout: 30000
-      }, 'test prompt')
-
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true)
-      cleanup()
-    })
-  })
-
-  describe('codex auto-switch', () => {
-    it('auto-selects codex exec when model starts with gpt-', () => {
-      setup()
-      // Create a 'codex' shim that echoes args
-      const shimDir = path.join(tmpDir, 'bin')
-      fs.mkdirSync(shimDir, { recursive: true })
-      const shimPath = path.join(shimDir, 'codex')
-      fs.writeFileSync(shimPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
-      fs.chmodSync(shimPath, 0o755)
-
-      // Prepend shimDir to PATH so 'codex' resolves
-      const origPath = process.env.PATH
-      process.env.PATH = `${shimDir}:${origPath}`
-
-      const review = runReviewer(tmpDir, {
-        model: 'gpt-5.3-codex'
-      }, 'test prompt')
-
-      process.env.PATH = origPath
-
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true)
-      assert.ok(review.reason.includes('--model') && review.reason.includes('gpt-5.3-codex'),
-        `Expected --model gpt-5.3-codex in args, got: ${review.reason}`)
-      cleanup()
-    })
-
-    it('does not auto-select codex for non-gpt models', () => {
-      setup()
-      // Create a 'claude' shim that echoes args
-      const shimDir = path.join(tmpDir, 'bin')
-      fs.mkdirSync(shimDir, { recursive: true })
-      const shimPath = path.join(shimDir, 'claude')
-      fs.writeFileSync(shimPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
-      fs.chmodSync(shimPath, 0o755)
-
-      const origPath = process.env.PATH
-      process.env.PATH = `${shimDir}:${origPath}`
-
-      const review = runReviewer(tmpDir, {
-        model: 'haiku'
-      }, 'test prompt')
-
-      process.env.PATH = origPath
-
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true)
-      assert.ok(review.reason.includes('--model') && review.reason.includes('haiku'),
-        `Expected --model haiku in args, got: ${review.reason}`)
-      cleanup()
-    })
-
-    it('does not override explicit command even with gpt model', () => {
-      setup()
-      process.env.FRAUDE_RESPONSE = 'PASS: custom command'
-      const review = runReviewer(tmpDir, {
-        command: `${fraudePath} -p`,
-        model: 'gpt-5.3-codex'
-      }, 'test prompt')
-
-      assert.strictEqual(review.available, true)
-      assert.strictEqual(review.pass, true)
-      assert.strictEqual(review.reason, 'custom command')
-      cleanup()
-    })
+    process.env.PATH = origPath
+    cleanup()
   })
 })

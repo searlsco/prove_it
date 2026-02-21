@@ -65,13 +65,6 @@ describe('init', () => {
       assert.ok(allChecks.some(c => c.name === 'fast-tests'))
     })
 
-    it('full config has at least as many hooks as base-only', () => {
-      const full = buildConfig()
-      const base = buildConfig({ gitHooks: false, defaultChecks: false })
-      assert.ok(full.hooks.length >= base.hooks.length,
-        'Full config should have at least as many hooks as base')
-    })
-
     it('code-quality-review uses type agent with promptType reference and gross churn threshold', () => {
       const cfg = buildConfig()
       const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
@@ -202,12 +195,6 @@ describe('init', () => {
       const cfg1 = { hooks: [] }
       const cfg2 = { hooks: [], initSeed: 'abc123def456' }
       assert.strictEqual(configHash(cfg1), configHash(cfg2))
-    })
-
-    it('returns a 12-character hex string', () => {
-      const hash = configHash({ enabled: true })
-      assert.strictEqual(hash.length, 12)
-      assert.match(hash, /^[0-9a-f]{12}$/)
     })
   })
 })

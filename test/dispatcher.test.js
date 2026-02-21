@@ -8,19 +8,14 @@ const { recordFileEdit, resetTurnTracking } = require('../lib/session')
 
 describe('claude dispatcher', () => {
   describe('matchesHookEntry', () => {
-    it('matches type and event', () => {
-      const entry = { type: 'claude', event: 'Stop', tasks: [] }
-      assert.strictEqual(matchesHookEntry(entry, 'Stop', {}), true)
-    })
-
-    it('rejects wrong type', () => {
-      const entry = { type: 'git', event: 'Stop', tasks: [] }
-      assert.strictEqual(matchesHookEntry(entry, 'Stop', {}), false)
-    })
-
-    it('rejects wrong event', () => {
-      const entry = { type: 'claude', event: 'PreToolUse', tasks: [] }
-      assert.strictEqual(matchesHookEntry(entry, 'Stop', {}), false)
+    ;[
+      ['matches type and event', { type: 'claude', event: 'Stop', tasks: [] }, 'Stop', {}, true],
+      ['rejects wrong type', { type: 'git', event: 'Stop', tasks: [] }, 'Stop', {}, false],
+      ['rejects wrong event', { type: 'claude', event: 'PreToolUse', tasks: [] }, 'Stop', {}, false]
+    ].forEach(([label, entry, event, hookInput, expected]) => {
+      it(label, () => {
+        assert.strictEqual(matchesHookEntry(entry, event, hookInput), expected)
+      })
     })
 
     it('matches tool name via matcher', () => {
@@ -83,12 +78,13 @@ describe('claude dispatcher', () => {
   })
 
   describe('evaluateWhen', () => {
-    it('returns true when no conditions', () => {
-      assert.strictEqual(evaluateWhen(null, { rootDir: '.' }), true)
-    })
-
-    it('returns true when undefined', () => {
-      assert.strictEqual(evaluateWhen(undefined, { rootDir: '.' }), true)
+    ;[
+      ['null', null],
+      ['undefined', undefined]
+    ].forEach(([label, input]) => {
+      it(`returns true when conditions are ${label}`, () => {
+        assert.strictEqual(evaluateWhen(input, { rootDir: '.' }), true)
+      })
     })
 
     it('checks fileExists — passes when file exists', () => {
@@ -479,16 +475,11 @@ describe('claude dispatcher', () => {
   })
 
   describe('defaultConfig', () => {
-    it('returns enabled: false', () => {
-      assert.strictEqual(defaultConfig().enabled, false)
-    })
-
-    it('returns empty hooks array', () => {
-      assert.deepStrictEqual(defaultConfig().hooks, [])
-    })
-
-    it('returns no format key', () => {
-      assert.strictEqual(defaultConfig().format, undefined)
+    it('returns disabled config with empty hooks and no format', () => {
+      const config = defaultConfig()
+      assert.strictEqual(config.enabled, false)
+      assert.deepStrictEqual(config.hooks, [])
+      assert.strictEqual(config.format, undefined)
     })
   })
 })

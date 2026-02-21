@@ -7,21 +7,13 @@ const { parseEnvOutput } = require('../lib/checks/env')
 const { writeEnvFile } = require('../lib/dispatcher/claude')
 
 describe('parseEnvOutput', () => {
-  describe('empty input', () => {
-    it('returns empty vars for empty string', () => {
-      const { vars, parseError } = parseEnvOutput('')
-      assert.deepStrictEqual(vars, {})
-      assert.strictEqual(parseError, null)
-    })
-
-    it('returns empty vars for whitespace-only', () => {
-      const { vars, parseError } = parseEnvOutput('  \n  ')
-      assert.deepStrictEqual(vars, {})
-      assert.strictEqual(parseError, null)
-    })
-
-    it('returns empty vars for null', () => {
-      const { vars, parseError } = parseEnvOutput(null)
+  ;[
+    ['empty string', ''],
+    ['whitespace-only', '  \n  '],
+    ['null', null]
+  ].forEach(([label, input]) => {
+    it(`returns empty vars for ${label}`, () => {
+      const { vars, parseError } = parseEnvOutput(input)
       assert.deepStrictEqual(vars, {})
       assert.strictEqual(parseError, null)
     })
@@ -66,16 +58,15 @@ describe('parseEnvOutput', () => {
       assert.strictEqual(parseError, null)
     })
 
-    it('parses double-quoted values', () => {
-      const { vars, parseError } = parseEnvOutput('FOO="hello world"')
-      assert.deepStrictEqual(vars, { FOO: 'hello world' })
-      assert.strictEqual(parseError, null)
-    })
-
-    it('parses single-quoted values', () => {
-      const { vars, parseError } = parseEnvOutput("FOO='hello world'")
-      assert.deepStrictEqual(vars, { FOO: 'hello world' })
-      assert.strictEqual(parseError, null)
+    ;[
+      ['double-quoted', 'FOO="hello world"'],
+      ['single-quoted', "FOO='hello world'"]
+    ].forEach(([label, input]) => {
+      it(`parses ${label} values`, () => {
+        const { vars, parseError } = parseEnvOutput(input)
+        assert.deepStrictEqual(vars, { FOO: 'hello world' })
+        assert.strictEqual(parseError, null)
+      })
     })
 
     it('skips comment lines', () => {
@@ -116,22 +107,16 @@ describe('parseEnvOutput', () => {
   })
 
   describe('export format', () => {
-    it('parses export KEY=value lines', () => {
-      const { vars, parseError } = parseEnvOutput('export FOO=bar\nexport BAZ=qux')
-      assert.deepStrictEqual(vars, { FOO: 'bar', BAZ: 'qux' })
-      assert.strictEqual(parseError, null)
-    })
-
-    it('parses export with quoted values', () => {
-      const { vars, parseError } = parseEnvOutput('export FOO="hello world"')
-      assert.deepStrictEqual(vars, { FOO: 'hello world' })
-      assert.strictEqual(parseError, null)
-    })
-
-    it('parses mixed export and plain formats', () => {
-      const { vars, parseError } = parseEnvOutput('export FOO=bar\nBAZ=qux')
-      assert.deepStrictEqual(vars, { FOO: 'bar', BAZ: 'qux' })
-      assert.strictEqual(parseError, null)
+    ;[
+      ['export KEY=value lines', 'export FOO=bar\nexport BAZ=qux', { FOO: 'bar', BAZ: 'qux' }],
+      ['export with quoted values', 'export FOO="hello world"', { FOO: 'hello world' }],
+      ['mixed export and plain formats', 'export FOO=bar\nBAZ=qux', { FOO: 'bar', BAZ: 'qux' }]
+    ].forEach(([label, input, expected]) => {
+      it(`parses ${label}`, () => {
+        const { vars, parseError } = parseEnvOutput(input)
+        assert.deepStrictEqual(vars, expected)
+        assert.strictEqual(parseError, null)
+      })
     })
   })
 })

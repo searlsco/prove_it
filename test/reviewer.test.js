@@ -5,22 +5,18 @@ const { isCodexModel, parseVerdict } = require('../lib/shared')
 
 describe('parseVerdict', () => {
   describe('PASS responses', () => {
-    it("parses 'PASS' with fallback rationale", () => {
-      const result = parseVerdict('PASS')
-      assert.strictEqual(result.pass, true)
-      assert.strictEqual(result.reason, '<<Reviewer provided no rationale>>')
-    })
+    const bareCases = [
+      ['bare PASS', 'PASS'],
+      ['PASS with trailing whitespace', 'PASS\n\n'],
+      ['PASS with leading whitespace', '  PASS']
+    ]
 
-    it("parses 'PASS' with trailing whitespace", () => {
-      const result = parseVerdict('PASS\n\n')
-      assert.strictEqual(result.pass, true)
-      assert.strictEqual(result.reason, '<<Reviewer provided no rationale>>')
-    })
-
-    it("parses 'PASS' with leading whitespace", () => {
-      const result = parseVerdict('  PASS')
-      assert.strictEqual(result.pass, true)
-      assert.strictEqual(result.reason, '<<Reviewer provided no rationale>>')
+    bareCases.forEach(([label, input]) => {
+      it(`parses ${label} with fallback rationale`, () => {
+        const result = parseVerdict(input)
+        assert.strictEqual(result.pass, true)
+        assert.strictEqual(result.reason, '<<Reviewer provided no rationale>>')
+      })
     })
 
     it("parses 'PASS: reasoning'", () => {
@@ -136,8 +132,14 @@ describe('isCodexModel', () => {
     assert.strictEqual(isCodexModel('claude-3-opus'), false)
   })
 
-  it('returns false for null/undefined', () => {
-    assert.strictEqual(isCodexModel(null), false)
-    assert.strictEqual(isCodexModel(undefined), false)
+  const nullishCases = [
+    ['null', null],
+    ['undefined', undefined]
+  ]
+
+  nullishCases.forEach(([label, value]) => {
+    it(`returns false for ${label}`, () => {
+      assert.strictEqual(isCodexModel(value), false)
+    })
   })
 })

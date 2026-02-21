@@ -8,65 +8,42 @@ const { readRef, churnSinceRef, sanitizeRefName } = require('../../lib/git')
 const { freshRepo } = require('../helpers')
 
 describe('git dispatcher', () => {
-  describe('defaultConfig', () => {
-    it('returns enabled: false', () => {
-      assert.strictEqual(defaultConfig().enabled, false)
-    })
-
-    it('returns empty hooks array', () => {
-      assert.deepStrictEqual(defaultConfig().hooks, [])
-    })
-
-    it('returns null sources', () => {
-      assert.strictEqual(defaultConfig().sources, null)
-    })
-
-    it('returns no format key', () => {
-      assert.strictEqual(defaultConfig().format, undefined)
-    })
+  it('defaultConfig returns safe defaults', () => {
+    const cfg = defaultConfig()
+    assert.strictEqual(cfg.enabled, false)
+    assert.deepStrictEqual(cfg.hooks, [])
+    assert.strictEqual(cfg.sources, null)
+    assert.strictEqual(cfg.format, undefined)
   })
 
   describe('matchGitEntries', () => {
-    it('matches git entries for the given event', () => {
+    it('matches git entries by event, ignoring non-git types', () => {
       const hooks = [
         { type: 'git', event: 'pre-commit', tasks: [{ name: 'a' }] },
         { type: 'git', event: 'pre-push', tasks: [{ name: 'b' }] },
-        { type: 'claude', event: 'Stop', tasks: [{ name: 'c' }] }
+        { type: 'claude', event: 'Stop', tasks: [{ name: 'c' }] },
+        { type: 'git', event: 'pre-commit', tasks: [{ name: 'd' }] },
+        { type: 'claude', event: 'pre-commit', tasks: [{ name: 'e' }] }
       ]
+
+      // Matches correct event
       const matched = matchGitEntries(hooks, 'pre-commit')
-      assert.strictEqual(matched.length, 1)
+      assert.strictEqual(matched.length, 2, 'should match both pre-commit git entries')
       assert.strictEqual(matched[0].tasks[0].name, 'a')
+      assert.strictEqual(matched[1].tasks[0].name, 'd')
+
+      // Returns empty for unmatched event
+      assert.deepStrictEqual(matchGitEntries(hooks, 'post-merge'), [])
+
+      // Ignores claude-type entries even when event matches
+      const claudeOnly = [{ type: 'claude', event: 'pre-commit', tasks: [{ name: 'x' }] }]
+      assert.deepStrictEqual(matchGitEntries(claudeOnly, 'pre-commit'), [])
     })
 
-    it('returns empty for no matches', () => {
-      const hooks = [
-        { type: 'git', event: 'pre-push', tasks: [] }
-      ]
-      assert.deepStrictEqual(matchGitEntries(hooks, 'pre-commit'), [])
-    })
-
-    it('ignores claude-type entries', () => {
-      const hooks = [
-        { type: 'claude', event: 'pre-commit', tasks: [{ name: 'x' }] }
-      ]
-      assert.deepStrictEqual(matchGitEntries(hooks, 'pre-commit'), [])
-    })
-
-    it('returns empty for null hooks', () => {
+    it('handles edge cases', () => {
       assert.deepStrictEqual(matchGitEntries(null, 'pre-commit'), [])
-    })
-
-    it('returns empty for non-array hooks', () => {
       assert.deepStrictEqual(matchGitEntries('not-an-array', 'pre-commit'), [])
-    })
-
-    it('matches multiple entries for same event', () => {
-      const hooks = [
-        { type: 'git', event: 'pre-commit', tasks: [{ name: 'a' }] },
-        { type: 'git', event: 'pre-commit', tasks: [{ name: 'b' }] }
-      ]
-      const matched = matchGitEntries(hooks, 'pre-commit')
-      assert.strictEqual(matched.length, 2)
+      assert.deepStrictEqual(matchGitEntries(undefined, 'pre-commit'), [])
     })
   })
 
@@ -91,186 +68,104 @@ describe('git dispatcher', () => {
       return scriptPath
     }
 
-    it('returns no failure when all tasks pass', () => {
-      const scriptPath = makeScript('script/test', '#!/usr/bin/env bash\nexit 0\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [{ name: 'tests', type: 'script', command: scriptPath }]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      const { failure } = runGitTasks(entries, context)
-      assert.strictEqual(failure, null)
-    })
+    function makeContext (overrides = {}) {
+      return {
+        rootDir: tmpDir,
+        projectDir: tmpDir,
+        sessionId: null,
+        hookEvent: 'pre-commit',
+        localCfgPath: null,
+        sources: null,
+        maxChars: 12000,
+        testOutput: '',
+        ...overrides
+      }
+    }
 
-    it('returns failure from failing task', () => {
-      const scriptPath = makeScript('script/test', '#!/usr/bin/env bash\necho "broken" >&2\nexit 1\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [{ name: 'tests', type: 'script', command: scriptPath }]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      const { failure } = runGitTasks(entries, context)
-      assert.ok(failure)
-      assert.ok(failure.includes('tests:'))
-    })
+    function makeEntries (tasks) {
+      return [{ type: 'git', event: 'pre-commit', tasks }]
+    }
 
-    it('stops on first failure by default (first-fail)', () => {
-      const fail1 = makeScript('fail1.sh', '#!/usr/bin/env bash\nexit 1\n')
-      const fail2 = makeScript('fail2.sh', '#!/usr/bin/env bash\nexit 1\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [
-          { name: 'a', type: 'script', command: fail1 },
-          { name: 'b', type: 'script', command: fail2 }
-        ]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      const { failure } = runGitTasks(entries, context)
-      assert.ok(failure, 'default mode should stop after first failure')
-      assert.ok(failure.startsWith('a:'), 'should report first failing task')
-    })
-
-    it('always stops on first failure (fail-fast)', () => {
+    it('basic execution: pass/fail, fail-fast, output propagation', () => {
       const pass = makeScript('pass.sh', '#!/usr/bin/env bash\nexit 0\n')
-      const fail1 = makeScript('fail1.sh', '#!/usr/bin/env bash\nexit 1\n')
+      const fail1 = makeScript('fail1.sh', '#!/usr/bin/env bash\necho "broken" >&2\nexit 1\n')
       const fail2 = makeScript('fail2.sh', '#!/usr/bin/env bash\nexit 1\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [
+      const outputScript = makeScript('output.sh', '#!/usr/bin/env bash\necho "test output here"\nexit 0\n')
+
+      // All pass → no failure
+      const ctx1 = makeContext()
+      const { failure: f1 } = runGitTasks(
+        makeEntries([{ name: 'tests', type: 'script', command: pass }]),
+        ctx1
+      )
+      assert.strictEqual(f1, null)
+
+      // Single failure → reported with task name
+      const { failure: f2 } = runGitTasks(
+        makeEntries([{ name: 'tests', type: 'script', command: fail1 }]),
+        makeContext()
+      )
+      assert.ok(f2)
+      assert.ok(f2.includes('tests:'))
+
+      // Fail-fast: stops on first failure, does not run subsequent tasks
+      const { failure: f3 } = runGitTasks(
+        makeEntries([
           { name: 'a', type: 'script', command: fail1 },
           { name: 'b', type: 'script', command: pass },
           { name: 'c', type: 'script', command: fail2 }
-        ]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      const { failure } = runGitTasks(entries, context)
-      assert.ok(failure, 'should report failure')
-      assert.ok(failure.startsWith('a:'), 'should report first failing task')
+        ]),
+        makeContext()
+      )
+      assert.ok(f3, 'should report failure')
+      assert.ok(f3.startsWith('a:'), 'should report first failing task')
+
+      // Output propagation between tasks
+      const ctx4 = makeContext()
+      runGitTasks(
+        makeEntries([{ name: 'a', type: 'script', command: outputScript }]),
+        ctx4
+      )
+      assert.ok(ctx4.testOutput.includes('test output'))
     })
 
-    it('skips tasks with unsatisfied when condition', () => {
+    it('skip conditions: when, unknown type, enabled flag', () => {
       const fail = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [
-          { name: 'a', type: 'script', command: fail, when: { fileExists: 'nonexistent-xyz' } }
-        ]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      const { failure } = runGitTasks(entries, context)
-      assert.strictEqual(failure, null)
+
+      // Unsatisfied when condition → skip (no failure)
+      const { failure: f1 } = runGitTasks(
+        makeEntries([{ name: 'a', type: 'script', command: fail, when: { fileExists: 'nonexistent-xyz' } }]),
+        makeContext()
+      )
+      assert.strictEqual(f1, null, 'unsatisfied when should skip')
+
+      // Unknown task type → skip (no failure)
+      const { failure: f2 } = runGitTasks(
+        makeEntries([{ name: 'a', type: 'unknown', command: 'whatever' }]),
+        makeContext()
+      )
+      assert.strictEqual(f2, null, 'unknown type should skip')
+
+      // enabled: false → skip (no failure despite failing script)
+      const { failure: f3 } = runGitTasks(
+        makeEntries([{ name: 'disabled-task', type: 'script', command: fail, enabled: false }]),
+        makeContext()
+      )
+      assert.strictEqual(f3, null, 'disabled task should be skipped')
+
+      // enabled: true → runs (failure reported)
+      const { failure: f4 } = runGitTasks(
+        makeEntries([{ name: 'enabled-task', type: 'script', command: fail, enabled: true }]),
+        makeContext()
+      )
+      assert.ok(f4, 'enabled task should execute and report failure')
+      assert.ok(f4.includes('enabled-task'), 'failure should name the task')
     })
 
-    it('skips unknown task types', () => {
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [
-          { name: 'a', type: 'unknown', command: 'whatever' }
-        ]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      const { failure } = runGitTasks(entries, context)
-      assert.strictEqual(failure, null)
-    })
-
-    it('skips task with enabled: false', () => {
-      const failScript = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [{ name: 'disabled-task', type: 'script', command: failScript, enabled: false }]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      const { failure } = runGitTasks(entries, context)
-      assert.strictEqual(failure, null, 'Disabled task should be skipped, not executed')
-    })
-
-    it('suppresses disabled-task SKIP log when quiet: true', () => {
-      const origDir = process.env.PROVE_IT_DIR
-      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
-      const sid = 'test-git-quiet-disabled'
-      const failScript = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [{ name: 'quiet-disabled', type: 'script', command: failScript, enabled: false, quiet: true }]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: sid, hookEvent: 'pre-commit', localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      runGitTasks(entries, context)
-
-      const logFile = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sid}.jsonl`)
-      const logEntries = fs.existsSync(logFile)
-        ? fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
-        : []
-
-      if (origDir === undefined) delete process.env.PROVE_IT_DIR
-      else process.env.PROVE_IT_DIR = origDir
-
-      assert.strictEqual(logEntries.length, 0, 'Quiet disabled task should produce no log entries')
-    })
-
-    it('suppresses when-skipped SKIP log when quiet: true', () => {
-      const origDir = process.env.PROVE_IT_DIR
-      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
-      const sid = 'test-git-quiet-when-skip'
-      const script = makeScript('pass.sh', '#!/usr/bin/env bash\nexit 0\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [{ name: 'quiet-gated', type: 'script', command: script, quiet: true, when: { fileExists: 'nonexistent-xyz' } }]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: sid, hookEvent: 'pre-commit', localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      runGitTasks(entries, context)
-
-      const logFile = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sid}.jsonl`)
-      const logEntries = fs.existsSync(logFile)
-        ? fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
-        : []
-
-      if (origDir === undefined) delete process.env.PROVE_IT_DIR
-      else process.env.PROVE_IT_DIR = origDir
-
-      assert.strictEqual(logEntries.length, 0, 'Quiet when-skipped task should produce no log entries')
-    })
-
-    it('runs task with enabled: true', () => {
-      const failScript = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [{ name: 'enabled-task', type: 'script', command: failScript, enabled: true }]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      const { failure } = runGitTasks(entries, context)
-      assert.ok(failure, 'Task with enabled: true should execute and report failure')
-      assert.ok(failure.includes('enabled-task'), 'Failure should name the task')
-    })
-
-    it('propagates test output between tasks', () => {
-      const script = makeScript('output.sh', '#!/usr/bin/env bash\necho "test output here"\nexit 0\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [
-          { name: 'a', type: 'script', command: script }
-        ]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
-      runGitTasks(entries, context)
-      assert.ok(context.testOutput.includes('test output'))
-    })
-
-    it('advances churn ref on pass for linesChanged task', () => {
-      // Bootstrap the ref
+    it('churn advancement: advance on pass, sticky on fail, resetOnFail', () => {
+      // --- Advance on pass ---
       churnSinceRef(tmpDir, sanitizeRefName('churn-check'), ['**/*.js'])
 
-      // Create enough churn
       const lines = Array.from({ length: 10 }, (_, i) => `line${i}`).join('\n') + '\n'
       fs.writeFileSync(path.join(tmpDir, 'app.js'), lines)
       spawnSync('git', ['add', '.'], { cwd: tmpDir })
@@ -278,88 +173,70 @@ describe('git dispatcher', () => {
 
       const headBefore = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
       const passScript = makeScript('pass.sh', '#!/usr/bin/env bash\nexit 0\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [{
-          name: 'churn-check',
-          type: 'script',
-          command: passScript,
-          when: { linesChanged: 5 }
-        }]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, hookEvent: 'pre-commit', localCfgPath: null, sources: ['**/*.js'], maxChars: 12000, testOutput: '' }
-      const { failure } = runGitTasks(entries, context)
-      assert.strictEqual(failure, null, 'Task should pass')
+      const churnEntries = makeEntries([{
+        name: 'churn-check',
+        type: 'script',
+        command: passScript,
+        when: { linesChanged: 5 }
+      }])
+      const churnCtx = makeContext({ sources: ['**/*.js'] })
+      const { failure: f1 } = runGitTasks(churnEntries, churnCtx)
+      assert.strictEqual(f1, null, 'task should pass')
 
-      // Ref should now be at HEAD
       const ref = readRef(tmpDir, sanitizeRefName('churn-check'))
-      assert.strictEqual(ref, headBefore, 'Ref should be advanced to HEAD after pass')
+      assert.strictEqual(ref, headBefore, 'ref should advance to HEAD after pass')
 
-      // Running again with no new churn should skip
-      const { failure: failure2 } = runGitTasks(entries, context)
-      assert.strictEqual(failure2, null, 'Should pass (task skipped due to 0 churn)')
-    })
+      // Re-running with no new churn → skip (no failure)
+      const { failure: f1b } = runGitTasks(churnEntries, churnCtx)
+      assert.strictEqual(f1b, null, 'should pass (task skipped due to 0 churn)')
 
-    it('does NOT advance churn ref on failure by default (git hooks)', () => {
+      // --- Sticky on fail (ref does NOT advance) ---
       churnSinceRef(tmpDir, sanitizeRefName('sticky-check'), ['**/*.js'])
 
-      const lines = Array.from({ length: 10 }, (_, i) => `line${i}`).join('\n') + '\n'
-      fs.writeFileSync(path.join(tmpDir, 'app.js'), lines)
+      const lines2 = Array.from({ length: 10 }, (_, i) => `sticky${i}`).join('\n') + '\n'
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), lines2)
       spawnSync('git', ['add', '.'], { cwd: tmpDir })
-      spawnSync('git', ['commit', '-m', 'add code'], { cwd: tmpDir })
+      spawnSync('git', ['commit', '-m', 'more code'], { cwd: tmpDir })
 
       const refBefore = readRef(tmpDir, sanitizeRefName('sticky-check'))
       const failScript = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [{
-          name: 'sticky-check',
-          type: 'script',
-          command: failScript,
-          when: { linesChanged: 5 }
-        }]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, hookEvent: 'pre-commit', localCfgPath: null, sources: ['**/*.js'], maxChars: 12000, testOutput: '' }
-      const { failure } = runGitTasks(entries, context)
-      assert.ok(failure, 'Task should fail')
+      const stickyEntries = makeEntries([{
+        name: 'sticky-check',
+        type: 'script',
+        command: failScript,
+        when: { linesChanged: 5 }
+      }])
+      const { failure: f2 } = runGitTasks(stickyEntries, makeContext({ sources: ['**/*.js'] }))
+      assert.ok(f2, 'task should fail')
 
-      // Ref should NOT have advanced
       const refAfter = readRef(tmpDir, sanitizeRefName('sticky-check'))
-      assert.strictEqual(refAfter, refBefore, 'Ref should NOT advance on failure (git hook default)')
-    })
+      assert.strictEqual(refAfter, refBefore, 'ref should NOT advance on failure')
 
-    it('advances churn ref on failure when resetOnFail: true', () => {
+      // --- resetOnFail: true → advance even on failure ---
       churnSinceRef(tmpDir, sanitizeRefName('reset-check'), ['**/*.js'])
 
-      const lines = Array.from({ length: 10 }, (_, i) => `line${i}`).join('\n') + '\n'
-      fs.writeFileSync(path.join(tmpDir, 'app.js'), lines)
+      const lines3 = Array.from({ length: 10 }, (_, i) => `reset${i}`).join('\n') + '\n'
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), lines3)
       spawnSync('git', ['add', '.'], { cwd: tmpDir })
-      spawnSync('git', ['commit', '-m', 'add code'], { cwd: tmpDir })
+      spawnSync('git', ['commit', '-m', 'reset code'], { cwd: tmpDir })
 
-      const failScript = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [{
-          name: 'reset-check',
-          type: 'script',
-          command: failScript,
-          when: { linesChanged: 5 },
-          resetOnFail: true
-        }]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, hookEvent: 'pre-commit', localCfgPath: null, sources: ['**/*.js'], maxChars: 12000, testOutput: '' }
-      const { failure } = runGitTasks(entries, context)
-      assert.ok(failure, 'Task should fail')
+      const resetEntries = makeEntries([{
+        name: 'reset-check',
+        type: 'script',
+        command: failScript,
+        when: { linesChanged: 5 },
+        resetOnFail: true
+      }])
+      const { failure: f3 } = runGitTasks(resetEntries, makeContext({ sources: ['**/*.js'] }))
+      assert.ok(f3, 'task should fail')
 
-      // Ref should be advanced — re-running with no new churn should skip
-      const { failure: failure2 } = runGitTasks(entries, context)
-      assert.strictEqual(failure2, null, 'Should skip after resetOnFail advanced ref')
+      // Re-running with no new churn → skip
+      const { failure: f3b } = runGitTasks(resetEntries, makeContext({ sources: ['**/*.js'] }))
+      assert.strictEqual(f3b, null, 'should skip after resetOnFail advanced ref')
     })
 
-    it('does NOT advance churn ref on agent SKIP', () => {
+    it('churn edge cases: no advance on SKIP, resetOnFail deadlock fix for uncommitted changes', () => {
+      // --- No advance on SKIP ---
       churnSinceRef(tmpDir, sanitizeRefName('skip-check'), ['**/*.js'])
 
       const lines = Array.from({ length: 10 }, (_, i) => `line${i}`).join('\n') + '\n'
@@ -369,58 +246,78 @@ describe('git dispatcher', () => {
 
       const refBefore = readRef(tmpDir, sanitizeRefName('skip-check'))
 
-      // Create a reviewer shim that returns SKIP
       const skipReviewer = makeScript('skip_reviewer.sh', '#!/usr/bin/env bash\ncat > /dev/null\necho "SKIP: mid-refactor"\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [{
-          name: 'skip-check',
-          type: 'agent',
-          prompt: 'Review {{project_dir}}',
-          command: skipReviewer,
-          when: { linesChanged: 5 }
-        }]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, hookEvent: 'pre-commit', localCfgPath: null, sources: ['**/*.js'], maxChars: 12000, testOutput: '' }
-      const { failure } = runGitTasks(entries, context)
-      assert.strictEqual(failure, null, 'SKIP should not cause failure')
+      const skipEntries = makeEntries([{
+        name: 'skip-check',
+        type: 'agent',
+        prompt: 'Review {{project_dir}}',
+        command: skipReviewer,
+        when: { linesChanged: 5 }
+      }])
+      const { failure: f1 } = runGitTasks(skipEntries, makeContext({ sources: ['**/*.js'] }))
+      assert.strictEqual(f1, null, 'SKIP should not cause failure')
 
-      // Ref should NOT have advanced
       const refAfter = readRef(tmpDir, sanitizeRefName('skip-check'))
-      assert.strictEqual(refAfter, refBefore, 'Ref should NOT advance on SKIP')
-    })
+      assert.strictEqual(refAfter, refBefore, 'ref should NOT advance on SKIP')
 
-    it('resetOnFail resets churn for uncommitted changes (deadlock fix)', () => {
-      // Bootstrap
+      // --- resetOnFail deadlock fix for uncommitted changes ---
       churnSinceRef(tmpDir, sanitizeRefName('deadlock-check'), ['**/*.js'])
 
       // Simulate agent Write — uncommitted changes (no commit!)
-      const lines = Array.from({ length: 10 }, (_, i) => `line${i}`).join('\n') + '\n'
-      fs.writeFileSync(path.join(tmpDir, 'app.js'), lines)
+      const lines2 = Array.from({ length: 10 }, (_, i) => `deadlock${i}`).join('\n') + '\n'
+      fs.writeFileSync(path.join(tmpDir, 'app.js'), lines2)
 
       const failScript = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
-      const entries = [{
-        type: 'git',
-        event: 'pre-commit',
-        tasks: [{
-          name: 'deadlock-check',
-          type: 'script',
-          command: failScript,
-          when: { linesChanged: 5 },
-          resetOnFail: true
-        }]
-      }]
-      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, hookEvent: 'pre-commit', localCfgPath: null, sources: ['**/*.js'], maxChars: 12000, testOutput: '' }
+      const deadlockEntries = makeEntries([{
+        name: 'deadlock-check',
+        type: 'script',
+        command: failScript,
+        when: { linesChanged: 5 },
+        resetOnFail: true
+      }])
+      const deadlockCtx = makeContext({ sources: ['**/*.js'] })
 
       // First run: fires and fails, resetOnFail should snapshot working tree
-      const { failure } = runGitTasks(entries, context)
-      assert.ok(failure, 'Task should fail')
+      const { failure: f2 } = runGitTasks(deadlockEntries, deadlockCtx)
+      assert.ok(f2, 'task should fail')
 
       // Second run: if snapshot worked, churn is 0 and task is skipped (no deadlock)
-      const { failure: failure2 } = runGitTasks(entries, context)
-      assert.strictEqual(failure2, null,
-        'Should skip after resetOnFail — ref should capture working tree, not just HEAD')
+      const { failure: f2b } = runGitTasks(deadlockEntries, deadlockCtx)
+      assert.strictEqual(f2b, null,
+        'should skip after resetOnFail — ref should capture working tree, not just HEAD')
+    })
+
+    it('quiet flag suppresses SKIP log entries', () => {
+      const origDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
+      const sid = 'test-git-quiet'
+
+      try {
+        const fail = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
+        const pass = makeScript('pass.sh', '#!/usr/bin/env bash\nexit 0\n')
+
+        // Disabled task with quiet: true → no log
+        runGitTasks(
+          makeEntries([{ name: 'quiet-disabled', type: 'script', command: fail, enabled: false, quiet: true }]),
+          makeContext({ sessionId: sid })
+        )
+
+        // When-skipped task with quiet: true → no log
+        runGitTasks(
+          makeEntries([{ name: 'quiet-gated', type: 'script', command: pass, quiet: true, when: { fileExists: 'nonexistent-xyz' } }]),
+          makeContext({ sessionId: sid })
+        )
+
+        const logFile = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sid}.jsonl`)
+        const logEntries = fs.existsSync(logFile)
+          ? fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+          : []
+
+        assert.strictEqual(logEntries.length, 0, 'quiet SKIP tasks should produce no log entries')
+      } finally {
+        if (origDir === undefined) delete process.env.PROVE_IT_DIR
+        else process.env.PROVE_IT_DIR = origDir
+      }
     })
   })
 })

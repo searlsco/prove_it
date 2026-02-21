@@ -57,9 +57,12 @@ describe('session state functions', () => {
       assert.deepStrictEqual(result, value)
     })
 
-    it('returns null for missing key', () => {
+    it('returns null for a key that does not exist', () => {
       saveSessionState(SESSION_ID, 'exists', true)
       assert.strictEqual(loadSessionState(SESSION_ID, 'doesNotExist'), null)
+
+      saveSessionState('test-missing-key', 'existing_key', 'some_value')
+      assert.strictEqual(loadSessionState('test-missing-key', 'nonexistent_key'), null)
     })
 
     it('overwrites previous value for same key', () => {
@@ -94,11 +97,6 @@ describe('session state functions', () => {
 
       assert.strictEqual(loadSessionState('test-multikey', 'key_a'), 'value_a')
       assert.strictEqual(loadSessionState('test-multikey', 'key_b'), 'value_b')
-    })
-
-    it('returns null for a key that does not exist in state file', () => {
-      saveSessionState('test-missing-key', 'existing_key', 'some_value')
-      assert.strictEqual(loadSessionState('test-missing-key', 'nonexistent_key'), null)
     })
 
     it('isolates state between sessions (the core property)', () => {
@@ -195,32 +193,26 @@ describe('session state functions', () => {
       assert.strictEqual(lastEntry.reason, 'Missing tests for new function')
     })
 
-    it('includes durationMs when provided', () => {
+    it('includes or omits durationMs based on whether it is provided', () => {
       logReview(SESSION_ID, '/project', 'fast-tests', 'PASS', 'OK', 1234)
-      const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${SESSION_ID}.jsonl`)
-      const entry = JSON.parse(fs.readFileSync(logFile, 'utf8').trim().split('\n').pop())
-      assert.strictEqual(entry.durationMs, 1234)
-    })
-
-    it('omits durationMs when not provided', () => {
       logReview(SESSION_ID, '/project', 'fast-tests', 'PASS', 'OK')
+
       const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${SESSION_ID}.jsonl`)
-      const entry = JSON.parse(fs.readFileSync(logFile, 'utf8').trim().split('\n').pop())
-      assert.strictEqual('durationMs' in entry, false)
+      const entries = fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+
+      assert.strictEqual(entries[0].durationMs, 1234)
+      assert.strictEqual('durationMs' in entries[1], false)
     })
 
-    it('includes hookEvent when provided', () => {
+    it('includes or omits hookEvent based on whether it is provided', () => {
       logReview(SESSION_ID, '/project', 'fast-tests', 'PASS', 'OK', 1234, 'Stop')
-      const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${SESSION_ID}.jsonl`)
-      const entry = JSON.parse(fs.readFileSync(logFile, 'utf8').trim().split('\n').pop())
-      assert.strictEqual(entry.hookEvent, 'Stop')
-    })
-
-    it('omits hookEvent when not provided', () => {
       logReview(SESSION_ID, '/project', 'fast-tests', 'PASS', 'OK', 1234)
+
       const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${SESSION_ID}.jsonl`)
-      const entry = JSON.parse(fs.readFileSync(logFile, 'utf8').trim().split('\n').pop())
-      assert.strictEqual('hookEvent' in entry, false)
+      const entries = fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+
+      assert.strictEqual(entries[0].hookEvent, 'Stop')
+      assert.strictEqual('hookEvent' in entries[1], false)
     })
 
     it('includes extra fields when provided', () => {
@@ -357,28 +349,31 @@ describe('session state functions', () => {
       assert.strictEqual(diff.includes('+world'), true)
     })
 
-    it('shows added lines', () => {
-      const diff = generateUnifiedDiff('file.js', 'a\nb\n', 'a\nb\nc\n')
-      assert.strictEqual(diff.includes('+c'), true)
-      assert.strictEqual(diff.includes('-c'), false)
+    ;[
+      ['added lines', 'a\nb\n', 'a\nb\nc\n', ['+c'], ['-c']],
+      ['removed lines', 'a\nb\nc\n', 'a\nb\n', ['-c'], ['+c']]
+    ].forEach(([label, oldContent, newContent, mustInclude, mustExclude]) => {
+      it(`shows ${label}`, () => {
+        const diff = generateUnifiedDiff('file.js', oldContent, newContent)
+        mustInclude.forEach(pat => {
+          assert.strictEqual(diff.includes(pat), true, `Expected ${pat} in diff`)
+        })
+        mustExclude.forEach(pat => {
+          assert.strictEqual(diff.includes(pat), false, `Did not expect ${pat} in diff`)
+        })
+      })
     })
 
-    it('shows removed lines', () => {
-      const diff = generateUnifiedDiff('file.js', 'a\nb\nc\n', 'a\nb\n')
-      assert.strictEqual(diff.includes('-c'), true)
-      assert.strictEqual(diff.includes('+c'), false)
-    })
-
-    it('handles empty old content (new file)', () => {
-      const diff = generateUnifiedDiff('new.js', '', 'line1\nline2\n')
-      assert.strictEqual(diff.includes('+line1'), true)
-      assert.strictEqual(diff.includes('+line2'), true)
-    })
-
-    it('handles empty new content (deleted file)', () => {
-      const diff = generateUnifiedDiff('old.js', 'line1\nline2\n', '')
-      assert.strictEqual(diff.includes('-line1'), true)
-      assert.strictEqual(diff.includes('-line2'), true)
+    ;[
+      ['empty old content (new file)', '', 'line1\nline2\n', ['+line1', '+line2']],
+      ['empty new content (deleted file)', 'line1\nline2\n', '', ['-line1', '-line2']]
+    ].forEach(([label, oldContent, newContent, expectedPatterns]) => {
+      it(`handles ${label}`, () => {
+        const diff = generateUnifiedDiff('file.js', oldContent, newContent)
+        expectedPatterns.forEach(pat => {
+          assert.strictEqual(diff.includes(pat), true, `Expected ${pat} in diff`)
+        })
+      })
     })
 
     it('includes context lines around changes', () => {
@@ -413,22 +408,15 @@ describe('session state functions', () => {
       assert.match(hunkHeader, /@@ -\d+,\d+ \+\d+,\d+ @@/, 'Hunk header should include counts')
     })
 
-    it('line numbers diverge on add', () => {
-      const old = 'a\nb\nc\n'
-      const nu = 'a\nb\nINSERTED\nc\n'
-      const diff = generateUnifiedDiff('file.js', old, nu)
-
-      assert.ok(diff, 'Should produce a diff')
-      assert.strictEqual(diff.includes('+INSERTED'), true, 'Should show added line')
-    })
-
-    it('line numbers diverge on delete', () => {
-      const old = 'a\nb\nc\nd\n'
-      const nu = 'a\nb\nd\n'
-      const diff = generateUnifiedDiff('file.js', old, nu)
-
-      assert.ok(diff, 'Should produce a diff')
-      assert.strictEqual(diff.includes('-c'), true, 'Should show removed line')
+    ;[
+      ['line numbers diverge on add', 'a\nb\nc\n', 'a\nb\nINSERTED\nc\n', '+INSERTED'],
+      ['line numbers diverge on delete', 'a\nb\nc\nd\n', 'a\nb\nd\n', '-c']
+    ].forEach(([label, oldContent, newContent, expectedPattern]) => {
+      it(label, () => {
+        const diff = generateUnifiedDiff('file.js', oldContent, newContent)
+        assert.ok(diff, 'Should produce a diff')
+        assert.strictEqual(diff.includes(expectedPattern), true, `Should show ${expectedPattern}`)
+      })
     })
   })
 
@@ -537,19 +525,15 @@ describe('session state functions', () => {
       assert.strictEqual(getFileEdits(SESSION_ID), null)
     })
 
-    it('recordFileEdit ignores null sessionId', () => {
-      recordFileEdit(null, 'Edit', 'src/app.js')
-      assert.strictEqual(getFileEdits(null), null)
-    })
-
-    it('recordFileEdit ignores null toolName', () => {
-      recordFileEdit(SESSION_ID, null, 'src/app.js')
-      assert.strictEqual(getFileEdits(SESSION_ID), null)
-    })
-
-    it('recordFileEdit ignores null filePath', () => {
-      recordFileEdit(SESSION_ID, 'Edit', null)
-      assert.strictEqual(getFileEdits(SESSION_ID), null)
+    ;[
+      ['null sessionId', null, 'Edit', 'src/app.js'],
+      ['null toolName', SESSION_ID, null, 'src/app.js'],
+      ['null filePath', SESSION_ID, 'Edit', null]
+    ].forEach(([label, sessionId, toolName, filePath]) => {
+      it(`recordFileEdit ignores ${label}`, () => {
+        recordFileEdit(sessionId, toolName, filePath)
+        assert.strictEqual(getFileEdits(sessionId || SESSION_ID), null)
+      })
     })
 
     it('resetTurnTracking is safe with null sessionId', () => {

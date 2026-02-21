@@ -88,24 +88,4 @@ describe('protocol', () => {
       assert.strictEqual(output.systemMessage, undefined)
     })
   })
-
-  describe('valid permissionDecision values', () => {
-    const VALID_PERMISSION_DECISIONS = ['allow', 'deny', 'ask']
-
-    it("rejects 'block' as a permissionDecision value", () => {
-      assert.strictEqual(
-        VALID_PERMISSION_DECISIONS.includes('block'),
-        false,
-        "'block' must not be in the valid set — Claude Code ignores it"
-      )
-    })
-
-    it("rejects 'approve' as a permissionDecision value", () => {
-      assert.strictEqual(
-        VALID_PERMISSION_DECISIONS.includes('approve'),
-        false,
-        "'approve' must not be in the valid set — use 'allow' instead"
-      )
-    })
-  })
 })

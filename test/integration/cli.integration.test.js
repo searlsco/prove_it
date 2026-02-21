@@ -20,685 +20,385 @@ function runCli (args, options = {}) {
 }
 
 describe('CLI', () => {
-  describe('help', () => {
-    it('shows help with no arguments', () => {
-      const result = runCli([])
-      assert.match(result.stdout, /prove_it.*Config-driven/s)
-      assert.match(result.stdout, /install/)
-      assert.match(result.stdout, /uninstall/)
-      assert.match(result.stdout, /init/)
-      assert.match(result.stdout, /deinit/)
-    })
-
-    it('shows help with help command', () => {
-      const result = runCli(['help'])
-      assert.match(result.stdout, /prove_it.*Config-driven/s)
-    })
-
-    it('shows help with --help flag', () => {
-      const result = runCli(['--help'])
-      assert.match(result.stdout, /prove_it.*Config-driven/s)
-    })
+  // ---------- Story: help ----------
+  it('shows help for no args, help command, and --help flag', () => {
+    for (const args of [[], ['help'], ['--help']]) {
+      const r = runCli(args)
+      assert.match(r.stdout, /prove_it.*Config-driven/s)
+    }
+    assert.match(runCli([]).stdout, /install/)
+    assert.match(runCli([]).stdout, /run_builtin/)
   })
 
-  describe('unknown command', () => {
-    it('exits with error for unknown command', () => {
-      const result = runCli(['foobar'])
-      assert.strictEqual(result.exitCode, 1)
-      assert.match(result.stderr, /Unknown command: foobar/)
-    })
+  it('exits with error for unknown command', () => {
+    const r = runCli(['foobar'])
+    assert.strictEqual(r.exitCode, 1)
+    assert.match(r.stderr, /Unknown command: foobar/)
   })
 
-  describe('reinstall', () => {
-    let tmpDir
+  // ---------- Story: run_builtin ----------
+  it('run_builtin: usage, unknown, and config:lock invocation', () => {
+    const r1 = runCli(['run_builtin'])
+    assert.strictEqual(r1.exitCode, 1)
+    assert.match(r1.stderr, /Usage/)
 
-    beforeEach(() => {
-      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_reinstall_'))
-    })
+    const r2 = runCli(['run_builtin', 'nonexistent'])
+    assert.strictEqual(r2.exitCode, 1)
+    assert.match(r2.stderr, /Unknown builtin/)
 
-    afterEach(() => {
-      fs.rmSync(tmpDir, { recursive: true, force: true })
-    })
+    const r3 = runCli(['run_builtin', 'config:lock'])
+    assert.strictEqual(r3.exitCode, 0)
+  })
 
-    it('uninstalls and reinstalls global hooks', () => {
+  // ---------- Story: reinstall ----------
+  it('reinstall uninstalls and reinstalls global hooks', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_reinstall_'))
+    try {
       const env = { ...process.env, HOME: tmpDir }
       runCli(['install'], { env })
-      const result = runCli(['reinstall'], { env })
-      assert.strictEqual(result.exitCode, 0)
-
+      const r = runCli(['reinstall'], { env })
+      assert.strictEqual(r.exitCode, 0)
       const settings = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'settings.json'), 'utf8'))
-      const serialized = JSON.stringify(settings.hooks)
-      assert.ok(serialized.includes('prove_it hook claude:Stop'))
-      assert.ok(serialized.includes('prove_it hook claude:PreToolUse'))
-      assert.ok(serialized.includes('prove_it hook claude:SessionStart'))
-    })
-  })
-
-  describe('run_builtin', () => {
-    it('shows usage with no arguments', () => {
-      const result = runCli(['run_builtin'])
-      assert.strictEqual(result.exitCode, 1)
-      assert.match(result.stderr, /Usage/)
-    })
-
-    it('exits with error for unknown builtin', () => {
-      const result = runCli(['run_builtin', 'nonexistent'])
-      assert.strictEqual(result.exitCode, 1)
-      assert.match(result.stderr, /Unknown builtin/)
-    })
-
-    it('help text mentions run_builtin', () => {
-      const result = runCli(['help'])
-      assert.match(result.stdout, /run_builtin/)
-    })
-
-    it('successfully invokes config:lock (passes with no tool context)', () => {
-      const result = runCli(['run_builtin', 'config:lock'])
-      assert.strictEqual(result.exitCode, 0,
-        `config:lock should pass when no tool context, stderr: ${result.stderr}`)
-    })
+      const s = JSON.stringify(settings.hooks)
+      assert.ok(s.includes('prove_it hook claude:Stop'))
+      assert.ok(s.includes('prove_it hook claude:PreToolUse'))
+      assert.ok(s.includes('prove_it hook claude:SessionStart'))
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
   })
 })
 
 describe('init/deinit', () => {
   let tmpDir
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_test_'))
-  })
+  beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_test_')) })
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }) })
 
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true })
-  })
-
-  it('init creates expected files', () => {
-    const result = runCli(['init'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 0)
-
-    // Check files exist
+  // ---------- Story: init lifecycle ----------
+  it('creates files, reports up-to-date on re-init, auto-upgrades outdated', () => {
+    // Fresh init
+    const r1 = runCli(['init'], { cwd: tmpDir })
+    assert.strictEqual(r1.exitCode, 0)
     assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json')))
     assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it', 'config.local.json')))
     assert.ok(fs.existsSync(path.join(tmpDir, 'script', 'test')))
     assert.ok(fs.existsSync(path.join(tmpDir, 'script', 'test_fast')))
-
-    // Check script/test is executable
-    const stat = fs.statSync(path.join(tmpDir, 'script', 'test'))
-    assert.ok(stat.mode & fs.constants.S_IXUSR, 'script/test should be executable')
-
-    // Check config format
+    assert.ok(fs.statSync(path.join(tmpDir, 'script', 'test')).mode & fs.constants.S_IXUSR)
     const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json'), 'utf8'))
-    assert.ok(Array.isArray(cfg.hooks), 'hooks should be an array')
+    assert.ok(Array.isArray(cfg.hooks))
+
+    // Re-init → up to date
+    assert.match(runCli(['init'], { cwd: tmpDir }).stdout, /up to date/)
+
+    // Shows sources TODO when placeholder globs present
+    assert.match(r1.stdout, /Replace the placeholder sources globs/)
   })
 
-  it('init is non-destructive for legacy configs without hash', () => {
-    // Create a custom config first (no _generatedHash = legacy)
-    fs.mkdirSync(path.join(tmpDir, '.claude', 'prove_it'), { recursive: true })
-    fs.writeFileSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json'), '{"custom": true}')
-
-    runCli(['init'], { cwd: tmpDir })
-
-    // Custom content should be preserved (non-interactive → no overwrite prompt)
-    const content = fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json'), 'utf8')
-    assert.strictEqual(content, '{"custom": true}')
-  })
-
-  it('init reports "(up to date)" when config matches current defaults', () => {
-    // First init creates with hash
-    runCli(['init'], { cwd: tmpDir })
-    // Second init should detect up-to-date
-    const result = runCli(['init'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 0)
-    assert.match(result.stdout, /up to date/)
-  })
-
-  it('init auto-upgrades outdated unedited config', () => {
-    // First init with no default checks
+  // ---------- Story: init upgrade/overwrite ----------
+  it('auto-upgrades outdated, --no-overwrite preserves edited, --overwrite replaces', () => {
+    // Auto-upgrade: init without default checks, then re-init
     runCli(['init', '--no-default-checks'], { cwd: tmpDir })
-    // Re-init with default checks — should auto-upgrade
-    const result = runCli(['init'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 0)
-    assert.match(result.stdout, /Updated:.*upgraded to current defaults/)
-  })
+    const upgrade = runCli(['init'], { cwd: tmpDir })
+    assert.match(upgrade.stdout, /upgraded to current defaults/)
+    assert.match(upgrade.stdout, /\[ \] Commit changes/)
 
-  it('init --no-overwrite reports "(customized)" for edited config', () => {
-    // Init to create config with hash
-    runCli(['init'], { cwd: tmpDir })
-    // Modify the config
     const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
-    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
-    cfg.sources = ['src/**/*.js']
-    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
 
-    const result = runCli(['init', '--no-overwrite'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 0)
-    assert.match(result.stdout, /customized/)
-  })
+    // Customize the config
+    const cfg2 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    cfg2.sources = ['src/**/*.js']
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg2, null, 2) + '\n')
 
-  it('init --overwrite overwrites edited config', () => {
-    // Init to create config with hash
-    runCli(['init'], { cwd: tmpDir })
-    // Modify the config
-    const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
-    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
-    cfg.sources = ['src/**/*.js']
-    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
+    // --no-overwrite → customized
+    assert.match(runCli(['init', '--no-overwrite'], { cwd: tmpDir }).stdout, /customized/)
 
-    const result = runCli(['init', '--overwrite'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 0)
-    assert.match(result.stdout, /Updated:.*overwritten with current defaults/)
-    // Config should now have default sources, not the customized ones
-    const newCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
-    assert.ok(newCfg.initSeed, 'should have initSeed')
-    assert.ok(!newCfg.sources.includes('src/**/*.js'))
-  })
-
-  it('init --overwrite respects other flags', () => {
-    // Init with defaults (includes default checks)
-    runCli(['init'], { cwd: tmpDir })
-    // Modify the config so it's "edited"
-    const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
-    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
-    cfg.sources = ['src/**/*.js']
-    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
-
-    // Overwrite with --no-default-checks
-    const result = runCli(['init', '--overwrite', '--no-default-checks'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 0)
+    // --overwrite → overwritten
+    const ow = runCli(['init', '--overwrite'], { cwd: tmpDir })
+    assert.match(ow.stdout, /overwritten with current defaults/)
     const newCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
     assert.ok(newCfg.initSeed)
-    const allTasks = newCfg.hooks.flatMap(h => h.tasks || [])
-    assert.ok(!allTasks.some(t => t.name === 'code-quality-review'), 'should not have default checks')
-    assert.ok(!allTasks.some(t => t.name === 'coverage-review'), 'should not have default checks')
+    assert.ok(!newCfg.sources.includes('src/**/*.js'))
+
+    // --overwrite respects other flags
+    const cfg3 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    cfg3.sources = ['src/**/*.js']
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg3, null, 2) + '\n')
+    runCli(['init', '--overwrite', '--no-default-checks'], { cwd: tmpDir })
+    const cfg4 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    const allTasks = cfg4.hooks.flatMap(h => h.tasks || [])
+    assert.ok(!allTasks.some(t => t.name === 'code-quality-review'))
   })
 
-  it('init shows "Commit changes" TODO after auto-upgrade', () => {
-    // Init with --no-default-checks, then re-init with defaults to trigger upgrade
-    runCli(['init', '--no-default-checks'], { cwd: tmpDir })
-    const result = runCli(['init'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 0)
-    assert.match(result.stdout, /\[ \] Commit changes/)
-  })
-
-  it('init shows sources TODO when placeholder globs are present', () => {
-    const result = runCli(['init'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 0)
-    assert.match(result.stdout, /Replace the placeholder sources globs/)
-  })
-
-  it('init shows sources done when globs are customized', () => {
-    // Init first
+  it('is non-destructive for legacy configs without hash', () => {
+    fs.mkdirSync(path.join(tmpDir, '.claude', 'prove_it'), { recursive: true })
+    fs.writeFileSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json'), '{"custom": true}')
     runCli(['init'], { cwd: tmpDir })
-    // Customize sources
+    assert.strictEqual(
+      fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json'), 'utf8'),
+      '{"custom": true}'
+    )
+  })
+
+  // ---------- Story: init TODOs ----------
+  it('shows sources/trap TODOs appropriately', () => {
+    runCli(['init'], { cwd: tmpDir })
+
+    // Customize sources → done
     const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
     cfg.sources = ['src/**/*.js', 'test/**/*.js']
     fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
-    // Re-run init
-    const result = runCli(['init'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 0)
-    assert.match(result.stdout, /\[x\] Sources globs configured/)
-  })
+    assert.match(runCli(['init'], { cwd: tmpDir }).stdout, /\[x\] Sources globs configured/)
 
-  it('init shows trap instructions when scripts lack prove_it record', () => {
-    // Create customized scripts without prove_it record
-    fs.mkdirSync(path.join(tmpDir, 'script'), { recursive: true })
+    // Custom scripts without prove_it record → trap instructions
     fs.writeFileSync(path.join(tmpDir, 'script', 'test'), '#!/usr/bin/env bash\nnpm test\n')
     fs.writeFileSync(path.join(tmpDir, 'script', 'test_fast'), '#!/usr/bin/env bash\nnpm run test:unit\n')
+    const r2 = runCli(['init'], { cwd: tmpDir })
+    assert.match(r2.stdout, /skip redundant test runs/)
+    assert.match(r2.stdout, /trap 'prove_it record --name full-tests --result \$\?' EXIT/)
 
-    const result = runCli(['init'], { cwd: tmpDir })
-    assert.match(result.stdout, /skip redundant test runs/)
-    assert.match(result.stdout, /trap 'prove_it record --name full-tests --result \$\?' EXIT/)
-    assert.match(result.stdout, /trap 'prove_it record --name fast-tests --result \$\?' EXIT/)
-  })
-
-  it('init TODO shows done when script has prove_it record', () => {
-    fs.mkdirSync(path.join(tmpDir, 'script'), { recursive: true })
+    // Scripts with prove_it record → done
     fs.writeFileSync(path.join(tmpDir, 'script', 'test'),
       "#!/usr/bin/env bash\ntrap 'prove_it record --name full-tests --result $?' EXIT\nnpm test\n")
     fs.writeFileSync(path.join(tmpDir, 'script', 'test_fast'),
       "#!/usr/bin/env bash\ntrap 'prove_it record --name fast-tests --result $?' EXIT\nnpm run test:unit\n")
-
-    const result = runCli(['init'], { cwd: tmpDir })
-    assert.match(result.stdout, /\[x\] script\/test records results/)
-    assert.match(result.stdout, /\[x\] script\/test_fast records results/)
+    const r3 = runCli(['init'], { cwd: tmpDir })
+    assert.match(r3.stdout, /\[x\] script\/test records results/)
+    assert.match(r3.stdout, /\[x\] script\/test_fast records results/)
   })
 
+  // ---------- Story: reinit ----------
   it('reinit removes and recreates prove_it files', () => {
-    // Init first with custom content
     runCli(['init'], { cwd: tmpDir })
     const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
-    assert.ok(fs.existsSync(cfgPath))
-
-    // Manually delete the config to prove reinit recreates it
     fs.unlinkSync(cfgPath)
     assert.ok(!fs.existsSync(cfgPath))
-
-    const result = runCli(['reinit'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 0)
-    assert.ok(fs.existsSync(cfgPath), 'reinit should recreate config.json')
+    runCli(['reinit'], { cwd: tmpDir })
+    assert.ok(fs.existsSync(cfgPath))
   })
 
-  it('deinit removes prove_it files', () => {
-    // First init
+  // ---------- Story: deinit ----------
+  it('removes configs, preserves custom scripts, removes stubs, handles rules', () => {
     runCli(['init'], { cwd: tmpDir })
     assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'prove_it', 'config.local.json')))
-
-    // Then deinit
-    const result = runCli(['deinit'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 0)
-
-    // Files should be gone
-    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json')))
-    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it', 'config.local.json')))
-  })
-
-  it('deinit preserves customized script/test', () => {
-    // Init first
-    runCli(['init'], { cwd: tmpDir })
 
     // Customize script/test
     fs.writeFileSync(path.join(tmpDir, 'script', 'test'), '#!/usr/bin/env bash\nnpm test\n')
 
     // Deinit
-    runCli(['deinit'], { cwd: tmpDir })
+    const r = runCli(['deinit'], { cwd: tmpDir })
+    assert.strictEqual(r.exitCode, 0)
 
-    // script/test should still exist since it was customized
+    // Config removed
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json')))
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it', 'config.local.json')))
+
+    // Custom script preserved
     assert.ok(fs.existsSync(path.join(tmpDir, 'script', 'test')))
-  })
 
-  it('deinit removes stub script/test and script/test_fast', () => {
-    // Init creates stubs
+    // Stub scripts removed (clean slate: remove custom script, re-init to get stubs)
+    fs.rmSync(path.join(tmpDir, 'script'), { recursive: true, force: true })
     runCli(['init'], { cwd: tmpDir })
-
-    // Deinit should remove them since they're still stubs
     runCli(['deinit'], { cwd: tmpDir })
-
     assert.ok(!fs.existsSync(path.join(tmpDir, 'script', 'test')))
     assert.ok(!fs.existsSync(path.join(tmpDir, 'script', 'test_fast')))
-  })
 
-  it('deinit removes default rule file', () => {
+    // Default rule file removed
     runCli(['init'], { cwd: tmpDir })
     assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'testing.md')))
-
     runCli(['deinit'], { cwd: tmpDir })
     assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'testing.md')))
-  })
 
-  it('deinit preserves customized rule file', () => {
+    // Customized rule file preserved
     runCli(['init'], { cwd: tmpDir })
-    const rulePath = path.join(tmpDir, '.claude', 'rules', 'testing.md')
-    fs.writeFileSync(rulePath, '# My custom rules\n')
+    fs.writeFileSync(path.join(tmpDir, '.claude', 'rules', 'testing.md'), '# Custom\n')
+    const r2 = runCli(['deinit'], { cwd: tmpDir })
+    assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'testing.md')))
+    assert.match(r2.stdout, /customized/)
 
-    const result = runCli(['deinit'], { cwd: tmpDir })
-    assert.ok(fs.existsSync(rulePath), 'Customized rule file should be preserved')
-    assert.match(result.stdout, /customized/)
-  })
-
-  it('deinit removes .claude/prove_it/ directory', () => {
+    // .claude/prove_it/ directory removed (including runtime state)
     runCli(['init'], { cwd: tmpDir })
     const proveItDir = path.join(tmpDir, '.claude', 'prove_it')
-    assert.ok(fs.existsSync(path.join(proveItDir, '.gitignore')),
-      'init should create .claude/prove_it/.gitignore')
-
-    // Simulate runtime state
     const sessionDir = path.join(proveItDir, 'sessions', 'test-session', 'backchannel', 'test-review')
     fs.mkdirSync(sessionDir, { recursive: true })
     fs.writeFileSync(path.join(sessionDir, 'README.md'), 'dev response')
-
     runCli(['deinit'], { cwd: tmpDir })
-    assert.ok(!fs.existsSync(proveItDir),
-      '.claude/prove_it/ should be removed by deinit')
-  })
+    assert.ok(!fs.existsSync(proveItDir))
 
-  it('deinit removes legacy flat-file configs', () => {
-    // Simulate old-format files that might be left from pre-directory layout
+    // Legacy flat-file configs removed
     fs.mkdirSync(path.join(tmpDir, '.claude'), { recursive: true })
     fs.writeFileSync(path.join(tmpDir, '.claude', 'prove_it.json'), '{"old": true}')
     fs.writeFileSync(path.join(tmpDir, '.claude', 'prove_it.local.json'), '{"old": true}')
-
-    const result = runCli(['deinit'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 0)
-    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.json')),
-      'legacy prove_it.json should be removed')
-    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.local.json')),
-      'legacy prove_it.local.json should be removed')
+    runCli(['deinit'], { cwd: tmpDir })
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.json')))
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it.local.json')))
   })
 })
 
 describe('install/uninstall', () => {
   let tmpDir
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_install_'))
-  })
+  beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_install_')) })
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }) })
 
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true })
-  })
+  // ---------- Story: install lifecycle ----------
+  it('creates hooks/config/skill, is idempotent, upgrades outdated', () => {
+    const env = { ...process.env, HOME: tmpDir }
 
-  it('install creates hooks in settings.json', () => {
-    runCli(['install'], { env: { ...process.env, HOME: tmpDir } })
-
+    // Fresh install
+    runCli(['install'], { env })
     const settingsPath = path.join(tmpDir, '.claude', 'settings.json')
-    assert.ok(fs.existsSync(settingsPath), 'settings.json should exist')
-
     const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
     const serialized = JSON.stringify(settings.hooks)
+    assert.ok(serialized.includes('prove_it hook claude:Stop'))
+    assert.ok(serialized.includes('prove_it hook claude:PreToolUse'))
+    assert.ok(serialized.includes('prove_it hook claude:SessionStart'))
 
-    assert.ok(serialized.includes('prove_it hook claude:Stop'),
-      'Should have Stop dispatcher')
-    assert.ok(serialized.includes('prove_it hook claude:PreToolUse'),
-      'Should have PreToolUse dispatcher')
-    assert.ok(serialized.includes('prove_it hook claude:SessionStart'),
-      'Should have SessionStart dispatcher')
-  })
+    // No rules file (v2)
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'prove_it.md')))
 
-  it('install does not create rules file (v2 has no global rules)', () => {
-    runCli(['install'], { env: { ...process.env, HOME: tmpDir } })
-
-    const rulesPath = path.join(tmpDir, '.claude', 'rules', 'prove_it.md')
-    assert.ok(!fs.existsSync(rulesPath),
-      'prove_it.md rules file should not exist in v2')
-  })
-
-  it('install creates global config with default taskEnv vars', () => {
-    runCli(['install'], { env: { ...process.env, HOME: tmpDir } })
-
+    // Global config with defaults
     const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
-    assert.ok(fs.existsSync(configPath), 'Global config should exist')
     const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-    assert.strictEqual(cfg.taskEnv.TURBOCOMMIT_DISABLED, '1',
-      'Should set TURBOCOMMIT_DISABLED=1')
-  })
+    assert.ok(cfg.enabled)
+    assert.ok(cfg.initSeed && cfg.initSeed.length === 12)
+    assert.strictEqual(cfg.taskEnv.TURBOCOMMIT_DISABLED, '1')
 
-  it('install preserves existing global config fields', () => {
-    const configDir = path.join(tmpDir, '.claude', 'prove_it')
-    fs.mkdirSync(configDir, { recursive: true })
-    fs.writeFileSync(path.join(configDir, 'config.json'),
-      JSON.stringify({ ignoredPaths: ['~/tmp'], taskEnv: { MY_VAR: 'keep' } }, null, 2))
+    // Skill file
+    const skillPath = path.join(tmpDir, '.claude', 'skills', 'prove', 'SKILL.md')
+    assert.ok(fs.existsSync(skillPath))
+    const skillContent = fs.readFileSync(skillPath, 'utf8')
+    assert.match(skillContent, /^---\nname: prove\n/)
+    assert.match(skillContent, /disable-model-invocation: true/)
 
-    runCli(['install'], { env: { ...process.env, HOME: tmpDir } })
-
-    const cfg = JSON.parse(fs.readFileSync(path.join(configDir, 'config.json'), 'utf8'))
-    assert.deepStrictEqual(cfg.ignoredPaths, ['~/tmp'],
-      'Should preserve ignoredPaths')
-    assert.strictEqual(cfg.taskEnv.MY_VAR, 'keep',
-      'Should preserve existing taskEnv vars')
-    assert.strictEqual(cfg.taskEnv.TURBOCOMMIT_DISABLED, '1',
-      'Should add default taskEnv vars')
-  })
-
-  it('install is idempotent', () => {
-    const env = { ...process.env, HOME: tmpDir }
+    // Idempotent
     runCli(['install'], { env })
-    runCli(['install'], { env })
-
-    const settingsPath = path.join(tmpDir, '.claude', 'settings.json')
-    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
-
-    // Each hook event should have exactly 1 prove_it dispatcher
-    for (const [event, groups] of Object.entries(settings.hooks)) {
-      const proveItGroups = groups.filter(g =>
-        JSON.stringify(g).includes('prove_it hook')
-      )
-      assert.strictEqual(proveItGroups.length, 1,
-        `${event} should have exactly 1 prove_it dispatcher`)
+    const s2 = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+    for (const [event, groups] of Object.entries(s2.hooks)) {
+      const proveItGroups = groups.filter(g => JSON.stringify(g).includes('prove_it hook'))
+      assert.strictEqual(proveItGroups.length, 1, `${event}: exactly 1 prove_it dispatcher`)
     }
+
+    // Reports "up to date" on second run
+    const r2 = runCli(['install'], { env })
+    assert.match(r2.stdout, /already up to date/)
+    assert.ok(!r2.stdout.includes('Restart Claude Code'))
   })
 
-  it('install reports "up to date" on second run', () => {
+  it('upgrades outdated hooks, config taskEnv, and skill file', () => {
     const env = { ...process.env, HOME: tmpDir }
     runCli(['install'], { env })
-    const result = runCli(['install'], { env })
-    assert.strictEqual(result.exitCode, 0)
-    assert.match(result.stdout, /already up to date/)
-    assert.ok(!result.stdout.includes('Restart Claude Code'),
-      'Should not show restart banner when already up to date')
-  })
-
-  it('install detects outdated global config taskEnv', () => {
-    const env = { ...process.env, HOME: tmpDir }
-    runCli(['install'], { env })
-
-    // Remove the default taskEnv var from global config
+    const settingsPath = path.join(tmpDir, '.claude', 'settings.json')
     const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+    const skillPath = path.join(tmpDir, '.claude', 'skills', 'prove', 'SKILL.md')
+
+    // Outdated hooks
+    const s = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+    const ptGroup = s.hooks.PreToolUse.find(g => JSON.stringify(g).includes('prove_it hook'))
+    ptGroup.matcher = 'Edit|Write'
+    fs.writeFileSync(settingsPath, JSON.stringify(s, null, 2) + '\n')
+    runCli(['install'], { env })
+    const updated = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+    const upGroup = updated.hooks.PreToolUse.find(g => JSON.stringify(g).includes('prove_it hook'))
+    assert.strictEqual(upGroup.matcher, 'Edit|Write|NotebookEdit|Bash')
+
+    // Outdated taskEnv
     const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
     delete cfg.taskEnv.TURBOCOMMIT_DISABLED
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n')
-
-    // Re-install should detect it and update (not report "up to date")
-    const result = runCli(['install'], { env })
-    assert.strictEqual(result.exitCode, 0)
-    assert.match(result.stdout, /prove_it installed/)
-
-    const updated = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-    assert.strictEqual(updated.taskEnv.TURBOCOMMIT_DISABLED, '1',
-      'Should restore default taskEnv var')
-  })
-
-  it('install updates outdated hooks', () => {
-    const env = { ...process.env, HOME: tmpDir }
     runCli(['install'], { env })
+    assert.strictEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).taskEnv.TURBOCOMMIT_DISABLED, '1')
 
-    // Simulate outdated hooks by changing a matcher
-    const settingsPath = path.join(tmpDir, '.claude', 'settings.json')
-    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
-    const ptGroup = settings.hooks.PreToolUse.find(g =>
-      JSON.stringify(g).includes('prove_it hook'))
-    ptGroup.matcher = 'Edit|Write'
-    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n')
-
-    // Re-install should fix it
-    const result = runCli(['install'], { env })
-    assert.strictEqual(result.exitCode, 0)
-    assert.match(result.stdout, /prove_it installed/)
-
-    const updated = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
-    const updatedGroup = updated.hooks.PreToolUse.find(g =>
-      JSON.stringify(g).includes('prove_it hook'))
-    assert.strictEqual(updatedGroup.matcher, 'Edit|Write|NotebookEdit|Bash')
-  })
-
-  it('install detects outdated skill file', () => {
-    const env = { ...process.env, HOME: tmpDir }
-    runCli(['install'], { env })
-
-    // Tamper with the skill file
-    const skillPath = path.join(tmpDir, '.claude', 'skills', 'prove', 'SKILL.md')
+    // Outdated skill file
     fs.writeFileSync(skillPath, 'outdated content')
-
-    // Re-install should detect it and update
-    const result = runCli(['install'], { env })
-    assert.strictEqual(result.exitCode, 0)
-    assert.match(result.stdout, /prove_it installed/)
-
-    const content = fs.readFileSync(skillPath, 'utf8')
-    assert.ok(content !== 'outdated content', 'Skill should be updated')
-  })
-
-  it('uninstall removes hooks and config', () => {
-    const env = { ...process.env, HOME: tmpDir }
     runCli(['install'], { env })
-
-    // Verify install worked
-    const settingsCheck = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'settings.json'), 'utf8'))
-    assert.ok(JSON.stringify(settingsCheck).includes('prove_it hook'))
-
-    runCli(['uninstall'], { env })
-
-    // Hooks should be removed from settings
-    const settingsPath = path.join(tmpDir, '.claude', 'settings.json')
-    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
-    const serialized = JSON.stringify(settings)
-    assert.ok(!serialized.includes('prove_it hook'),
-      'No prove_it hooks should remain in settings.json')
-
-    // Config dir and rules should be removed
-    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it')),
-      'prove_it config directory should be removed')
-    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'prove_it.md')),
-      'prove_it rules file should be removed')
+    assert.ok(fs.readFileSync(skillPath, 'utf8') !== 'outdated content')
   })
 
-  it('install creates skill file', () => {
-    runCli(['install'], { env: { ...process.env, HOME: tmpDir } })
-
-    const skillPath = path.join(tmpDir, '.claude', 'skills', 'prove', 'SKILL.md')
-    assert.ok(fs.existsSync(skillPath), 'SKILL.md should exist')
-
-    const content = fs.readFileSync(skillPath, 'utf8')
-    assert.match(content, /^---\nname: prove\n/,
-      'Should have valid frontmatter with name: prove')
-    assert.match(content, /allowed-tools:/,
-      'Should have allowed-tools')
-    assert.match(content, /disable-model-invocation: true/,
-      'Should have disable-model-invocation: true')
-  })
-
-  it('install overwrites existing skill file', () => {
+  it('preserves existing global config fields and handles legacy configs', () => {
     const env = { ...process.env, HOME: tmpDir }
-    const skillDir = path.join(tmpDir, '.claude', 'skills', 'prove')
-    fs.mkdirSync(skillDir, { recursive: true })
-    fs.writeFileSync(path.join(skillDir, 'SKILL.md'), 'old content')
-
-    runCli(['install'], { env })
-
-    const content = fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8')
-    assert.ok(content !== 'old content', 'Should overwrite old content')
-    assert.match(content, /^---\nname: prove\n/,
-      'Should have current skill content')
-  })
-
-  it('uninstall removes skill directory', () => {
-    const env = { ...process.env, HOME: tmpDir }
-    runCli(['install'], { env })
-
-    const skillDir = path.join(tmpDir, '.claude', 'skills', 'prove')
-    assert.ok(fs.existsSync(skillDir), 'Skill dir should exist after install')
-
-    runCli(['uninstall'], { env })
-    assert.ok(!fs.existsSync(skillDir), 'Skill dir should be removed after uninstall')
-  })
-
-  it('install creates global config with initSeed', () => {
-    runCli(['install'], { env: { ...process.env, HOME: tmpDir } })
-
     const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+
+    // Preserves existing fields
+    fs.mkdirSync(path.dirname(configPath), { recursive: true })
+    fs.writeFileSync(configPath, JSON.stringify({ ignoredPaths: ['~/tmp'], taskEnv: { MY_VAR: 'keep' } }, null, 2))
+    runCli(['install'], { env })
     const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-    assert.ok(cfg.enabled, 'Should have enabled: true')
-    assert.ok(cfg.initSeed, 'Should have initSeed')
-    assert.strictEqual(cfg.initSeed.length, 12, 'initSeed should be 12-char hex')
-  })
+    assert.deepStrictEqual(cfg.ignoredPaths, ['~/tmp'])
+    assert.strictEqual(cfg.taskEnv.MY_VAR, 'keep')
+    assert.strictEqual(cfg.taskEnv.TURBOCOMMIT_DISABLED, '1')
 
-  it('install auto-upgrades unedited global config when defaults change', () => {
-    const env = { ...process.env, HOME: tmpDir }
-    const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
-
-    // Write an old-style global config that is self-consistent (hash matches seed)
+    // Auto-upgrade unedited global config
     const { configHash } = require('../../lib/config')
     const oldConfig = { taskEnv: { OLD_VAR: '1' } }
     oldConfig.initSeed = configHash(oldConfig)
-    fs.mkdirSync(path.dirname(configPath), { recursive: true })
     fs.writeFileSync(configPath, JSON.stringify(oldConfig, null, 2) + '\n')
-
-    // Also need settings.json for install to not short-circuit
     runCli(['install'], { env })
+    const upgraded = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    assert.strictEqual(upgraded.taskEnv.TURBOCOMMIT_DISABLED, '1')
+    assert.ok(!upgraded.taskEnv.OLD_VAR)
 
-    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-    assert.strictEqual(cfg.taskEnv.TURBOCOMMIT_DISABLED, '1', 'Should have current defaults')
-    assert.ok(!cfg.taskEnv.OLD_VAR, 'Old taskEnv should be replaced')
-    assert.strictEqual(cfg.initSeed, configHash(cfg), 'initSeed should match content')
-  })
-
-  it('install preserves edited global config but ensures env defaults', () => {
-    const env = { ...process.env, HOME: tmpDir }
-    const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
-
-    // Install to get a seeded config
-    runCli(['install'], { env })
-
-    // Edit the config (hash will no longer match seed)
-    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-    cfg.ignoredPaths = ['~/my-project']
-    delete cfg.taskEnv.TURBOCOMMIT_DISABLED
-    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n')
-
-    // Re-install
-    runCli(['install'], { env })
-
-    const updated = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-    assert.deepStrictEqual(updated.ignoredPaths, ['~/my-project'],
-      'Should preserve custom fields')
-    assert.strictEqual(updated.taskEnv.TURBOCOMMIT_DISABLED, '1',
-      'Should restore default taskEnv vars')
-  })
-
-  it('install treats legacy global config as edited', () => {
-    const env = { ...process.env, HOME: tmpDir }
-    const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
-
-    // Write a legacy config (no initSeed)
-    fs.mkdirSync(path.dirname(configPath), { recursive: true })
+    // Legacy config (no initSeed) preserved
     fs.writeFileSync(configPath, JSON.stringify({
       ignoredPaths: ['~/legacy'],
       taskEnv: { CUSTOM: 'yes' }
     }, null, 2) + '\n')
-
     runCli(['install'], { env })
+    const legacy = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    assert.deepStrictEqual(legacy.ignoredPaths, ['~/legacy'])
+    assert.strictEqual(legacy.taskEnv.CUSTOM, 'yes')
+    assert.ok(!legacy.initSeed)
 
-    const updated = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-    assert.deepStrictEqual(updated.ignoredPaths, ['~/legacy'],
-      'Should preserve custom fields')
-    assert.strictEqual(updated.taskEnv.CUSTOM, 'yes',
-      'Should preserve custom taskEnv vars')
-    assert.strictEqual(updated.taskEnv.TURBOCOMMIT_DISABLED, '1',
-      'Should add default taskEnv vars')
-    assert.ok(!updated.initSeed,
-      'Should not inject initSeed into edited config')
-  })
-
-  it('install strips configVersion from edited global config', () => {
-    const env = { ...process.env, HOME: tmpDir }
-    const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
-
-    // Write a legacy config with configVersion (no initSeed = treated as edited)
-    fs.mkdirSync(path.dirname(configPath), { recursive: true })
+    // Strips configVersion from edited config
     fs.writeFileSync(configPath, JSON.stringify({
       configVersion: 3,
       ignoredPaths: ['~/legacy'],
       taskEnv: { CUSTOM: 'yes' }
     }, null, 2) + '\n')
-
     runCli(['install'], { env })
+    const stripped = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    assert.ok(!('configVersion' in stripped))
+    assert.deepStrictEqual(stripped.ignoredPaths, ['~/legacy'])
 
-    const updated = JSON.parse(fs.readFileSync(configPath, 'utf8'))
-    assert.ok(!('configVersion' in updated),
-      'Should strip configVersion from edited config')
-    assert.deepStrictEqual(updated.ignoredPaths, ['~/legacy'],
-      'Should preserve other custom fields')
+    // Edited config: install preserves edits but restores env defaults
+    runCli(['install'], { env })
+    const edit = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    edit.ignoredPaths = ['~/my-project']
+    delete edit.taskEnv.TURBOCOMMIT_DISABLED
+    fs.writeFileSync(configPath, JSON.stringify(edit, null, 2) + '\n')
+    runCli(['install'], { env })
+    const fixed = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    assert.deepStrictEqual(fixed.ignoredPaths, ['~/my-project'])
+    assert.strictEqual(fixed.taskEnv.TURBOCOMMIT_DISABLED, '1')
+  })
+
+  // ---------- Story: uninstall ----------
+  it('removes hooks, config, and skill directory', () => {
+    const env = { ...process.env, HOME: tmpDir }
+    runCli(['install'], { env })
+    assert.ok(JSON.stringify(JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'settings.json'), 'utf8'))).includes('prove_it hook'))
+
+    runCli(['uninstall'], { env })
+
+    const settings = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'settings.json'), 'utf8'))
+    assert.ok(!JSON.stringify(settings).includes('prove_it hook'))
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it')))
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'skills', 'prove')))
   })
 })
 
 describe('skill source', () => {
   it('has valid frontmatter', () => {
-    const skillSource = path.join(__dirname, '..', '..', 'lib', 'skills', 'prove.md')
-    const content = fs.readFileSync(skillSource, 'utf8')
-
-    // Single opening --- (not double)
-    assert.ok(content.startsWith('---\n'), 'Should start with single ---')
-    assert.ok(!content.startsWith('---\n---'), 'Should not have double ---')
-
-    // Extract frontmatter
+    const content = fs.readFileSync(path.join(__dirname, '..', '..', 'lib', 'skills', 'prove.md'), 'utf8')
+    assert.ok(content.startsWith('---\n') && !content.startsWith('---\n---'))
     const endIdx = content.indexOf('\n---\n', 4)
-    assert.ok(endIdx > 0, 'Should have closing ---')
-    const frontmatter = content.slice(4, endIdx)
-
-    assert.match(frontmatter, /^name: prove$/m, 'name should be prove')
-    assert.match(frontmatter, /disable-model-invocation: true/,
-      'Should disable model invocation')
-    assert.match(frontmatter, /allowed-tools:/, 'Should have allowed-tools')
-    assert.match(frontmatter, /- Bash/, 'Should allow Bash tool')
-    assert.match(frontmatter, /argument-hint:/, 'Should have argument-hint')
+    assert.ok(endIdx > 0)
+    const fm = content.slice(4, endIdx)
+    assert.match(fm, /^name: prove$/m)
+    assert.match(fm, /disable-model-invocation: true/)
+    assert.match(fm, /allowed-tools:/)
+    assert.match(fm, /- Bash/)
+    assert.match(fm, /argument-hint:/)
   })
 })

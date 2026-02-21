@@ -33,62 +33,57 @@ describe('validateConfig', () => {
       assert.ok(errors.some(e => e.includes('"enabled" must be a boolean')))
     })
 
-    it('errors when sources is not array', () => {
-      const { errors } = validateConfig(validConfig({ sources: 'not-array' }))
-      assert.ok(errors.some(e => e.includes('"sources" must be an array')))
+    it('validates sources field', () => {
+      // not array
+      const notArray = validateConfig(validConfig({ sources: 'not-array' }))
+      assert.ok(notArray.errors.some(e => e.includes('"sources" must be an array')))
+
+      // contains non-string
+      const nonString = validateConfig(validConfig({ sources: ['ok', 42] }))
+      assert.ok(nonString.errors.some(e => e.includes('sources[1] must be a string')))
+
+      // allows null
+      const nullSources = validateConfig(validConfig({ sources: null }))
+      assert.strictEqual(nullSources.errors.length, 0)
     })
 
-    it('errors when sources contains non-string', () => {
-      const { errors } = validateConfig(validConfig({ sources: ['ok', 42] }))
-      assert.ok(errors.some(e => e.includes('sources[1] must be a string')))
+    it('validates format field', () => {
+      // not an object
+      const notObj = validateConfig(validConfig({ format: 'bad' }))
+      assert.ok(notObj.errors.some(e => e.includes('"format" must be an object')))
+
+      // maxOutputChars not positive
+      const neg = validateConfig(validConfig({ format: { maxOutputChars: -1 } }))
+      assert.ok(neg.errors.some(e => e.includes('maxOutputChars must be a positive number')))
     })
 
-    it('allows sources to be null', () => {
-      const { errors } = validateConfig(validConfig({ sources: null }))
-      assert.strictEqual(errors.length, 0)
+    it('errors on legacy keys (mode, checks)', () => {
+      const withMode = validConfig()
+      withMode.mode = 'strict'
+      assert.ok(validateConfig(withMode).errors.some(e => e.includes('"mode" is not supported')))
+
+      const withChecks = validConfig()
+      withChecks.checks = []
+      assert.ok(validateConfig(withChecks).errors.some(e => e.includes('Top-level "checks" is not valid')))
     })
 
-    it('errors when format is not object', () => {
-      const { errors } = validateConfig(validConfig({ format: 'bad' }))
-      assert.ok(errors.some(e => e.includes('"format" must be an object')))
+    it('validates fileEditingTools field', () => {
+      // valid array passes
+      const valid = validateConfig(validConfig({ fileEditingTools: ['XcodeEdit', 'CustomMCPWrite'] }))
+      assert.strictEqual(valid.errors.length, 0)
+
+      // not array errors
+      const notArray = validateConfig(validConfig({ fileEditingTools: 'XcodeEdit' }))
+      assert.ok(notArray.errors.some(e => e.includes('"fileEditingTools" must be an array')))
+
+      // non-string element errors
+      const nonString = validateConfig(validConfig({ fileEditingTools: ['XcodeEdit', 42] }))
+      assert.ok(nonString.errors.some(e => e.includes('fileEditingTools[1] must be a string')))
     })
 
-    it('errors when maxOutputChars is not positive number', () => {
-      const { errors } = validateConfig(validConfig({ format: { maxOutputChars: -1 } }))
-      assert.ok(errors.some(e => e.includes('maxOutputChars must be a positive number')))
-    })
-
-    it('errors on legacy mode key', () => {
-      const cfg = validConfig()
-      cfg.mode = 'strict'
-      const { errors } = validateConfig(cfg)
-      assert.ok(errors.some(e => e.includes('"mode" is not supported')))
-    })
-
-    it('errors on legacy checks key at top level', () => {
-      const cfg = validConfig()
-      cfg.checks = []
-      const { errors } = validateConfig(cfg)
-      assert.ok(errors.some(e => e.includes('Top-level "checks" is not valid')))
-    })
-
-    it('passes fileEditingTools as valid array', () => {
-      const { errors } = validateConfig(validConfig({ fileEditingTools: ['XcodeEdit', 'CustomMCPWrite'] }))
-      assert.strictEqual(errors.length, 0)
-    })
-
-    it('errors when fileEditingTools is not an array', () => {
-      const { errors } = validateConfig(validConfig({ fileEditingTools: 'XcodeEdit' }))
-      assert.ok(errors.some(e => e.includes('"fileEditingTools" must be an array')))
-    })
-
-    it('errors when fileEditingTools contains non-string', () => {
-      const { errors } = validateConfig(validConfig({ fileEditingTools: ['XcodeEdit', 42] }))
-      assert.ok(errors.some(e => e.includes('fileEditingTools[1] must be a string')))
-    })
-
-    it('accepts top-level model as valid string', () => {
-      const { errors } = validateConfig(validConfig({
+    it('validates top-level model field', () => {
+      // valid string with agent tasks passes
+      const valid = validateConfig(validConfig({
         model: 'gpt-4.1',
         hooks: [{
           type: 'claude',
@@ -96,22 +91,17 @@ describe('validateConfig', () => {
           tasks: [{ name: 'a', type: 'agent', prompt: 'Review this' }]
         }]
       }))
-      assert.strictEqual(errors.length, 0)
-    })
+      assert.strictEqual(valid.errors.length, 0)
 
-    it('errors when top-level model is not a string', () => {
-      const { errors } = validateConfig(validConfig({ model: 42 }))
-      assert.ok(errors.some(e => e.includes('"model" must be a non-empty string')))
-    })
+      // invalid values: not a string, empty string
+      for (const [label, value] of [['number', 42], ['empty string', '']]) {
+        const { errors } = validateConfig(validConfig({ model: value }))
+        assert.ok(errors.some(e => e.includes('"model" must be a non-empty string')),
+          `Expected error for model: ${label}`)
+      }
 
-    it('errors when top-level model is empty string', () => {
-      const { errors } = validateConfig(validConfig({ model: '' }))
-      assert.ok(errors.some(e => e.includes('"model" must be a non-empty string')))
-    })
-
-    it('warns when top-level model is set but no agent tasks exist', () => {
-      const { errors, warnings } = validateConfig(validConfig({ model: 'gpt-4.1' }))
-      assert.strictEqual(errors.length, 0)
+      // warns when no agent tasks exist
+      const { warnings } = validateConfig(validConfig({ model: 'gpt-4.1' }))
       assert.ok(warnings.some(w => w.includes('model') && w.includes('no agent tasks')))
     })
 
@@ -127,16 +117,13 @@ describe('validateConfig', () => {
       assert.strictEqual(errors.length, 0)
     })
 
-    it('errors when hooks is missing', () => {
-      const cfg = validConfig()
-      delete cfg.hooks
-      const { errors } = validateConfig(cfg)
-      assert.ok(errors.some(e => e.includes('"hooks" is required')))
-    })
+    it('validates hooks is required and must be array', () => {
+      const missing = validConfig()
+      delete missing.hooks
+      assert.ok(validateConfig(missing).errors.some(e => e.includes('"hooks" is required')))
 
-    it('errors when hooks is not array', () => {
-      const { errors } = validateConfig(validConfig({ hooks: {} }))
-      assert.ok(errors.some(e => e.includes('"hooks" must be an array')))
+      const notArray = validateConfig(validConfig({ hooks: {} }))
+      assert.ok(notArray.errors.some(e => e.includes('"hooks" must be an array')))
     })
   })
 
@@ -145,62 +132,50 @@ describe('validateConfig', () => {
       return validConfig({ hooks: [hookEntry] })
     }
 
-    it('errors on missing type', () => {
-      const { errors } = validateConfig(cfgWith({ event: 'Stop', tasks: [] }))
-      assert.ok(errors.some(e => e.includes('missing "type"')))
+    it('errors on missing or invalid type', () => {
+      const missing = validateConfig(cfgWith({ event: 'Stop', tasks: [] }))
+      assert.ok(missing.errors.some(e => e.includes('missing "type"')))
+
+      const invalid = validateConfig(cfgWith({ type: 'webhook', event: 'Stop', tasks: [] }))
+      assert.ok(invalid.errors.some(e => e.includes('invalid type "webhook"')))
     })
 
-    it('errors on invalid type', () => {
-      const { errors } = validateConfig(cfgWith({ type: 'webhook', event: 'Stop', tasks: [] }))
-      assert.ok(errors.some(e => e.includes('invalid type "webhook"')))
+    it('errors on missing or invalid event', () => {
+      const missing = validateConfig(cfgWith({ type: 'claude', tasks: [] }))
+      assert.ok(missing.errors.some(e => e.includes('missing "event"')))
+
+      const invalidClaude = validateConfig(cfgWith({ type: 'claude', event: 'OnSave', tasks: [] }))
+      assert.ok(invalidClaude.errors.some(e => e.includes('invalid claude event "OnSave"')))
+
+      const invalidGit = validateConfig(cfgWith({ type: 'git', event: 'post-merge', tasks: [] }))
+      assert.ok(invalidGit.errors.some(e => e.includes('invalid git event "post-merge"')))
     })
 
-    it('errors on missing event', () => {
-      const { errors } = validateConfig(cfgWith({ type: 'claude', tasks: [] }))
-      assert.ok(errors.some(e => e.includes('missing "event"')))
-    })
-
-    it('errors on invalid claude event', () => {
-      const { errors } = validateConfig(cfgWith({ type: 'claude', event: 'OnSave', tasks: [] }))
-      assert.ok(errors.some(e => e.includes('invalid claude event "OnSave"')))
-    })
-
-    it('errors on invalid git event', () => {
-      const { errors } = validateConfig(cfgWith({ type: 'git', event: 'post-merge', tasks: [] }))
-      assert.ok(errors.some(e => e.includes('invalid git event "post-merge"')))
-    })
-
-    it('errors on legacy checks key', () => {
-      const { errors } = validateConfig(cfgWith({
+    it('errors on legacy checks key and missing tasks', () => {
+      const legacy = validateConfig(cfgWith({
         type: 'claude', event: 'Stop', checks: [{ name: 'a', type: 'script', command: 'x' }]
       }))
-      assert.ok(errors.some(e => e.includes('Rename "checks" to "tasks"')))
+      assert.ok(legacy.errors.some(e => e.includes('Rename "checks" to "tasks"')))
+
+      const missing = validateConfig(cfgWith({ type: 'claude', event: 'Stop' }))
+      assert.ok(missing.errors.some(e => e.includes('missing "tasks"')))
     })
 
-    it('errors on missing tasks', () => {
-      const { errors } = validateConfig(cfgWith({ type: 'claude', event: 'Stop' }))
-      assert.ok(errors.some(e => e.includes('missing "tasks"')))
-    })
-
-    it('warns on matcher with non-PreToolUse event', () => {
-      const { warnings } = validateConfig(cfgWith({
+    it('warns when event-specific keys are used on wrong events', () => {
+      const matcher = validateConfig(cfgWith({
         type: 'claude', event: 'Stop', matcher: 'Edit', tasks: []
       }))
-      assert.ok(warnings.some(w => w.includes('matcher only applies to PreToolUse')))
-    })
+      assert.ok(matcher.warnings.some(w => w.includes('matcher only applies to PreToolUse')))
 
-    it('warns on triggers with non-PreToolUse event', () => {
-      const { warnings } = validateConfig(cfgWith({
+      const triggers = validateConfig(cfgWith({
         type: 'claude', event: 'Stop', triggers: ['npm'], tasks: []
       }))
-      assert.ok(warnings.some(w => w.includes('triggers only applies to PreToolUse')))
-    })
+      assert.ok(triggers.warnings.some(w => w.includes('triggers only applies to PreToolUse')))
 
-    it('warns on source with non-SessionStart event', () => {
-      const { warnings } = validateConfig(cfgWith({
+      const source = validateConfig(cfgWith({
         type: 'claude', event: 'Stop', source: 'startup', tasks: []
       }))
-      assert.ok(warnings.some(w => w.includes('source only applies to SessionStart')))
+      assert.ok(source.warnings.some(w => w.includes('source only applies to SessionStart')))
     })
 
     it('errors on unknown hook keys', () => {
@@ -222,56 +197,60 @@ describe('validateConfig', () => {
       })
     }
 
-    it('errors on missing name', () => {
-      const { errors } = validateConfig(cfgWithTask({ type: 'script', command: 'x' }))
-      assert.ok(errors.some(e => e.includes('missing "name"')))
+    it('errors on missing or invalid name/type', () => {
+      const noName = validateConfig(cfgWithTask({ type: 'script', command: 'x' }))
+      assert.ok(noName.errors.some(e => e.includes('missing "name"')))
+
+      const noType = validateConfig(cfgWithTask({ name: 'a' }))
+      assert.ok(noType.errors.some(e => e.includes('missing "type"')))
+
+      const badType = validateConfig(cfgWithTask({ name: 'a', type: 'webhook' }))
+      assert.ok(badType.errors.some(e => e.includes('invalid type "webhook"')))
     })
 
-    it('errors on missing type', () => {
-      const { errors } = validateConfig(cfgWithTask({ name: 'a' }))
-      assert.ok(errors.some(e => e.includes('missing "type"')))
-    })
+    it('errors when required fields are missing for task type', () => {
+      // script without command
+      const noCmd = validateConfig(cfgWithTask({ name: 'a', type: 'script' }))
+      assert.ok(noCmd.errors.some(e => e.includes('type "script" but has no "command"')))
 
-    it('errors on invalid type', () => {
-      const { errors } = validateConfig(cfgWithTask({ name: 'a', type: 'webhook' }))
-      assert.ok(errors.some(e => e.includes('invalid type "webhook"')))
-    })
+      // agent without prompt
+      const noPrompt = validateConfig(cfgWithTask({ name: 'a', type: 'agent' }))
+      assert.ok(noPrompt.errors.some(e => e.includes('type "agent" but has no "prompt"')))
 
-    it('errors on script without command', () => {
-      const { errors } = validateConfig(cfgWithTask({ name: 'a', type: 'script' }))
-      assert.ok(errors.some(e => e.includes('type "script" but has no "command"')))
-    })
-
-    it('errors on agent without prompt', () => {
-      const { errors } = validateConfig(cfgWithTask({ name: 'a', type: 'agent' }))
-      assert.ok(errors.some(e => e.includes('type "agent" but has no "prompt"')))
-    })
-
-    it('passes agent with prompt and optional command', () => {
-      const { errors } = validateConfig(cfgWithTask({
+      // agent with prompt and optional command passes
+      const valid = validateConfig(cfgWithTask({
         name: 'a', type: 'agent', prompt: 'Review this', command: 'codex exec -'
       }))
-      assert.strictEqual(errors.length, 0)
+      assert.strictEqual(valid.errors.length, 0)
     })
 
-    it('errors on invalid when keys', () => {
-      const { errors } = validateConfig(cfgWithTask({
+    it('validates when conditions', () => {
+      // valid conditions pass
+      const valid = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { fileExists: '.config', envSet: 'CI', envNotSet: 'SKIP' }
+      }))
+      assert.strictEqual(valid.errors.length, 0)
+
+      // unknown key errors
+      const badKey = validateConfig(cfgWithTask({
         name: 'a',
         type: 'script',
         command: 'x',
         when: { badKey: 'val' }
       }))
-      assert.ok(errors.some(e => e.includes('when has unknown key "badKey"')))
-    })
+      assert.ok(badKey.errors.some(e => e.includes('when has unknown key "badKey"')))
 
-    it('errors on non-string when values', () => {
-      const { errors } = validateConfig(cfgWithTask({
+      // non-string value errors
+      const nonString = validateConfig(cfgWithTask({
         name: 'a',
         type: 'script',
         command: 'x',
         when: { fileExists: 42 }
       }))
-      assert.ok(errors.some(e => e.includes('when.fileExists must be a string')))
+      assert.ok(nonString.errors.some(e => e.includes('when.fileExists must be a string')))
     })
 
     it('errors on non-positive timeout', () => {
@@ -288,18 +267,23 @@ describe('validateConfig', () => {
       assert.ok(errors.some(e => e.includes('mtime must be a boolean')))
     })
 
-    it('accepts enabled as a boolean', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'script', command: 'x', enabled: false
-      }))
-      assert.strictEqual(errors.length, 0)
-    })
-
-    it('errors on non-boolean enabled', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'script', command: 'x', enabled: 'no'
-      }))
-      assert.ok(errors.some(e => e.includes('enabled must be a boolean')))
+    it('validates boolean task fields (enabled, resetOnFail, quiet)', () => {
+      for (const field of ['enabled', 'resetOnFail', 'quiet']) {
+        // accepts true and false
+        for (const val of [true, false]) {
+          const { errors } = validateConfig(cfgWithTask({
+            name: 'a', type: 'script', command: 'x', [field]: val
+          }))
+          assert.strictEqual(errors.length, 0,
+            `Expected no errors for ${field}: ${val}`)
+        }
+        // rejects non-boolean
+        const { errors } = validateConfig(cfgWithTask({
+          name: 'a', type: 'script', command: 'x', [field]: 'yes'
+        }))
+        assert.ok(errors.some(e => e.includes(`${field} must be a boolean`)),
+          `Expected boolean error for ${field}`)
+      }
     })
 
     it('errors on unknown task keys', () => {
@@ -309,348 +293,86 @@ describe('validateConfig', () => {
       assert.ok(errors.some(e => e.includes('unknown key "extraKey"')))
     })
 
-    it('passes valid when conditions', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'script',
-        command: 'x',
-        when: { fileExists: '.config', envSet: 'CI', envNotSet: 'SKIP' }
-      }))
-      assert.strictEqual(errors.length, 0)
-    })
+    it('validates linesChanged and linesWritten when keys', () => {
+      // valid values pass
+      for (const [field, extra] of [
+        ['linesChanged', { command: 'prove_it run_builtin review:test_investment' }],
+        ['linesWritten', {}]
+      ]) {
+        const { errors } = validateConfig(cfgWithTask({
+          name: 'a',
+          type: 'agent',
+          prompt: 'review this',
+          ...extra,
+          when: { [field]: 500 }
+        }))
+        assert.strictEqual(errors.length, 0, `Expected no errors for ${field}`)
+      }
 
-    it('passes linesChanged as valid when key', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'agent',
-        prompt: 'review this',
-        command: 'prove_it run_builtin review:test_investment',
-        when: { linesChanged: 500 }
-      }))
-      assert.strictEqual(errors.length, 0)
-    })
-
-    it('errors when linesChanged is not a number', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'script',
-        command: 'x',
-        when: { linesChanged: '500' }
-      }))
-      assert.ok(errors.some(e => e.includes('linesChanged must be a positive number')))
-    })
-
-    it('errors when linesChanged is zero', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'script',
-        command: 'x',
-        when: { linesChanged: 0 }
-      }))
-      assert.ok(errors.some(e => e.includes('linesChanged must be a positive number')))
-    })
-
-    it('errors when linesChanged is negative', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'script',
-        command: 'x',
-        when: { linesChanged: -10 }
-      }))
-      assert.ok(errors.some(e => e.includes('linesChanged must be a positive number')))
-    })
-
-    it('passes linesWritten as valid when key', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'agent',
-        prompt: 'review this',
-        when: { linesWritten: 733 }
-      }))
-      assert.strictEqual(errors.length, 0)
-    })
-
-    it('errors when linesWritten is not a number', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'script',
-        command: 'x',
-        when: { linesWritten: '500' }
-      }))
-      assert.ok(errors.some(e => e.includes('linesWritten must be a positive number')))
-    })
-
-    it('errors when linesWritten is zero', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'script',
-        command: 'x',
-        when: { linesWritten: 0 }
-      }))
-      assert.ok(errors.some(e => e.includes('linesWritten must be a positive number')))
-    })
-
-    it('errors when linesWritten is negative', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'script',
-        command: 'x',
-        when: { linesWritten: -10 }
-      }))
-      assert.ok(errors.some(e => e.includes('linesWritten must be a positive number')))
-    })
-
-    it('warns when linesWritten is used on a git hook', () => {
-      const { errors, warnings } = validateConfig(validConfig({
-        hooks: [{
-          type: 'git',
-          event: 'pre-commit',
-          tasks: [{
+      // invalid values error
+      for (const field of ['linesChanged', 'linesWritten']) {
+        for (const [label, value] of [['string', '500'], ['zero', 0], ['negative', -10]]) {
+          const { errors } = validateConfig(cfgWithTask({
             name: 'a',
             type: 'script',
             command: 'x',
-            when: { linesWritten: 500 }
-          }]
+            when: { [field]: value }
+          }))
+          assert.ok(errors.some(e => e.includes(`${field} must be a positive number`)),
+            `Expected error for ${field}: ${label} (${value})`)
+        }
+      }
+    })
+
+    it('warns when linesWritten is used on a git hook but not linesChanged', () => {
+      // linesWritten warns on git hooks
+      const written = validateConfig(validConfig({
+        hooks: [{
+          type: 'git',
+          event: 'pre-commit',
+          tasks: [{ name: 'a', type: 'script', command: 'x', when: { linesWritten: 500 } }]
         }]
       }))
-      assert.strictEqual(errors.length, 0)
-      assert.ok(warnings.some(w => w.includes('linesWritten') && w.includes('git')),
+      assert.strictEqual(written.errors.length, 0)
+      assert.ok(written.warnings.some(w => w.includes('linesWritten') && w.includes('git')),
         'Should warn about linesWritten on git hooks')
-    })
 
-    it('no warning when linesChanged is used on a git hook (git-based now)', () => {
-      const { errors, warnings } = validateConfig(validConfig({
+      // linesChanged does NOT warn on git hooks (git-based now)
+      const changed = validateConfig(validConfig({
         hooks: [{
           type: 'git',
           event: 'pre-commit',
-          tasks: [{
-            name: 'a',
-            type: 'script',
-            command: 'x',
-            when: { linesChanged: 500 }
-          }]
+          tasks: [{ name: 'a', type: 'script', command: 'x', when: { linesChanged: 500 } }]
         }]
       }))
-      assert.strictEqual(errors.length, 0)
-      assert.ok(!warnings.some(w => w.includes('linesChanged')),
+      assert.strictEqual(changed.errors.length, 0)
+      assert.ok(!changed.warnings.some(w => w.includes('linesChanged')),
         'Should NOT warn about linesChanged on git hooks anymore')
     })
 
-    it('passes sourcesModifiedSinceLastRun as valid when key', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'agent',
-        prompt: 'review this',
-        when: { sourcesModifiedSinceLastRun: true }
-      }))
-      assert.strictEqual(errors.length, 0)
-    })
+    it('validates boolean when-conditions (sourcesModifiedSinceLastRun, sourceFilesEdited)', () => {
+      // valid booleans pass
+      for (const [field, taskBase] of [
+        ['sourcesModifiedSinceLastRun', { type: 'agent', prompt: 'review this' }],
+        ['sourceFilesEdited', { type: 'script', command: 'x' }]
+      ]) {
+        const { errors } = validateConfig(cfgWithTask({
+          name: 'a', ...taskBase, when: { [field]: true }
+        }))
+        assert.strictEqual(errors.length, 0, `Expected no errors for ${field}: true`)
+      }
 
-    it('errors when sourcesModifiedSinceLastRun is not a boolean', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'script',
-        command: 'x',
-        when: { sourcesModifiedSinceLastRun: 'yes' }
-      }))
-      assert.ok(errors.some(e => e.includes('sourcesModifiedSinceLastRun must be a boolean')))
-    })
-
-    it('passes agent with promptType reference and valid reference', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'agent', prompt: 'review:commit_quality', promptType: 'reference'
-      }))
-      assert.strictEqual(errors.length, 0)
-    })
-
-    it('errors on invalid promptType value', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'agent', prompt: 'review this', promptType: 'builtin'
-      }))
-      assert.ok(errors.some(e => e.includes('promptType must be "string" or "reference"')))
-    })
-
-    it('errors on promptType reference with unknown prompt reference', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'agent', prompt: 'nonexistent:builtin', promptType: 'reference'
-      }))
-      assert.ok(errors.some(e => e.includes('references unknown builtin "nonexistent:builtin"')))
-    })
-
-    it('passes promptType string with any prompt value', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'agent', prompt: 'Review this code', promptType: 'string'
-      }))
-      assert.strictEqual(errors.length, 0)
-    })
-
-    it('passes agent with model field', () => {
-      const { errors, warnings } = validateConfig(cfgWithTask({
-        name: 'a', type: 'agent', prompt: 'Review this', model: 'haiku'
-      }))
-      assert.strictEqual(errors.length, 0)
-      assert.strictEqual(warnings.length, 0)
-    })
-
-    it('errors when model is empty string', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'agent', prompt: 'Review this', model: ''
-      }))
-      assert.ok(errors.some(e => e.includes('model must be a non-empty string')))
-    })
-
-    it('errors when model is not a string', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'agent', prompt: 'Review this', model: 42
-      }))
-      assert.ok(errors.some(e => e.includes('model must be a non-empty string')))
-    })
-
-    it('warns when model is used on non-agent task', () => {
-      const { errors, warnings } = validateConfig(cfgWithTask({
-        name: 'a', type: 'script', command: 'x', model: 'haiku'
-      }))
-      assert.strictEqual(errors.length, 0)
-      assert.ok(warnings.some(w => w.includes('model only applies to agent tasks')))
-    })
-
-    it('passes agent with ruleFile field', () => {
-      const { errors, warnings } = validateConfig(cfgWithTask({
-        name: 'a', type: 'agent', prompt: 'Review this', ruleFile: '.claude/rules/testing.md'
-      }))
-      assert.strictEqual(errors.length, 0)
-      assert.strictEqual(warnings.length, 0)
-    })
-
-    it('errors when ruleFile is empty string', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'agent', prompt: 'Review this', ruleFile: ''
-      }))
-      assert.ok(errors.some(e => e.includes('ruleFile must be a non-empty string')))
-    })
-
-    it('errors when ruleFile is not a string', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'agent', prompt: 'Review this', ruleFile: 42
-      }))
-      assert.ok(errors.some(e => e.includes('ruleFile must be a non-empty string')))
-    })
-
-    it('warns when ruleFile is used on non-agent task', () => {
-      const { errors, warnings } = validateConfig(cfgWithTask({
-        name: 'a', type: 'script', command: 'x', ruleFile: '.claude/rules/testing.md'
-      }))
-      assert.strictEqual(errors.length, 0)
-      assert.ok(warnings.some(w => w.includes('ruleFile only applies to agent tasks')))
-    })
-
-    it('accepts resetOnFail as a boolean', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'script', command: 'x', resetOnFail: true
-      }))
-      assert.strictEqual(errors.length, 0)
-    })
-
-    it('accepts resetOnFail: false', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'script', command: 'x', resetOnFail: false
-      }))
-      assert.strictEqual(errors.length, 0)
-    })
-
-    it('errors when resetOnFail is not a boolean', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'script', command: 'x', resetOnFail: 'yes'
-      }))
-      assert.ok(errors.some(e => e.includes('resetOnFail must be a boolean')))
-    })
-
-    it('accepts quiet as a boolean', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'script', command: 'x', quiet: true
-      }))
-      assert.strictEqual(errors.length, 0)
-    })
-
-    it('accepts quiet: false', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'script', command: 'x', quiet: false
-      }))
-      assert.strictEqual(errors.length, 0)
-    })
-
-    it('errors when quiet is not a boolean', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'script', command: 'x', quiet: 'yes'
-      }))
-      assert.ok(errors.some(e => e.includes('quiet must be a boolean')))
-    })
-
-    it('passes toolsUsed as valid array', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'script',
-        command: 'x',
-        when: { toolsUsed: ['XcodeEdit', 'Edit'] }
-      }))
-      assert.strictEqual(errors.length, 0)
-    })
-
-    it('errors when toolsUsed is not an array', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'script',
-        command: 'x',
-        when: { toolsUsed: 'Edit' }
-      }))
-      assert.ok(errors.some(e => e.includes('toolsUsed must be an array')))
-    })
-
-    it('errors when toolsUsed contains non-string', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'script',
-        command: 'x',
-        when: { toolsUsed: ['Edit', 42] }
-      }))
-      assert.ok(errors.some(e => e.includes('toolsUsed[1] must be a string')))
-    })
-
-    it('warns when toolsUsed is used on a git hook', () => {
-      const { errors, warnings } = validateConfig(validConfig({
-        hooks: [{
-          type: 'git',
-          event: 'pre-commit',
-          tasks: [{
-            name: 'a',
-            type: 'script',
-            command: 'x',
-            when: { toolsUsed: ['Edit'] }
-          }]
-        }]
-      }))
-      assert.strictEqual(errors.length, 0)
-      assert.ok(warnings.some(w => w.includes('toolsUsed') && w.includes('git')))
-    })
-
-    it('passes sourceFilesEdited as valid boolean', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'script',
-        command: 'x',
-        when: { sourceFilesEdited: true }
-      }))
-      assert.strictEqual(errors.length, 0)
-    })
-
-    it('errors when sourceFilesEdited is not a boolean', () => {
-      const { errors } = validateConfig(cfgWithTask({
-        name: 'a',
-        type: 'script',
-        command: 'x',
-        when: { sourceFilesEdited: 'yes' }
-      }))
-      assert.ok(errors.some(e => e.includes('sourceFilesEdited must be a boolean')))
+      // non-booleans error
+      for (const field of ['sourcesModifiedSinceLastRun', 'sourceFilesEdited']) {
+        const { errors } = validateConfig(cfgWithTask({
+          name: 'a',
+          type: 'script',
+          command: 'x',
+          when: { [field]: 'yes' }
+        }))
+        assert.ok(errors.some(e => e.includes(`${field} must be a boolean`)),
+          `Expected boolean error for ${field}`)
+      }
     })
 
     it('warns when sourceFilesEdited is used on a git hook', () => {
@@ -658,110 +380,199 @@ describe('validateConfig', () => {
         hooks: [{
           type: 'git',
           event: 'pre-commit',
-          tasks: [{
-            name: 'a',
-            type: 'script',
-            command: 'x',
-            when: { sourceFilesEdited: true }
-          }]
+          tasks: [{ name: 'a', type: 'script', command: 'x', when: { sourceFilesEdited: true } }]
         }]
       }))
       assert.strictEqual(errors.length, 0)
       assert.ok(warnings.some(w => w.includes('sourceFilesEdited') && w.includes('git')))
     })
 
-    it('passes variablesPresent as valid array', () => {
-      const { errors } = validateConfig(cfgWithTask({
+    it('validates promptType field', () => {
+      // reference with valid builtin passes
+      const validRef = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'review:commit_quality', promptType: 'reference'
+      }))
+      assert.strictEqual(validRef.errors.length, 0)
+
+      // string promptType with any prompt passes
+      const validStr = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'Review this code', promptType: 'string'
+      }))
+      assert.strictEqual(validStr.errors.length, 0)
+
+      // invalid promptType value errors
+      const badType = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'review this', promptType: 'builtin'
+      }))
+      assert.ok(badType.errors.some(e => e.includes('promptType must be "string" or "reference"')))
+
+      // reference with unknown builtin errors
+      const unknownRef = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'nonexistent:builtin', promptType: 'reference'
+      }))
+      assert.ok(unknownRef.errors.some(e => e.includes('references unknown builtin "nonexistent:builtin"')))
+    })
+
+    it('validates task-level model field', () => {
+      // valid model on agent passes with no warnings
+      const valid = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'Review this', model: 'haiku'
+      }))
+      assert.strictEqual(valid.errors.length, 0)
+      assert.strictEqual(valid.warnings.length, 0)
+
+      // invalid values: empty string, non-string
+      for (const [label, value] of [['empty string', ''], ['number', 42]]) {
+        const { errors } = validateConfig(cfgWithTask({
+          name: 'a', type: 'agent', prompt: 'Review this', model: value
+        }))
+        assert.ok(errors.some(e => e.includes('model must be a non-empty string')),
+          `Expected error for model: ${label}`)
+      }
+
+      // warns on non-agent task
+      const { warnings } = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', model: 'haiku'
+      }))
+      assert.ok(warnings.some(w => w.includes('model only applies to agent tasks')))
+    })
+
+    it('validates task-level ruleFile field', () => {
+      // valid ruleFile on agent passes with no warnings
+      const valid = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'Review this', ruleFile: '.claude/rules/testing.md'
+      }))
+      assert.strictEqual(valid.errors.length, 0)
+      assert.strictEqual(valid.warnings.length, 0)
+
+      // invalid values: empty string, non-string
+      for (const [label, value] of [['empty string', ''], ['number', 42]]) {
+        const { errors } = validateConfig(cfgWithTask({
+          name: 'a', type: 'agent', prompt: 'Review this', ruleFile: value
+        }))
+        assert.ok(errors.some(e => e.includes('ruleFile must be a non-empty string')),
+          `Expected error for ruleFile: ${label}`)
+      }
+
+      // warns on non-agent task
+      const { warnings } = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', ruleFile: '.claude/rules/testing.md'
+      }))
+      assert.ok(warnings.some(w => w.includes('ruleFile only applies to agent tasks')))
+    })
+
+    it('validates toolsUsed when key', () => {
+      // valid array passes
+      const valid = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { toolsUsed: ['XcodeEdit', 'Edit'] }
+      }))
+      assert.strictEqual(valid.errors.length, 0)
+
+      // not an array errors
+      const notArray = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { toolsUsed: 'Edit' }
+      }))
+      assert.ok(notArray.errors.some(e => e.includes('toolsUsed must be an array')))
+
+      // non-string element errors
+      const nonString = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { toolsUsed: ['Edit', 42] }
+      }))
+      assert.ok(nonString.errors.some(e => e.includes('toolsUsed[1] must be a string')))
+
+      // warns on git hook
+      const { warnings } = validateConfig(validConfig({
+        hooks: [{
+          type: 'git',
+          event: 'pre-commit',
+          tasks: [{ name: 'a', type: 'script', command: 'x', when: { toolsUsed: ['Edit'] } }]
+        }]
+      }))
+      assert.ok(warnings.some(w => w.includes('toolsUsed') && w.includes('git')))
+    })
+
+    it('validates variablesPresent when key', () => {
+      // valid array passes
+      const valid = validateConfig(cfgWithTask({
         name: 'a',
         type: 'script',
         command: 'x',
         when: { variablesPresent: ['staged_diff', 'session_diff'] }
       }))
-      assert.strictEqual(errors.length, 0)
-    })
+      assert.strictEqual(valid.errors.length, 0)
 
-    it('errors when variablesPresent is not array', () => {
-      const { errors } = validateConfig(cfgWithTask({
+      // not an array errors
+      const notArray = validateConfig(cfgWithTask({
         name: 'a',
         type: 'script',
         command: 'x',
         when: { variablesPresent: 'staged_diff' }
       }))
-      assert.ok(errors.some(e => e.includes('variablesPresent must be an array')))
-    })
+      assert.ok(notArray.errors.some(e => e.includes('variablesPresent must be an array')))
 
-    it('errors when variablesPresent contains unknown var name', () => {
-      const { errors } = validateConfig(cfgWithTask({
+      // unknown var name errors
+      const unknown = validateConfig(cfgWithTask({
         name: 'a',
         type: 'script',
         command: 'x',
         when: { variablesPresent: ['bogus_var'] }
       }))
-      assert.ok(errors.some(e => e.includes('unknown variable "bogus_var"')))
+      assert.ok(unknown.errors.some(e => e.includes('unknown variable "bogus_var"')))
     })
   })
 
   describe('top-level taskEnv validation', () => {
-    it('passes taskEnv as object with string values', () => {
-      const { errors } = validateConfig(validConfig({ taskEnv: { TURBOCOMMIT_DISABLED: '1', MY_VAR: 'hello' } }))
-      assert.strictEqual(errors.length, 0)
-    })
+    it('passes valid taskEnv configurations', () => {
+      // object with string values
+      const withValues = validateConfig(validConfig({ taskEnv: { TURBOCOMMIT_DISABLED: '1', MY_VAR: 'hello' } }))
+      assert.strictEqual(withValues.errors.length, 0)
 
-    it('passes empty taskEnv object', () => {
-      const { errors } = validateConfig(validConfig({ taskEnv: {} }))
-      assert.strictEqual(errors.length, 0)
-    })
+      // empty object
+      const empty = validateConfig(validConfig({ taskEnv: {} }))
+      assert.strictEqual(empty.errors.length, 0)
 
-    it('passes when taskEnv is omitted', () => {
+      // omitted entirely
       const cfg = validConfig()
       delete cfg.taskEnv
-      const { errors } = validateConfig(cfg)
-      assert.strictEqual(errors.length, 0)
+      const omitted = validateConfig(cfg)
+      assert.strictEqual(omitted.errors.length, 0)
+
+      // key starting with underscore
+      const underscore = validateConfig(validConfig({ taskEnv: { _INTERNAL: 'val' } }))
+      assert.strictEqual(underscore.errors.length, 0)
     })
 
-    it('errors when taskEnv is a string', () => {
-      const { errors } = validateConfig(validConfig({ taskEnv: 'FOO=bar' }))
-      assert.ok(errors.some(e => e.includes('"taskEnv" must be an object')))
+    it('errors when taskEnv is not a plain object', () => {
+      for (const [label, value] of [['string', 'FOO=bar'], ['array', ['FOO=bar']], ['null', null]]) {
+        const { errors } = validateConfig(validConfig({ taskEnv: value }))
+        assert.ok(errors.some(e => e.includes('"taskEnv" must be an object')),
+          `Expected object error for taskEnv: ${label}`)
+      }
     })
 
-    it('errors when taskEnv is an array', () => {
-      const { errors } = validateConfig(validConfig({ taskEnv: ['FOO=bar'] }))
-      assert.ok(errors.some(e => e.includes('"taskEnv" must be an object')))
+    it('errors when taskEnv values are not strings', () => {
+      for (const [key, value] of [['PORT', 3000], ['DEBUG', true], ['NESTED', { a: 1 }]]) {
+        const { errors } = validateConfig(validConfig({ taskEnv: { [key]: value } }))
+        assert.ok(errors.some(e => e.includes(`taskEnv["${key}"] must be a string`)),
+          `Expected string error for taskEnv["${key}"]`)
+      }
     })
 
-    it('errors when taskEnv is null', () => {
-      const { errors } = validateConfig(validConfig({ taskEnv: null }))
-      assert.ok(errors.some(e => e.includes('"taskEnv" must be an object')))
-    })
-
-    it('errors when taskEnv value is a number', () => {
-      const { errors } = validateConfig(validConfig({ taskEnv: { PORT: 3000 } }))
-      assert.ok(errors.some(e => e.includes('taskEnv["PORT"] must be a string')))
-    })
-
-    it('errors when taskEnv value is a boolean', () => {
-      const { errors } = validateConfig(validConfig({ taskEnv: { DEBUG: true } }))
-      assert.ok(errors.some(e => e.includes('taskEnv["DEBUG"] must be a string')))
-    })
-
-    it('errors when taskEnv value is an object', () => {
-      const { errors } = validateConfig(validConfig({ taskEnv: { NESTED: { a: 1 } } }))
-      assert.ok(errors.some(e => e.includes('taskEnv["NESTED"] must be a string')))
-    })
-
-    it('errors when taskEnv key starts with a digit', () => {
-      const { errors } = validateConfig(validConfig({ taskEnv: { '3PO': 'droid' } }))
-      assert.ok(errors.some(e => e.includes('taskEnv key "3PO" is not a valid environment variable name')))
-    })
-
-    it('errors when taskEnv key has spaces', () => {
-      const { errors } = validateConfig(validConfig({ taskEnv: { 'MY VAR': 'val' } }))
-      assert.ok(errors.some(e => e.includes('taskEnv key "MY VAR" is not a valid environment variable name')))
-    })
-
-    it('passes taskEnv key starting with underscore', () => {
-      const { errors } = validateConfig(validConfig({ taskEnv: { _INTERNAL: 'val' } }))
-      assert.strictEqual(errors.length, 0)
+    it('errors when taskEnv key names are invalid', () => {
+      for (const [key, value] of [['3PO', 'droid'], ['MY VAR', 'val']]) {
+        const { errors } = validateConfig(validConfig({ taskEnv: { [key]: value } }))
+        assert.ok(errors.some(e => e.includes(`taskEnv key "${key}" is not a valid environment variable name`)),
+          `Expected invalid name error for taskEnv key "${key}"`)
+      }
     })
   })
 
@@ -776,58 +587,45 @@ describe('validateConfig', () => {
       })
     }
 
-    it('passes env task with command in SessionStart', () => {
-      const { errors } = validateConfig(cfgWithEnvTask({
+    it('validates env tasks require command and SessionStart event', () => {
+      // passes with command in SessionStart
+      const valid = validateConfig(cfgWithEnvTask({
         name: 'setup-env', type: 'env', command: './script/env.sh'
       }))
-      assert.strictEqual(errors.length, 0)
-    })
+      assert.strictEqual(valid.errors.length, 0)
 
-    it('errors on env task without command', () => {
-      const { errors } = validateConfig(cfgWithEnvTask({
-        name: 'setup-env', type: 'env'
-      }))
-      assert.ok(errors.some(e => e.includes('type "env" but has no "command"')))
-    })
+      // errors without command
+      const noCmd = validateConfig(cfgWithEnvTask({ name: 'setup-env', type: 'env' }))
+      assert.ok(noCmd.errors.some(e => e.includes('type "env" but has no "command"')))
 
-    it('errors on env task in Stop hook', () => {
-      const { errors } = validateConfig(cfgWithEnvTask({
-        name: 'setup-env', type: 'env', command: './script/env.sh'
-      }, 'Stop'))
-      assert.ok(errors.some(e => e.includes('env tasks are only valid in SessionStart')))
-    })
-
-    it('errors on env task in PreToolUse hook', () => {
-      const { errors } = validateConfig(cfgWithEnvTask({
-        name: 'setup-env', type: 'env', command: './script/env.sh'
-      }, 'PreToolUse'))
-      assert.ok(errors.some(e => e.includes('env tasks are only valid in SessionStart')))
+      // errors on non-SessionStart hooks
+      for (const event of ['Stop', 'PreToolUse']) {
+        const { errors } = validateConfig(cfgWithEnvTask({
+          name: 'setup-env', type: 'env', command: './script/env.sh'
+        }, event))
+        assert.ok(errors.some(e => e.includes('env tasks are only valid in SessionStart')),
+          `Expected SessionStart-only error for ${event}`)
+      }
     })
   })
 
   describe('edge cases', () => {
-    it('errors on null config', () => {
-      const { errors } = validateConfig(null)
-      assert.ok(errors.some(e => e.includes('Config must be a JSON object')))
+    it('errors on non-object config values', () => {
+      const nullCfg = validateConfig(null)
+      assert.ok(nullCfg.errors.some(e => e.includes('Config must be a JSON object')))
+
+      const stringCfg = validateConfig('string')
+      assert.ok(stringCfg.errors.some(e => e.includes('Config must be a JSON object')))
     })
 
-    it('errors on non-object config', () => {
-      const { errors } = validateConfig('string')
-      assert.ok(errors.some(e => e.includes('Config must be a JSON object')))
-    })
+    it('errors on non-object entries in hooks and tasks arrays', () => {
+      const badHook = validateConfig({ hooks: ['not-an-object'] })
+      assert.ok(badHook.errors.some(e => e.includes('hooks[0] must be an object')))
 
-    it('errors on non-object hook entry', () => {
-      const { errors } = validateConfig({
-        hooks: ['not-an-object']
-      })
-      assert.ok(errors.some(e => e.includes('hooks[0] must be an object')))
-    })
-
-    it('errors on non-object task', () => {
-      const { errors } = validateConfig({
+      const badTask = validateConfig({
         hooks: [{ type: 'claude', event: 'Stop', tasks: ['not-an-object'] }]
       })
-      assert.ok(errors.some(e => e.includes('tasks[0] must be an object')))
+      assert.ok(badTask.errors.some(e => e.includes('tasks[0] must be an object')))
     })
   })
 })

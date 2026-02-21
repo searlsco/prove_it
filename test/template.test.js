@@ -4,12 +4,13 @@ const { expandTemplate, makeResolvers, KNOWN_VARS, SESSION_VARS, getUnknownVars,
 
 describe('template', () => {
   describe('expandTemplate', () => {
-    it('returns empty string for null template', () => {
-      assert.strictEqual(expandTemplate(null, {}), '')
-    })
-
-    it('returns empty string for undefined template', () => {
-      assert.strictEqual(expandTemplate(undefined, {}), '')
+    ;[
+      ['null', null],
+      ['undefined', undefined]
+    ].forEach(([label, input]) => {
+      it(`returns empty string for ${label}`, () => {
+        assert.strictEqual(expandTemplate(input, {}), '')
+      })
     })
 
     it('returns template unchanged when no variables', () => {
@@ -161,12 +162,13 @@ describe('template', () => {
       assert.deepStrictEqual(getUnknownVars('{{bogus}} {{bogus}}'), ['bogus'])
     })
 
-    it('returns empty array for null template', () => {
-      assert.deepStrictEqual(getUnknownVars(null), [])
-    })
-
-    it('returns empty array for empty string', () => {
-      assert.deepStrictEqual(getUnknownVars(''), [])
+    ;[
+      ['null', null],
+      ['empty string', '']
+    ].forEach(([label, input]) => {
+      it(`returns empty array for ${label}`, () => {
+        assert.deepStrictEqual(getUnknownVars(input), [])
+      })
     })
 
     it('handles mix of known and unknown', () => {
