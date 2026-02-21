@@ -18,8 +18,5 @@ jobs:
         with:
           node-version: latest
 
-      - name: Run unit tests
-        run: npm test
-
-      - name: Run integration tests
-        run: npm run test:integration
+      - name: Run tests
+        run: ./script/test
