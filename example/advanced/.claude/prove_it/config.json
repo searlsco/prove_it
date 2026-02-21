@@ -27,7 +27,8 @@
         {
           "name": "lock-config",
           "type": "script",
-          "command": "prove_it run_builtin config:lock"
+          "command": "prove_it run_builtin config:lock",
+          "quiet": true
         }
       ]
     },

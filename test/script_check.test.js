@@ -430,6 +430,78 @@ describe('script check', () => {
         assert.ok(entries[0].reason.includes('Unknown builtin'))
       })
 
+      it('suppresses PASS log when quiet: true', () => {
+        const scriptPath = path.join(tmpDir, 'script', 'test')
+        fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
+        fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nexit 0\n')
+        fs.chmodSync(scriptPath, 0o755)
+
+        const sid = 'test-session-quiet-pass'
+        runScriptCheck(
+          { name: 'quiet-test', command: './script/test', quiet: true },
+          { rootDir: tmpDir, projectDir: tmpDir, sessionId: sid, localCfgPath: null, sources: null, maxChars: 12000 }
+        )
+
+        const entries = readLogEntries(sid)
+        assert.strictEqual(entries.length, 0, 'Quiet task pass should produce no log entries')
+      })
+
+      it('still logs FAIL when quiet: true', () => {
+        const scriptPath = path.join(tmpDir, 'script', 'test')
+        fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
+        fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nexit 1\n')
+        fs.chmodSync(scriptPath, 0o755)
+
+        const sid = 'test-session-quiet-fail'
+        runScriptCheck(
+          { name: 'quiet-test', command: './script/test', quiet: true },
+          { rootDir: tmpDir, projectDir: tmpDir, sessionId: sid, localCfgPath: null, sources: null, maxChars: 12000 }
+        )
+
+        const entries = readLogEntries(sid)
+        assert.strictEqual(entries.length, 1, 'Quiet task fail should produce exactly one log entry')
+        assert.strictEqual(entries[0].status, 'FAIL')
+      })
+
+      it('suppresses SKIP log for cached pass when quiet: true', () => {
+        const scriptPath = path.join(tmpDir, 'script', 'test')
+        fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
+        fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nexit 0\n')
+        fs.chmodSync(scriptPath, 0o755)
+        spawnSync('git', ['add', 'script/test'], { cwd: tmpDir })
+        spawnSync('git', ['commit', '-m', 'add test'], { cwd: tmpDir })
+
+        const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
+        fs.mkdirSync(path.dirname(localCfgPath), { recursive: true })
+        const runTime = Date.now()
+        fs.writeFileSync(localCfgPath, JSON.stringify({
+          runs: { 'quiet-test': { at: runTime, pass: true } }
+        }))
+
+        const past = new Date(runTime - 5000)
+        setAllTrackedMtimes(tmpDir, past)
+
+        const sid = 'test-session-quiet-skip'
+        runScriptCheck(
+          { name: 'quiet-test', command: './script/test', quiet: true },
+          { rootDir: tmpDir, projectDir: tmpDir, sessionId: sid, localCfgPath, sources: null, maxChars: 12000 }
+        )
+
+        const entries = readLogEntries(sid)
+        assert.strictEqual(entries.length, 0, 'Quiet task cached pass should produce no log entries')
+      })
+
+      it('suppresses builtin PASS log when quiet: true', () => {
+        const sid = 'test-session-quiet-builtin'
+        runScriptCheck(
+          { name: 'quiet-lock', command: 'prove_it run_builtin config:lock', quiet: true },
+          { rootDir: tmpDir, projectDir: tmpDir, sessionId: sid, localCfgPath: null, sources: null, maxChars: 12000 }
+        )
+
+        const entries = readLogEntries(sid)
+        assert.strictEqual(entries.length, 0, 'Quiet builtin pass should produce no log entries')
+      })
+
       it('does not log when sessionId and projectDir are both absent', () => {
         const scriptPath = path.join(tmpDir, 'script', 'test')
         fs.mkdirSync(path.dirname(scriptPath), { recursive: true })

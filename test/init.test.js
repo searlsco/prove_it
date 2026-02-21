@@ -186,6 +186,14 @@ describe('init', () => {
       }
     })
 
+    it('lock-config task has quiet: true', () => {
+      const cfg = buildConfig()
+      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
+      const lockConfig = allTasks.find(t => t.name === 'lock-config')
+      assert.ok(lockConfig, 'Should have lock-config task')
+      assert.strictEqual(lockConfig.quiet, true, 'lock-config should have quiet: true')
+    })
+
     it('generated config passes validation', () => {
       const { validateConfig } = require('../lib/validate')
       const cfg = buildConfig()

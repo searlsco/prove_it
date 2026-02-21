@@ -196,6 +196,54 @@ describe('git dispatcher', () => {
       assert.strictEqual(failure, null, 'Disabled task should be skipped, not executed')
     })
 
+    it('suppresses disabled-task SKIP log when quiet: true', () => {
+      const origDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
+      const sid = 'test-git-quiet-disabled'
+      const failScript = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
+      const entries = [{
+        type: 'git',
+        event: 'pre-commit',
+        tasks: [{ name: 'quiet-disabled', type: 'script', command: failScript, enabled: false, quiet: true }]
+      }]
+      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: sid, hookEvent: 'pre-commit', localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
+      runGitTasks(entries, context)
+
+      const logFile = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sid}.jsonl`)
+      const logEntries = fs.existsSync(logFile)
+        ? fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+        : []
+
+      if (origDir === undefined) delete process.env.PROVE_IT_DIR
+      else process.env.PROVE_IT_DIR = origDir
+
+      assert.strictEqual(logEntries.length, 0, 'Quiet disabled task should produce no log entries')
+    })
+
+    it('suppresses when-skipped SKIP log when quiet: true', () => {
+      const origDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
+      const sid = 'test-git-quiet-when-skip'
+      const script = makeScript('pass.sh', '#!/usr/bin/env bash\nexit 0\n')
+      const entries = [{
+        type: 'git',
+        event: 'pre-commit',
+        tasks: [{ name: 'quiet-gated', type: 'script', command: script, quiet: true, when: { fileExists: 'nonexistent-xyz' } }]
+      }]
+      const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: sid, hookEvent: 'pre-commit', localCfgPath: null, sources: null, maxChars: 12000, testOutput: '' }
+      runGitTasks(entries, context)
+
+      const logFile = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sid}.jsonl`)
+      const logEntries = fs.existsSync(logFile)
+        ? fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+        : []
+
+      if (origDir === undefined) delete process.env.PROVE_IT_DIR
+      else process.env.PROVE_IT_DIR = origDir
+
+      assert.strictEqual(logEntries.length, 0, 'Quiet when-skipped task should produce no log entries')
+    })
+
     it('runs task with enabled: true', () => {
       const failScript = makeScript('fail.sh', '#!/usr/bin/env bash\nexit 1\n')
       const entries = [{

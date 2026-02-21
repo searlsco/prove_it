@@ -565,6 +565,27 @@ describe('validateConfig', () => {
       assert.ok(errors.some(e => e.includes('resetOnFail must be a boolean')))
     })
 
+    it('accepts quiet as a boolean', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', quiet: true
+      }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('accepts quiet: false', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', quiet: false
+      }))
+      assert.strictEqual(errors.length, 0)
+    })
+
+    it('errors when quiet is not a boolean', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', quiet: 'yes'
+      }))
+      assert.ok(errors.some(e => e.includes('quiet must be a boolean')))
+    })
+
     it('passes toolsUsed as valid array', () => {
       const { errors } = validateConfig(cfgWithTask({
         name: 'a',
