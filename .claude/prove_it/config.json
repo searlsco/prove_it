@@ -10,13 +10,25 @@
   "hooks": [
     {
       "type": "claude",
+      "event": "SessionStart",
+      "tasks": [
+        {
+          "name": "session-briefing",
+          "type": "script",
+          "command": "prove_it run_builtin session:briefing"
+        }
+      ]
+    },
+    {
+      "type": "claude",
       "event": "PreToolUse",
       "matcher": "Edit|Write|NotebookEdit|Bash",
       "tasks": [
         {
           "name": "lock-config",
           "type": "script",
-          "command": "prove_it run_builtin config:lock"
+          "command": "prove_it run_builtin config:lock",
+          "quiet": true
         }
       ]
     },
@@ -65,5 +77,5 @@
       ]
     }
   ],
-  "initSeed": "ee9760a9b49e"
+  "initSeed": "ddb0d8e936bb"
 }
