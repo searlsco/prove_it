@@ -151,7 +151,7 @@ describe('script check', () => {
       assert.ok(result.reason.includes('cached pass'))
     })
 
-    it('uses mtime cache for cached fail', () => {
+    it('re-runs on cached failure instead of caching it', () => {
       const scriptPath = path.join(tmpDir, 'script', 'test')
       fs.mkdirSync(path.dirname(scriptPath), { recursive: true })
       fs.writeFileSync(scriptPath, '#!/usr/bin/env bash\nexit 0\n')
@@ -169,13 +169,13 @@ describe('script check', () => {
       const past = new Date(runTime - 5000)
       setAllTrackedMtimes(tmpDir, past)
 
+      // Script exits 0, so re-running it should pass (not return cached failure)
       const result = runScriptCheck(
         { name: 'my-test', command: './script/test' },
         { rootDir: tmpDir, localCfgPath, sources: null, maxChars: 12000 }
       )
-      assert.strictEqual(result.pass, false)
-      assert.strictEqual(result.cached, true)
-      assert.ok(result.reason.includes('Tests failed and no code has changed'))
+      assert.strictEqual(result.pass, true)
+      assert.strictEqual(result.cached, undefined, 'Should not be cached — actually re-ran')
     })
 
     it('skips mtime check when mtime: false', () => {

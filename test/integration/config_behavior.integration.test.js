@@ -756,7 +756,7 @@ describe('Config-driven hook behavior (v2)', () => {
       assert.strictEqual(result2.exitCode, 0)
     })
 
-    it('re-fires cached failure instead of silently skipping', () => {
+    it('re-runs failing task instead of silently skipping', () => {
       const sessionId = 'test-smslr-failure-sticky'
       createFile(tmpDir, 'src/app.js', 'code\n')
       createFile(tmpDir, 'script/check', '#!/usr/bin/env bash\nexit 1\n')
@@ -788,15 +788,15 @@ describe('Config-driven hook behavior (v2)', () => {
       assert.ok(result1.output, 'First invocation should produce output')
       assert.strictEqual(result1.output.decision, 'block', 'Should block on failure')
 
-      // Second run (no source changes): should re-fire with cached failure, NOT skip silently
+      // Second run (no source changes): should re-run (failures are never cached)
       const result2 = invokeHook('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
       }, { projectDir: tmpDir, env })
       assert.strictEqual(result2.exitCode, 0)
-      assert.ok(result2.output, 'Second invocation should still produce output (cached failure)')
-      assert.strictEqual(result2.output.decision, 'block', 'Cached failure should still block')
+      assert.ok(result2.output, 'Second invocation should still produce output')
+      assert.strictEqual(result2.output.decision, 'block', 'Re-run should still block (script still fails)')
 
       // Touch source and run again: should re-run the actual command (still fails)
       const now = Date.now()

@@ -22,7 +22,8 @@ const {
  *
  * The script check runner tracks run timestamps in prove_it/config.local.json and
  * compares against file mtimes. If tests passed more recently than any tracked
- * file changed, the hook skips re-running and uses the cached result.
+ * file changed, the hook skips re-running. Only passes are cached — failures
+ * always re-run so transient issues don't get permanently locked in.
  */
 
 function stopHooks () {
@@ -131,12 +132,13 @@ describe('Mtime-based test skip', () => {
     }
   })
 
-  it('stop hook blocks on cached failure without re-running', () => {
+  it('stop hook re-runs on cached failure instead of caching it', () => {
     writeConfig(tmpDir, makeConfig(stopHooks()))
     const runTime = Date.now()
     writeRunData('fast-tests', { at: runTime, pass: false })
     setFileMtimesBefore(runTime)
 
+    // Test scripts are passing (exit 0), so re-running should approve
     const result = invokeHook('claude:Stop', {
       hook_event_name: 'Stop',
       session_id: 'test-mtime-fail',
@@ -145,18 +147,17 @@ describe('Mtime-based test skip', () => {
 
     assert.strictEqual(result.exitCode, 0)
     assert.ok(result.output, 'Hook should produce JSON output')
-    assert.strictEqual(result.output.decision, 'block',
-      'Stop should block on cached failure')
-    assert.ok(result.output.reason.includes('Tests failed and no code has changed'),
-      `Reason should mention cached failure, got: ${result.output.reason}`)
+    assert.strictEqual(result.output.decision, 'approve',
+      'Stop should re-run and approve (not cache the failure)')
   })
 
-  it('commit hook denies on cached failure without re-running', () => {
+  it('commit hook re-runs on cached failure instead of caching it', () => {
     writeConfig(tmpDir, makeConfig(commitHooks()))
     const runTime = Date.now()
     writeRunData('full-tests', { at: runTime, pass: false })
     setFileMtimesBefore(runTime)
 
+    // Test scripts are passing (exit 0), so re-running should allow
     const result = invokeHook('claude:PreToolUse', {
       hook_event_name: 'PreToolUse',
       tool_name: 'Bash',
@@ -165,16 +166,14 @@ describe('Mtime-based test skip', () => {
     }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
     assert.strictEqual(result.exitCode, 0)
-    assert.ok(result.output, 'Hook should produce JSON output')
-    assert.strictEqual(
-      result.output.hookSpecificOutput.permissionDecision,
-      'deny',
-      'Commit should deny on cached failure'
-    )
-    assert.ok(
-      result.output.hookSpecificOutput.permissionDecisionReason.includes('Tests failed and no code has changed'),
-      'Should mention cached failure in reason'
-    )
+    // Re-ran and passed → should not deny
+    if (result.output) {
+      assert.notStrictEqual(
+        result.output.hookSpecificOutput?.permissionDecision,
+        'deny',
+        'Should not deny when re-run passes'
+      )
+    }
   })
 
   it('stop hook re-runs when code changed after last run', () => {
