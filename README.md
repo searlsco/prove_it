@@ -30,13 +30,13 @@ prove_it is a config-driven framework for enforcing quality in Claude Code sessi
 - **Block git commits** until a full test suite is green
 - **Run AI reviewers** — independent subagents that audit Claude's work for coverage gaps, logic errors, or security issues
 - **Fire reviews asynchronously** — expensive reviewers run in the background while Claude keeps working, then enforce their verdict on the next stop
-- **Gate tasks on signals** — heavyweight checks fire only when Claude declares a unit of work complete (`prove_it signal done`), not on every stop
+- **Gate tasks on signals** — heavyweight checks fire only when Claude declares a unit of work complete (`prove_it signal done`), or when Claude gets caught in a doom loop (`prove_it signal stuck --message "can't figure out Liquid Glass"`)
 - **Gate tasks on churn** — reviews trigger after N lines changed (net git diff) or N lines written (gross, catches thrashing)
-- **Inject context on session start** — environment variables, project state, orientation briefings
+- **Inject context on session start** — briefs your agent on what prove_it will inspect for and when, along with instructions on how to use it
 - **Guard tool usage** — block specific tool calls (config file edits, dangerous commands) before they execute
 - **Track runs** — skip re-running tests when code hasn't changed since the last pass
 
-Out of the box, `prove_it init` generates a Searls-style opinionated config:
+Out of the box, `prove_it init` generates the Searls-stack of configured tasks:
 
 - **Session briefing** on startup — Claude gets an orientation showing active tasks, signal instructions, and how the review process works
 - **Config lock** on every edit — silently blocks Claude from modifying your prove_it config
