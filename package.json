@@ -1,6 +1,6 @@
 {
   "name": "prove_it",
-  "version": "0.38.0",
+  "version": "0.39.0",
   "description": "Config-driven hook framework for Claude Code - enforce verified workflows",
   "author": "Justin Searls <justin@searls.co>",
   "license": "MIT",
