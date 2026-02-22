@@ -42,8 +42,8 @@
           "name": "coverage-review",
           "type": "agent",
           "async": true,
-          "prompt": "review:test_coverage",
-          "promptType": "reference",
+          "prompt": "prove-coverage",
+          "promptType": "skill",
           "model": "haiku",
           "when": {
             "linesChanged": 541
@@ -53,8 +53,8 @@
         {
           "name": "shipworthy-review",
           "type": "agent",
-          "promptType": "reference",
-          "prompt": "review:shipworthy",
+          "promptType": "skill",
+          "prompt": "prove-shipworthy",
           "model": "opus",
           "ruleFile": ".claude/rules/testing.md",
           "when": {

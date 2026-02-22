@@ -54,8 +54,8 @@
           "name": "coverage-review",
           "type": "agent",
           "async": true,
-          "promptType": "reference",
-          "prompt": "review:test_coverage",
+          "promptType": "skill",
+          "prompt": "prove-coverage",
           "model": "haiku",
           "ruleFile": ".claude/rules/testing.md",
           "when": {
@@ -65,8 +65,8 @@
         {
           "name": "shipworthy-review",
           "type": "agent",
-          "promptType": "reference",
-          "prompt": "review:shipworthy",
+          "promptType": "skill",
+          "prompt": "prove-shipworthy",
           "model": "opus",
           "ruleFile": ".claude/rules/testing.md",
           "when": {
@@ -87,5 +87,5 @@
       ]
     }
   ],
-  "initSeed": "8976b4d03126"
+  "initSeed": "d633976f933d"
 }

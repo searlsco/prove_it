@@ -127,20 +127,29 @@ function isInstallCurrent (settings) {
   return true
 }
 
-function isSkillCurrent (claudeDir) {
-  const skillPath = path.join(claudeDir, 'skills', 'prove', 'SKILL.md')
-  const shippedPath = path.join(__dirname, 'lib', 'skills', 'prove.md')
-  if (!fs.existsSync(skillPath)) return false
-  return fs.readFileSync(skillPath, 'utf8') === fs.readFileSync(shippedPath, 'utf8')
+const SKILLS = [
+  { name: 'prove', src: 'prove.md' },
+  { name: 'prove-coverage', src: 'prove-coverage.md' },
+  { name: 'prove-shipworthy', src: 'prove-shipworthy.md' }
+]
+
+function areSkillsCurrent (claudeDir) {
+  for (const { name, src } of SKILLS) {
+    const skillPath = path.join(claudeDir, 'skills', name, 'SKILL.md')
+    const shippedPath = path.join(__dirname, 'lib', 'skills', src)
+    if (!fs.existsSync(skillPath)) return false
+    if (fs.readFileSync(skillPath, 'utf8') !== fs.readFileSync(shippedPath, 'utf8')) return false
+  }
+  return true
 }
 
-function cmdInstall () {
+async function cmdInstall () {
   const claudeDir = getClaudeDir()
   const settingsPath = path.join(claudeDir, 'settings.json')
   const settings = loadJson(settingsPath) || {}
 
   // Check if already up to date
-  if (isInstallCurrent(settings) && isSkillCurrent(claudeDir)) {
+  if (isInstallCurrent(settings) && areSkillsCurrent(claudeDir)) {
     log('prove_it already up to date.')
     log(`  Settings: ${settingsPath}`)
     return
@@ -190,18 +199,38 @@ function cmdInstall () {
     writeJson(globalCfgPath, existingGlobal)
   }
 
-  // Install /prove skill
-  const skillDir = path.join(claudeDir, 'skills', 'prove')
-  fs.mkdirSync(skillDir, { recursive: true })
-  fs.copyFileSync(
-    path.join(__dirname, 'lib', 'skills', 'prove.md'),
-    path.join(skillDir, 'SKILL.md')
-  )
+  // Install skills
+  const isTTY = process.stdin.isTTY && process.stdout.isTTY
+  for (const { name, src } of SKILLS) {
+    const skillDir = path.join(claudeDir, 'skills', name)
+    const skillPath = path.join(skillDir, 'SKILL.md')
+    const shippedPath = path.join(__dirname, 'lib', 'skills', src)
+    const shippedContent = fs.readFileSync(shippedPath, 'utf8')
+
+    let doWrite = true
+    if (fs.existsSync(skillPath)) {
+      const existing = fs.readFileSync(skillPath, 'utf8')
+      if (existing !== shippedContent && isTTY) {
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+        try {
+          doWrite = await askYesNo(rl, `Overwrite ~/.claude/skills/${name}/SKILL.md?`)
+        } finally {
+          rl.close()
+        }
+      }
+    }
+    if (doWrite) {
+      fs.mkdirSync(skillDir, { recursive: true })
+      fs.writeFileSync(skillPath, shippedContent)
+    }
+  }
 
   log('prove_it installed.')
   log(`  Settings: ${settingsPath}`)
   log(`  Config:   ${globalCfgPath}`)
-  log(`  Skill:    ${path.join(skillDir, 'SKILL.md')}`)
+  for (const { name } of SKILLS) {
+    log(`  Skill:    ${path.join(claudeDir, 'skills', name, 'SKILL.md')}`)
+  }
   log('')
   log('════════════════════════════════════════════════════════════════════')
   log('IMPORTANT: Restart Claude Code for hooks to take effect.')
@@ -235,13 +264,17 @@ function cmdUninstall () {
   // Remove prove_it files (best-effort)
   rmIfExists(path.join(claudeDir, 'prove_it'))
   rmIfExists(path.join(claudeDir, 'rules', 'prove_it.md'))
-  rmIfExists(path.join(claudeDir, 'skills', 'prove'))
+  for (const { name } of SKILLS) {
+    rmIfExists(path.join(claudeDir, 'skills', name))
+  }
 
   log('prove_it uninstalled.')
   log(`  Settings: ${settingsPath}`)
   log('  Removed: ~/.claude/prove_it/')
   log('  Removed: ~/.claude/rules/prove_it.md')
-  log('  Removed: ~/.claude/skills/prove/')
+  for (const { name } of SKILLS) {
+    log(`  Removed: ~/.claude/skills/${name}/`)
+  }
 }
 
 // ============================================================================
@@ -672,21 +705,23 @@ function cmdDoctor () {
     issues.push("Run 'prove_it install' to register hooks")
   }
 
-  // Check /prove skill
-  const skillPath = path.join(claudeDir, 'skills', 'prove', 'SKILL.md')
-  const shippedSkillPath = path.join(__dirname, 'lib', 'skills', 'prove.md')
-  if (fs.existsSync(skillPath)) {
-    const installed = fs.readFileSync(skillPath, 'utf8')
-    const shipped = fs.readFileSync(shippedSkillPath, 'utf8')
-    if (installed === shipped) {
-      log('  [x] /prove skill (current)')
+  // Check skills
+  for (const { name, src } of SKILLS) {
+    const skillPath = path.join(claudeDir, 'skills', name, 'SKILL.md')
+    const shippedSkillPath = path.join(__dirname, 'lib', 'skills', src)
+    if (fs.existsSync(skillPath)) {
+      const installed = fs.readFileSync(skillPath, 'utf8')
+      const shipped = fs.readFileSync(shippedSkillPath, 'utf8')
+      if (installed === shipped) {
+        log(`  [x] /${name} skill (current)`)
+      } else {
+        log(`  [!] /${name} skill (outdated—run prove_it install to update)`)
+        issues.push(`/${name} skill is outdated`)
+      }
     } else {
-      log('  [!] /prove skill (outdated—run prove_it install to update)')
-      issues.push('/prove skill is outdated')
+      log(`  [ ] /${name} skill not installed`)
+      issues.push(`/${name} skill not installed—run 'prove_it install'`)
     }
-  } else {
-    log('  [ ] /prove skill not installed')
-    issues.push("/prove skill not installed—run 'prove_it install'")
   }
 
   log('\nCurrent repository:')
@@ -1103,14 +1138,20 @@ function main () {
 
   switch (command) {
     case 'install':
-      cmdInstall()
+      cmdInstall().catch(err => {
+        console.error(`prove_it install failed: ${err.message}`)
+        process.exit(1)
+      })
       break
     case 'uninstall':
       cmdUninstall()
       break
     case 'reinstall':
       cmdUninstall()
-      cmdInstall()
+      cmdInstall().catch(err => {
+        console.error(`prove_it reinstall failed: ${err.message}`)
+        process.exit(1)
+      })
       break
     case 'init':
       cmdInit().catch(err => {
