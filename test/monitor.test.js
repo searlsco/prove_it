@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 
-const { findLatestSession, listSessions, findProjectLogFiles, projectHash, formatEntry, formatVerbose, formatTime, formatDuration, useColor, stripAnsi, visualWidth, normalizeHookTag, middleTruncatePath, truncateReason, progressiveTruncate } = require('../lib/monitor')
+const { findLatestSession, listSessions, findProjectLogFiles, projectHash, formatEntry, formatVerbose, formatTime, formatDuration, useColor, stripAnsi, visualWidth, normalizeHookTag, middleTruncatePath, truncateReason, progressiveTruncate, watchFile } = require('../lib/monitor')
 
 describe('monitor', () => {
   let tmpDir
@@ -913,6 +913,71 @@ describe('monitor', () => {
       const plainLine = stripAnsi(line)
       const width = visualWidth(plainLine)
       assert.ok(width <= 80, `Visual width should be at most 80, got ${width}`)
+    })
+  })
+
+  describe('watchFile', () => {
+    it('immediately prints existing content when offset is 0', () => {
+      process.env.NO_COLOR = '1'
+      const logFile = path.join(tmpDir, 'immediate.jsonl')
+      const entry1 = { at: Date.now(), reviewer: 'session-briefing', status: 'PASS', reason: 'hello', hookEvent: 'SessionStart' }
+      const entry2 = { at: Date.now(), reviewer: 'env-loader', status: 'PASS', reason: 'loaded', hookEvent: 'SessionStart' }
+      fs.writeFileSync(logFile, JSON.stringify(entry1) + '\n' + JSON.stringify(entry2) + '\n')
+
+      const logs = []
+      const origLog = console.log
+      console.log = (...args) => logs.push(args.join(' '))
+      let cleanup
+      try {
+        cleanup = watchFile(logFile, 0, 120)
+        assert.strictEqual(logs.length, 2, `Expected 2 lines printed immediately, got ${logs.length}: ${JSON.stringify(logs)}`)
+        assert.ok(logs[0].includes('session-briefing'), `First line should have session-briefing: ${logs[0]}`)
+        assert.ok(logs[1].includes('env-loader'), `Second line should have env-loader: ${logs[1]}`)
+      } finally {
+        console.log = origLog
+        if (cleanup) cleanup()
+      }
+    })
+
+    it('does not re-print content when offset matches file size', () => {
+      process.env.NO_COLOR = '1'
+      const logFile = path.join(tmpDir, 'no-reprint.jsonl')
+      const entry = { at: Date.now(), reviewer: 'test', status: 'PASS', reason: 'ok' }
+      fs.writeFileSync(logFile, JSON.stringify(entry) + '\n')
+      const fileSize = fs.statSync(logFile).size
+
+      const logs = []
+      const origLog = console.log
+      console.log = (...args) => logs.push(args.join(' '))
+      let cleanup
+      try {
+        cleanup = watchFile(logFile, fileSize, 120)
+        assert.strictEqual(logs.length, 0, `Expected 0 lines, got ${logs.length}`)
+      } finally {
+        console.log = origLog
+        if (cleanup) cleanup()
+      }
+    })
+
+    it('respects statusFilter on immediate read', () => {
+      process.env.NO_COLOR = '1'
+      const logFile = path.join(tmpDir, 'filtered.jsonl')
+      const pass = { at: Date.now(), reviewer: 'a', status: 'PASS', reason: 'ok' }
+      const fail = { at: Date.now(), reviewer: 'b', status: 'FAIL', reason: 'bad' }
+      fs.writeFileSync(logFile, JSON.stringify(pass) + '\n' + JSON.stringify(fail) + '\n')
+
+      const logs = []
+      const origLog = console.log
+      console.log = (...args) => logs.push(args.join(' '))
+      let cleanup
+      try {
+        cleanup = watchFile(logFile, 0, 120, { statusFilter: ['FAIL'] })
+        assert.strictEqual(logs.length, 1, `Expected 1 filtered line, got ${logs.length}`)
+        assert.ok(logs[0].includes('FAIL'), `Should show FAIL entry: ${logs[0]}`)
+      } finally {
+        console.log = origLog
+        if (cleanup) cleanup()
+      }
     })
   })
 })
