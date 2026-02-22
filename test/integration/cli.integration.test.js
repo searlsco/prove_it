@@ -340,7 +340,7 @@ describe('install/uninstall', () => {
     runCli(['install'], { env })
     const updated = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
     const upGroup = updated.hooks.PreToolUse.find(g => JSON.stringify(g).includes('prove_it hook'))
-    assert.strictEqual(upGroup.matcher, 'Edit|Write|NotebookEdit|Bash')
+    assert.strictEqual(upGroup.matcher, 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*')
 
     // Outdated taskEnv
     const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))

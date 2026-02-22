@@ -71,7 +71,7 @@ focused config that isolates the reviewer you're testing:
   "hooks": [{
     "type": "claude",
     "event": "PreToolUse",
-    "matcher": "Edit|Write|NotebookEdit|Bash",
+    "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*",
     "tasks": [{
       "name": "ensure-tests",
       "type": "agent",

@@ -57,7 +57,7 @@ function correctSettings () {
       hooks: [{ type: 'command', command: 'prove_it hook claude:SessionStart' }]
     }],
     PreToolUse: [{
-      matcher: 'Edit|Write|NotebookEdit|Bash',
+      matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*',
       hooks: [{ type: 'command', command: 'prove_it hook claude:PreToolUse' }]
     }],
     Stop: [{
@@ -112,7 +112,7 @@ describe('doctor', () => {
     writeSettings(tmpHome, correctSettings())
     let result = run()
     assert.match(result.stdout, /\[x\] SessionStart dispatcher \(matcher: startup\|resume\|clear\|compact\)/)
-    assert.match(result.stdout, /\[x\] PreToolUse dispatcher \(matcher: Edit\|Write\|NotebookEdit\|Bash\)/)
+    assert.match(result.stdout, /\[x\] PreToolUse dispatcher \(matcher: Write\|Edit\|MultiEdit\|NotebookEdit\|Bash\|mcp__\.\*\)/)
     assert.match(result.stdout, /\[x\] Stop dispatcher/)
 
     // Missing dispatchers -> [ ]
@@ -136,7 +136,7 @@ describe('doctor', () => {
         hooks: [{ type: 'command', command: 'prove_it hook claude:SessionStart' }]
       }],
       PreToolUse: [{
-        matcher: 'Edit|Write|NotebookEdit|Bash',
+        matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*',
         hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }]
       }],
       Stop: [{
@@ -154,7 +154,7 @@ describe('doctor', () => {
         hooks: [{ type: 'command', command: 'prove_it hook claude:SessionStart' }]
       }],
       PreToolUse: [{
-        matcher: 'Edit|Write|NotebookEdit|Bash',
+        matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*',
         hooks: [{ type: 'command', command: 'some_other_tool' }]
       }],
       Stop: [{
@@ -174,7 +174,7 @@ describe('doctor', () => {
         hooks: [{ type: 'command', command: 'prove_it hook claude:SessionStart' }]
       }],
       PreToolUse: [{
-        matcher: 'Edit|Write|NotebookEdit|Bash',
+        matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*',
         hooks: [{ type: 'command', command: 'prove_it hook claude:PreToolUse' }]
       }],
       Stop: [{
@@ -192,7 +192,7 @@ describe('doctor', () => {
         hooks: [{ type: 'command', command: 'prove_it hook claude:SessionStart' }]
       }],
       PreToolUse: [{
-        matcher: 'Edit|Write|NotebookEdit|Bash',
+        matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*',
         hooks: [{ type: 'command', command: 'prove_it hook claude:PreToolUse' }]
       }],
       Stop: [{

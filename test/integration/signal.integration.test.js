@@ -35,7 +35,7 @@ describe('signal integration', () => {
 
   it('PreToolUse intercepts prove_it signal done and records signal', () => {
     writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Edit|Write|NotebookEdit|Bash', tasks: [] }
+      { type: 'claude', event: 'PreToolUse', matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*', tasks: [] }
     ]))
 
     const result = invokeHook('claude:PreToolUse', {

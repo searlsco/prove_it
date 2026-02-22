@@ -13,7 +13,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Edit|Write|NotebookEdit|Bash",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*",
         "hooks": [
           {
             "type": "command",
@@ -28,6 +28,16 @@
           {
             "type": "command",
             "command": "../support/prove_it hook claude:Stop"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "../support/prove_it hook claude:SubagentStart"
           }
         ]
       }

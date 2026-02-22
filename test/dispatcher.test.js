@@ -594,8 +594,8 @@ describe('claude dispatcher', () => {
   })
 
   describe('BUILTIN_EDIT_TOOLS', () => {
-    it('contains Edit, Write, NotebookEdit', () => {
-      assert.deepStrictEqual(BUILTIN_EDIT_TOOLS, ['Edit', 'Write', 'NotebookEdit'])
+    it('contains Edit, MultiEdit, Write, NotebookEdit', () => {
+      assert.deepStrictEqual(BUILTIN_EDIT_TOOLS, ['Edit', 'MultiEdit', 'Write', 'NotebookEdit'])
     })
   })
 

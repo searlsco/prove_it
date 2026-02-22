@@ -42,7 +42,7 @@ describe('Claude Code hook output contract', () => {
         {
           type: 'claude',
           event: 'PreToolUse',
-          matcher: 'Edit|Write|NotebookEdit|Bash',
+          matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*',
           tasks: [
             { name: 'lock-config', type: 'script', command: 'prove_it run_builtin config:lock' }
           ]

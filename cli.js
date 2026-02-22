@@ -78,7 +78,7 @@ function buildHookGroups () {
     {
       event: 'PreToolUse',
       group: {
-        matcher: 'Edit|Write|NotebookEdit|Bash',
+        matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*',
         hooks: [{ type: 'command', command: 'prove_it hook claude:PreToolUse' }]
       }
     },
@@ -664,7 +664,7 @@ function cmdDoctor () {
   const settings = loadJson(settingsPath)
   if (settings && settings.hooks) {
     checkDispatcher(settings, 'SessionStart', 'prove_it hook claude:SessionStart', 'startup|resume|clear|compact', issues)
-    checkDispatcher(settings, 'PreToolUse', 'prove_it hook claude:PreToolUse', 'Edit|Write|NotebookEdit|Bash', issues)
+    checkDispatcher(settings, 'PreToolUse', 'prove_it hook claude:PreToolUse', 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*', issues)
     checkDispatcher(settings, 'Stop', 'prove_it hook claude:Stop', null, issues)
     checkDispatcher(settings, 'SubagentStart', 'prove_it hook claude:SubagentStart', null, issues)
   } else {

@@ -22,7 +22,7 @@
     {
       "type": "claude",
       "event": "PreToolUse",
-      "matcher": "Edit|Write|NotebookEdit|Bash",
+      "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*",
       "tasks": [
         {
           "name": "lock-config",
