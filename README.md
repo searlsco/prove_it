@@ -238,11 +238,17 @@ Tasks can declare conditions that must be met before they run. This is how you g
   "when": { "fileExists": ".config" } }
 ```
 
-### Prerequisites (AND) vs triggers (OR)
+### Condition evaluation
 
-**Prerequisites** are environmental gates—all must pass. **Triggers** are activity signals—any one passing is enough to fire the task. Prerequisites are checked first; if any fails, the task is skipped regardless of triggers. When no triggers are present, prerequisites alone decide.
+**Object form — AND.** When `when` is an object, every condition must pass:
 
-This means you can combine a prerequisite like `envSet` with multiple triggers like `linesChanged` and `linesWritten`—the env var must be set, but either churn threshold will fire the review:
+```json
+{ "when": { "envSet": "CLAUDECODE", "linesChanged": 500 } }
+```
+
+Both `envSet` AND `linesChanged` must be true. If either fails, the task is skipped.
+
+**Array form — OR of ANDs.** When `when` is an array, each element is AND'd internally and any element passing fires the task:
 
 ```json
 {
@@ -250,28 +256,29 @@ This means you can combine a prerequisite like `envSet` with multiple triggers l
   "type": "agent",
   "prompt": "review:test_coverage",
   "promptType": "reference",
-  "when": {
-    "envSet": "CLAUDECODE",
-    "linesChanged": 500,
-    "linesWritten": 1000
-  }
+  "when": [
+    { "envSet": "CLAUDECODE", "linesChanged": 500 },
+    { "envSet": "CLAUDECODE", "linesWritten": 1000 }
+  ]
 }
 ```
 
+The env var must be set in both clauses, but either churn threshold firing is enough to run the review. This is the MongoDB/CSS-selector pattern.
+
 ### Condition reference
 
-| Condition | Category | Type | Description |
-|-----------|----------|------|-------------|
-| `fileExists` | prerequisite | string | Passes when file exists relative to project root |
-| `envSet` | prerequisite | string | Passes when environment variable is set |
-| `envNotSet` | prerequisite | string | Passes when environment variable is not set |
-| `variablesPresent` | prerequisite | string[] | Passes when all listed template variables resolve to non-empty values |
-| `signal` | prerequisite | string | Passes when the named signal (`done`, `stuck`, `idle`) is active for the current session |
-| `linesChanged` | trigger | number | Passes when at least N source lines have changed (additions + deletions) since the task last ran. Git-based—works in both Claude hooks and git hooks. |
-| `linesWritten` | trigger | number | Passes when at least N gross lines have been written by the agent since the task last ran. Catches thrashing. Claude Code sessions only. |
-| `sourcesModifiedSinceLastRun` | trigger | boolean | Passes when source file mtimes are newer than the last run |
-| `sourceFilesEdited` | trigger | boolean | Passes when source files were edited this turn (session-scoped, tool-agnostic) |
-| `toolsUsed` | trigger | string[] | Passes when any of the listed tools were used this turn |
+| Condition | Type | Description |
+|-----------|------|-------------|
+| `fileExists` | string | Passes when file exists relative to project root |
+| `envSet` | string | Passes when environment variable is set |
+| `envNotSet` | string | Passes when environment variable is not set |
+| `variablesPresent` | string[] | Passes when all listed template variables resolve to non-empty values |
+| `signal` | string | Passes when the named signal (`done`, `stuck`, `idle`) is active for the current session |
+| `linesChanged` | number | Passes when at least N source lines have changed (additions + deletions) since the task last ran. Git-based—works in both Claude hooks and git hooks. |
+| `linesWritten` | number | Passes when at least N gross lines have been written by the agent since the task last ran. Catches thrashing. Claude Code sessions only. |
+| `sourcesModifiedSinceLastRun` | boolean | Passes when source file mtimes are newer than the last run |
+| `sourceFilesEdited` | boolean | Passes when source files were edited this turn (session-scoped, tool-agnostic) |
+| `toolsUsed` | string[] | Passes when any of the listed tools were used this turn |
 
 ### Git-based churn tracking (`linesChanged`)
 

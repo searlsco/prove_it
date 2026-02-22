@@ -5,7 +5,7 @@ const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
 const { freshRepo } = require('../helpers')
-const { evaluateWhen, PREREQUISITE_KEYS, TRIGGER_KEYS } = require('../../lib/dispatcher/claude')
+const { evaluateWhen } = require('../../lib/dispatcher/claude')
 const { updateRef, churnSinceRef, sanitizeRefName, incrementGross, grossChurnSince } = require('../../lib/git')
 
 function setupAppJs (dir) {

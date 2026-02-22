@@ -4,6 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { matchesHookEntry, evaluateWhen, defaultConfig, settleTaskResult, spawnAsyncTask, harvestAsyncResults, cleanAsyncDir, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
+const { whenHasKey } = require('../lib/git')
 const { recordFileEdit, resetTurnTracking, getAsyncDir } = require('../lib/session')
 
 describe('claude dispatcher', () => {
