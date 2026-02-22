@@ -166,7 +166,7 @@ describe('init/deinit', () => {
     runCli(['init', '--overwrite', '--no-default-checks'], { cwd: tmpDir })
     const cfg4 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
     const allTasks = cfg4.hooks.flatMap(h => h.tasks || [])
-    assert.ok(!allTasks.some(t => t.name === 'code-quality-review'))
+    assert.ok(!allTasks.some(t => t.name === 'coverage-review'))
   })
 
   it('is non-destructive for legacy configs without hash', () => {

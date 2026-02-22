@@ -16,7 +16,7 @@ If it's not obvious, **prove_it only works with Claude Code.** If you're not usi
 
 The two most important things prove_it does:
 
-* **Blocks stop** — each time Claude finishes its response and hands control back to the user, it fires ["stop" hooks](https://code.claude.com/docs/en/hooks#subagentstop). prove_it runs your fast tests (`script/test_fast`) and blocks if they fail. It can also deploy [reviewer agents](#agent-tasks) — a code quality review and a coverage review — that fire periodically based on how much code the agent has written
+* **Blocks stop** — each time Claude finishes its response and hands control back to the user, it fires ["stop" hooks](https://code.claude.com/docs/en/hooks#subagentstop). prove_it runs your fast tests (`script/test_fast`) and blocks if they fail. It can also deploy [reviewer agents](#agent-tasks) — a coverage review that fires periodically based on churn, and a thorough pre-ship review that fires when the agent [signals done](#signals)
 * **Blocks commits** — each time Claude attempts a `git commit`, prove_it runs `./script/test` and blocks unless it passes
 
 Other stuff prove_it does:
@@ -56,7 +56,7 @@ Available flags:
 
 ```
 --[no-]git-hooks                Install git pre-commit/pre-push hooks (default: on)
---[no-]default-checks           Include AI code review, AI coverage review (default: on)
+--[no-]default-checks           Include AI coverage review, pre-ship review (default: on)
 --[no-]automatic-git-hook-merge Merge with existing git hooks (default: off — fails if hooks exist)
 ```
 
@@ -404,6 +404,10 @@ These expand in agent prompts:
 | `{{git_head}}` | Current HEAD commit SHA |
 | `{{git_status}}` | `git status --short` (staged/modified/untracked files) |
 | `{{recent_commits}}` | `git log --oneline --stat -5` (last 5 commits with file stats) |
+| `{{recently_edited_files}}` | Source files changed since last commit (sorted by recency) |
+| `{{sources}}` | Configured source globs (one per line) |
+| `{{signal_message}}` | Message from the active signal (e.g., from `prove_it signal done -m "message"`) |
+| `{{changes_since_last_review}}` | `git diff --stat` since this task's ref was last advanced (shows what changed since the reviewer last passed) |
 
 ### Rule files
 
@@ -421,7 +425,7 @@ Agent tasks accept a `ruleFile` field that injects the contents of a project-spe
 
 The path is resolved relative to the project directory. If the file is missing, the task fails with a clear error — this is intentional so you don't silently run reviews without your rules.
 
-`prove_it init` generates a default `.claude/rules/testing.md` with starter rules and a TODO for you to customize. The default agent tasks (`code-quality-review`, `coverage-review`) both point to this file.
+`prove_it init` generates a default `.claude/rules/testing.md` with starter rules and a TODO for you to customize. The default agent tasks (`coverage-review`, `shipworthy-review`) both point to this file.
 
 ### Adversarial cross-platform review
 
@@ -487,6 +491,7 @@ prove_it ships with built-in tasks invoked via `prove_it run_builtin <name>`:
 | Builtin | Type | What it does |
 |---------|------|-------------|
 | `config:lock` | script | Blocks direct edits to prove_it config files |
+| `review:shipworthy` | agent prompt | Thorough pre-ship review: correctness, integration, security, tests, omissions. Uses `{{changes_since_last_review}}` for scope. Designed for Opus. |
 | `review:code_quality` | agent prompt | Reviews for logic errors, dead code, error handling gaps, naming contradictions |
 | `review:commit_quality` | agent prompt | Reviews staged diff for test coverage gaps, logic errors, dead code |
 | `review:test_coverage` | agent prompt | Reviews session diffs for test coverage adequacy |

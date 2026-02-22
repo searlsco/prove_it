@@ -42,18 +42,6 @@
           "command": "./script/test_fast"
         },
         {
-          "name": "code-quality-review",
-          "type": "agent",
-          "async": true,
-          "promptType": "reference",
-          "prompt": "review:code_quality",
-          "model": "haiku",
-          "ruleFile": ".claude/rules/testing.md",
-          "when": {
-            "linesWritten": 733
-          }
-        },
-        {
           "name": "coverage-review",
           "type": "agent",
           "async": true,
@@ -63,6 +51,17 @@
           "ruleFile": ".claude/rules/testing.md",
           "when": {
             "linesChanged": 541
+          }
+        },
+        {
+          "name": "shipworthy-review",
+          "type": "agent",
+          "promptType": "reference",
+          "prompt": "review:shipworthy",
+          "model": "opus",
+          "ruleFile": ".claude/rules/testing.md",
+          "when": {
+            "signal": "done"
           }
         }
       ]
