@@ -84,6 +84,35 @@ describe('agent check', () => {
     assert.ok(missing.reason.includes('not found'))
   })
 
+  // ---------- Story: crash behavior with explicit model ----------
+  it('hard-fails when task has explicit model and reviewer crashes', () => {
+    const crashPath = path.join(tmpDir, 'crash.sh')
+    fs.writeFileSync(crashPath, '#!/usr/bin/env bash\ncat > /dev/null\nexit 1\n')
+    fs.chmodSync(crashPath, 0o755)
+
+    const result = runAgentCheck(
+      { name: 'model-crash', command: crashPath, prompt: 'Review this', model: 'opus' },
+      ctx(tmpDir)
+    )
+    assert.strictEqual(result.pass, false, 'Should hard-fail when model is set and reviewer crashes')
+    assert.ok(result.reason.includes('model "opus"'), 'Should mention the model')
+    assert.ok(result.reason.includes('prove_it signal clear'), 'Should tell agent how to unblock')
+    assert.strictEqual(result.skipped, undefined, 'Should not be marked as skipped')
+  })
+
+  it('soft-skips crash when no explicit model', () => {
+    const crashPath = path.join(tmpDir, 'crash2.sh')
+    fs.writeFileSync(crashPath, '#!/usr/bin/env bash\ncat > /dev/null\nexit 1\n')
+    fs.chmodSync(crashPath, 0o755)
+
+    const result = runAgentCheck(
+      { name: 'no-model-crash', command: crashPath, prompt: 'Review this' },
+      ctx(tmpDir)
+    )
+    assert.strictEqual(result.pass, true, 'Should soft-skip when no model set')
+    assert.strictEqual(result.skipped, true, 'Should be marked as skipped')
+  })
+
   it('expands template variables in prompt', () => {
     const { reviewerPath, capturePath } = writeCaptureReviewer(tmpDir, 'captured.txt')
     runAgentCheck(
