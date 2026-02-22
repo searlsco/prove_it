@@ -253,6 +253,56 @@ describe('validateConfig', () => {
       assert.ok(nonString.errors.some(e => e.includes('when.fileExists must be a string')))
     })
 
+    it('accepts when as array of objects', () => {
+      const valid = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: [{ envSet: 'CI' }, { fileExists: '.config' }]
+      }))
+      assert.strictEqual(valid.errors.length, 0)
+    })
+
+    it('rejects empty when array', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: []
+      }))
+      assert.ok(errors.some(e => e.includes('when array must not be empty')))
+    })
+
+    it('validates each element in when array', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: [{ envSet: 'CI' }, { badKey: 'val' }]
+      }))
+      assert.ok(errors.some(e => e.includes('when[1] has unknown key "badKey"')))
+    })
+
+    it('rejects non-object elements in when array', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: [{ envSet: 'CI' }, 'not-an-object']
+      }))
+      assert.ok(errors.some(e => e.includes('when[1] must be an object')))
+    })
+
+    it('rejects when as non-object non-array', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: 'string-value'
+      }))
+      assert.ok(errors.some(e => e.includes('when must be an object or array of objects')))
+    })
+
     it('errors on non-positive timeout', () => {
       const { errors } = validateConfig(cfgWithTask({
         name: 'a', type: 'script', command: 'x', timeout: 0

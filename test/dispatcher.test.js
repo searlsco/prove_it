@@ -547,6 +547,52 @@ describe('claude dispatcher', () => {
     })
   })
 
+  describe('whenHasKey', () => {
+    it('returns false for null/undefined when', () => {
+      assert.strictEqual(whenHasKey(null, 'linesChanged'), false)
+      assert.strictEqual(whenHasKey(undefined, 'linesChanged'), false)
+    })
+
+    it('finds key in object form', () => {
+      assert.strictEqual(whenHasKey({ linesChanged: 500 }, 'linesChanged'), true)
+      assert.strictEqual(whenHasKey({ envSet: 'CI' }, 'linesChanged'), false)
+    })
+
+    it('finds key in array form', () => {
+      assert.strictEqual(whenHasKey([{ envSet: 'CI' }, { linesChanged: 500 }], 'linesChanged'), true)
+      assert.strictEqual(whenHasKey([{ envSet: 'CI' }, { envNotSet: 'X' }], 'linesChanged'), false)
+    })
+  })
+
+  describe('evaluateWhen—array form', () => {
+    it('returns true when any clause passes (OR)', () => {
+      process.env.PROVE_IT_ARR_TEST = '1'
+      try {
+        const result = evaluateWhen(
+          [{ envSet: 'PROVE_IT_ARR_TEST' }, { envSet: 'PROVE_IT_MISSING' }],
+          { rootDir: '.' }
+        )
+        assert.strictEqual(result, true)
+      } finally {
+        delete process.env.PROVE_IT_ARR_TEST
+      }
+    })
+
+    it('returns reason when no clause passes', () => {
+      const result = evaluateWhen(
+        [{ envSet: 'PROVE_IT_NOPE_1' }, { envSet: 'PROVE_IT_NOPE_2' }],
+        { rootDir: '.' }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(typeof result === 'string')
+    })
+
+    it('returns true for null/undefined when (passthrough)', () => {
+      assert.strictEqual(evaluateWhen(null, { rootDir: '.' }), true)
+      assert.strictEqual(evaluateWhen(undefined, { rootDir: '.' }), true)
+    })
+  })
+
   describe('BUILTIN_EDIT_TOOLS', () => {
     it('contains Edit, Write, NotebookEdit', () => {
       assert.deepStrictEqual(BUILTIN_EDIT_TOOLS, ['Edit', 'Write', 'NotebookEdit'])

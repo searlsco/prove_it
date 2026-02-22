@@ -109,7 +109,7 @@ describe('evaluateWhen—linesWritten lifecycle', () => {
   beforeEach(() => { tmpDir = freshRepo(setupAppJs) })
   afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }) })
 
-  it('bootstrap → below threshold → meets threshold → OR with net churn', () => {
+  it('bootstrap → below threshold → meets threshold → AND with net churn', () => {
     // Bootstrap → 0
     const r0 = evaluateWhen({ linesWritten: 500 }, { rootDir: tmpDir, sources: ['**/*.js'] }, 'my-check')
     assert.notStrictEqual(r0, true)
@@ -126,86 +126,179 @@ describe('evaluateWhen—linesWritten lifecycle', () => {
     incrementGross(tmpDir, 500)
     assert.strictEqual(evaluateWhen({ linesWritten: 500 }, { rootDir: tmpDir, sources: ['**/*.js'] }, 'my-check'), true)
 
-    // OR with net churn: gross passes even though net doesn't
+    // AND with net churn: gross passes but net doesn't → skip (AND semantics)
     churnSinceRef(tmpDir, sanitizeRefName('dual-check'), ['**/*.js'])
     grossChurnSince(tmpDir, sanitizeRefName('dual-check'))
     incrementGross(tmpDir, 600)
-    assert.strictEqual(
+    assert.notStrictEqual(
       evaluateWhen({ linesChanged: 500, linesWritten: 500 }, { rootDir: tmpDir, sources: ['**/*.js'] }, 'dual-check'),
-      true
+      true,
+      'Both linesChanged AND linesWritten must pass (AND semantics)'
     )
   })
 })
 
-// ---------- Story: prerequisite/trigger split ----------
-describe('evaluateWhen—prerequisite/trigger split', () => {
+// ---------- Story: object form—all conditions AND'd ----------
+describe('evaluateWhen—object form (AND)', () => {
   let tmpDir
 
   beforeEach(() => { tmpDir = freshRepo(setupAppJs) })
   afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }) })
 
-  it('AND prereqs, OR triggers, prereq gates trigger, keys exported', () => {
-    // Both prereqs pass → true
-    process.env.PROVE_IT_PTS_VAR = '1'
+  it('all conditions must pass', () => {
+    // Both gates pass → true
+    process.env.PROVE_IT_AND_VAR = '1'
     fs.writeFileSync(path.join(tmpDir, '.config'), 'x')
-    assert.strictEqual(evaluateWhen({ fileExists: '.config', envSet: 'PROVE_IT_PTS_VAR' }, { rootDir: tmpDir }), true)
-    delete process.env.PROVE_IT_PTS_VAR
+    assert.strictEqual(evaluateWhen({ fileExists: '.config', envSet: 'PROVE_IT_AND_VAR' }, { rootDir: tmpDir }), true)
+    delete process.env.PROVE_IT_AND_VAR
 
-    // One prereq fails → skip
+    // One gate fails → skip
     assert.notStrictEqual(
-      evaluateWhen({ fileExists: '.config', envSet: 'PROVE_IT_PTS_MISSING' }, { rootDir: tmpDir }),
+      evaluateWhen({ fileExists: '.config', envSet: 'PROVE_IT_AND_MISSING' }, { rootDir: tmpDir }),
       true
     )
 
-    // OR triggers: only gross passes → task fires
-    churnSinceRef(tmpDir, sanitizeRefName('pts-or'), ['**/*.js'])
-    grossChurnSince(tmpDir, sanitizeRefName('pts-or'))
+    // Gate + activity both pass → true
+    process.env.PROVE_IT_AND_PASS = '1'
+    grossChurnSince(tmpDir, sanitizeRefName('and-pass'))
     incrementGross(tmpDir, 600)
     assert.strictEqual(
-      evaluateWhen({ linesChanged: 500, linesWritten: 500 }, { rootDir: tmpDir, sources: ['**/*.js'] }, 'pts-or'),
+      evaluateWhen({ envSet: 'PROVE_IT_AND_PASS', linesWritten: 500 }, { rootDir: tmpDir, sources: ['**/*.js'] }, 'and-pass'),
       true
     )
+    delete process.env.PROVE_IT_AND_PASS
 
-    // No triggers pass → skip
-    churnSinceRef(tmpDir, sanitizeRefName('pts-none'), ['**/*.js'])
-    grossChurnSince(tmpDir, sanitizeRefName('pts-none'))
-    incrementGross(tmpDir, 10)
-    assert.notStrictEqual(
-      evaluateWhen({ linesChanged: 500, linesWritten: 500 }, { rootDir: tmpDir, sources: ['**/*.js'] }, 'pts-none'),
-      true
-    )
-
-    // Prereq fails, trigger passes → skip (prereq gates)
-    grossChurnSince(tmpDir, sanitizeRefName('pts-gate'))
+    // Gate fails, activity passes → skip (gate short-circuits)
+    grossChurnSince(tmpDir, sanitizeRefName('and-gate'))
     incrementGross(tmpDir, 600)
     assert.notStrictEqual(
-      evaluateWhen({ envSet: 'PROVE_IT_PTS_GATE', linesWritten: 500 }, { rootDir: tmpDir, sources: ['**/*.js'] }, 'pts-gate'),
+      evaluateWhen({ envSet: 'PROVE_IT_AND_GATE', linesWritten: 500 }, { rootDir: tmpDir, sources: ['**/*.js'] }, 'and-gate'),
       true
     )
 
-    // Prereq passes, trigger passes → true
-    process.env.PROVE_IT_PTS_PASS = '1'
-    grossChurnSince(tmpDir, sanitizeRefName('pts-pass'))
+    // Gate passes, activity fails → skip
+    process.env.PROVE_IT_AND_TRIG = '1'
+    grossChurnSince(tmpDir, sanitizeRefName('and-trig'))
+    incrementGross(tmpDir, 10)
+    assert.notStrictEqual(
+      evaluateWhen({ envSet: 'PROVE_IT_AND_TRIG', linesWritten: 500 }, { rootDir: tmpDir, sources: ['**/*.js'] }, 'and-trig'),
+      true
+    )
+    delete process.env.PROVE_IT_AND_TRIG
+
+    // Multiple activity conditions: both must pass (AND, not OR)
+    churnSinceRef(tmpDir, sanitizeRefName('and-both'), ['**/*.js'])
+    grossChurnSince(tmpDir, sanitizeRefName('and-both'))
+    incrementGross(tmpDir, 600)
+    // Net churn is 0 (no file changes), gross is 600 → linesWritten passes, linesChanged fails
+    assert.notStrictEqual(
+      evaluateWhen({ linesChanged: 500, linesWritten: 500 }, { rootDir: tmpDir, sources: ['**/*.js'] }, 'and-both'),
+      true,
+      'Both activity conditions must pass (AND semantics)'
+    )
+  })
+})
+
+// ---------- Story: array form—OR of ANDs ----------
+describe('evaluateWhen—array form (OR of ANDs)', () => {
+  let tmpDir
+
+  beforeEach(() => { tmpDir = freshRepo(setupAppJs) })
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }) })
+
+  it('fires when first clause passes, second fails', () => {
+    process.env.PROVE_IT_ARR_1 = '1'
+    const result = evaluateWhen(
+      [{ envSet: 'PROVE_IT_ARR_1' }, { envSet: 'PROVE_IT_ARR_MISSING' }],
+      { rootDir: tmpDir }
+    )
+    assert.strictEqual(result, true)
+    delete process.env.PROVE_IT_ARR_1
+  })
+
+  it('fires when second clause passes, first fails', () => {
+    process.env.PROVE_IT_ARR_2 = '1'
+    const result = evaluateWhen(
+      [{ envSet: 'PROVE_IT_ARR_MISSING' }, { envSet: 'PROVE_IT_ARR_2' }],
+      { rootDir: tmpDir }
+    )
+    assert.strictEqual(result, true)
+    delete process.env.PROVE_IT_ARR_2
+  })
+
+  it('fires when both clauses pass', () => {
+    process.env.PROVE_IT_ARR_A = '1'
+    process.env.PROVE_IT_ARR_B = '1'
+    const result = evaluateWhen(
+      [{ envSet: 'PROVE_IT_ARR_A' }, { envSet: 'PROVE_IT_ARR_B' }],
+      { rootDir: tmpDir }
+    )
+    assert.strictEqual(result, true)
+    delete process.env.PROVE_IT_ARR_A
+    delete process.env.PROVE_IT_ARR_B
+  })
+
+  it('skips when no clause passes', () => {
+    const result = evaluateWhen(
+      [{ envSet: 'PROVE_IT_ARR_X' }, { envSet: 'PROVE_IT_ARR_Y' }],
+      { rootDir: tmpDir }
+    )
+    assert.notStrictEqual(result, true)
+    assert.ok(typeof result === 'string')
+  })
+
+  it('single-element array equivalent to object', () => {
+    process.env.PROVE_IT_ARR_SINGLE = '1'
+    const arrResult = evaluateWhen(
+      [{ envSet: 'PROVE_IT_ARR_SINGLE' }],
+      { rootDir: tmpDir }
+    )
+    const objResult = evaluateWhen(
+      { envSet: 'PROVE_IT_ARR_SINGLE' },
+      { rootDir: tmpDir }
+    )
+    assert.strictEqual(arrResult, objResult)
+    delete process.env.PROVE_IT_ARR_SINGLE
+  })
+
+  it('churn bootstraps in non-matching clauses', () => {
+    // Both clauses have linesWritten → both bootstrap even though both skip
+    grossChurnSince(tmpDir, sanitizeRefName('arr-boot'))
+    const result = evaluateWhen(
+      [{ linesWritten: 999 }, { linesWritten: 888 }],
+      { rootDir: tmpDir, sources: ['**/*.js'] },
+      'arr-boot'
+    )
+    assert.notStrictEqual(result, true)
+  })
+
+  it('accumulates _triggerProgress across clauses', () => {
+    grossChurnSince(tmpDir, sanitizeRefName('arr-prog'))
+    incrementGross(tmpDir, 50)
+    const context = { rootDir: tmpDir, sources: ['**/*.js'] }
+    evaluateWhen(
+      [{ linesWritten: 999 }, { linesWritten: 888 }],
+      context,
+      'arr-prog'
+    )
+    assert.ok(context._triggerProgress, '_triggerProgress should be set')
+    assert.ok(context._triggerProgress.includes('linesWritten'))
+  })
+
+  it('OR across churn types via array form', () => {
+    // Use array form to get the old OR-between-churn behavior:
+    // gross passes (linesWritten), net does not (linesChanged)
+    churnSinceRef(tmpDir, sanitizeRefName('arr-or'), ['**/*.js'])
+    grossChurnSince(tmpDir, sanitizeRefName('arr-or'))
     incrementGross(tmpDir, 600)
     assert.strictEqual(
-      evaluateWhen({ envSet: 'PROVE_IT_PTS_PASS', linesWritten: 500 }, { rootDir: tmpDir, sources: ['**/*.js'] }, 'pts-pass'),
-      true
+      evaluateWhen(
+        [{ linesChanged: 500 }, { linesWritten: 500 }],
+        { rootDir: tmpDir, sources: ['**/*.js'] },
+        'arr-or'
+      ),
+      true,
+      'Array form gives OR: linesWritten passes even though linesChanged does not'
     )
-    delete process.env.PROVE_IT_PTS_PASS
-
-    // Prereq passes, trigger fails → skip
-    process.env.PROVE_IT_PTS_TRIG = '1'
-    grossChurnSince(tmpDir, sanitizeRefName('pts-trig'))
-    incrementGross(tmpDir, 10)
-    assert.notStrictEqual(
-      evaluateWhen({ envSet: 'PROVE_IT_PTS_TRIG', linesWritten: 500 }, { rootDir: tmpDir, sources: ['**/*.js'] }, 'pts-trig'),
-      true
-    )
-    delete process.env.PROVE_IT_PTS_TRIG
-
-    // Keys exported
-    assert.ok(Array.isArray(PREREQUISITE_KEYS) && PREREQUISITE_KEYS.includes('fileExists'))
-    assert.ok(Array.isArray(TRIGGER_KEYS) && TRIGGER_KEYS.includes('linesChanged'))
-    assert.ok(TRIGGER_KEYS.includes('sourceFilesEdited'))
   })
 })
