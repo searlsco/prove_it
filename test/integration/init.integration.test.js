@@ -300,5 +300,69 @@ describe('init integration', () => {
       assert.ok(cfg.initSeed && cfg.enabled && !cfg.custom)
       assert.strictEqual(cfg.initSeed, configHash(cfg))
     })
+
+    it('preserves custom sources from existing config', () => {
+      initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      cfg.sources = ['src/**/*.js', 'test/**/*.js']
+      fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
+
+      const result = overwriteTeamConfig(tmpDir, { gitHooks: false, defaultChecks: false })
+      const updated = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      assert.deepStrictEqual(updated.sources, ['src/**/*.js', 'test/**/*.js'])
+      assert.strictEqual(updated.initSeed, configHash(updated))
+      assert.strictEqual(result.sourcesPreserved, true)
+    })
+
+    it('does not preserve placeholder sources', () => {
+      initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+
+      const result = overwriteTeamConfig(tmpDir, { gitHooks: false, defaultChecks: false })
+      const updated = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      assert.ok(updated.sources.some(s => s.includes('replace/these/with/globs')))
+      assert.strictEqual(result.sourcesPreserved, false)
+    })
+
+    it('uses explicitly passed preservedSources over auto-detected', () => {
+      initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      cfg.sources = ['src/**/*.js']
+      fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
+
+      overwriteTeamConfig(tmpDir, {
+        gitHooks: false,
+        defaultChecks: false,
+        preservedSources: ['lib/**/*.ts']
+      })
+      const updated = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      assert.deepStrictEqual(updated.sources, ['lib/**/*.ts'])
+    })
+  })
+
+  // ---------- Story: initProject with preservedSources ----------
+  describe('initProject preservedSources', () => {
+    it('injects preservedSources into fresh config with correct initSeed', () => {
+      const results = initProject(tmpDir, {
+        gitHooks: false,
+        defaultChecks: false,
+        preservedSources: ['app/**/*.rb', 'spec/**/*.rb']
+      })
+      assert.ok(results.teamConfig.created)
+      assert.strictEqual(results.teamConfig.sourcesPreserved, true)
+
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      assert.deepStrictEqual(cfg.sources, ['app/**/*.rb', 'spec/**/*.rb'])
+      assert.strictEqual(cfg.initSeed, configHash(cfg))
+    })
+
+    it('does not set sourcesPreserved when no preservedSources given', () => {
+      const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      assert.ok(results.teamConfig.created)
+      assert.strictEqual(results.teamConfig.sourcesPreserved, undefined)
+    })
   })
 })

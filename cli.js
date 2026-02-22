@@ -321,9 +321,10 @@ function scriptHasRecord (filePath) {
   }
 }
 
-async function cmdInit () {
+async function cmdInit (options = {}) {
   const { initProject, overwriteTeamConfig } = require('./lib/init')
   const repoRoot = process.cwd()
+  const { preservedSources } = options
 
   const args = process.argv.slice(3)
   const { flags, hasExplicitFlags } = parseInitFlags(args)
@@ -351,19 +352,22 @@ async function cmdInit () {
       flags.defaultChecks = await askYesNo(rl, 'Include default checks (code review, coverage review)?')
     }
 
-    const results = initProject(repoRoot, flags)
+    const results = initProject(repoRoot, { ...flags, preservedSources })
 
     // Handle edited config—prompt or respect --overwrite/--no-overwrite
     let overwritten = false
+    let sourcesPreserved = results.teamConfig.sourcesPreserved || false
     if (results.teamConfig.edited) {
       if (flags.overwrite === true) {
-        overwriteTeamConfig(repoRoot, flags)
+        const owResult = overwriteTeamConfig(repoRoot, { ...flags, preservedSources })
         overwritten = true
+        if (owResult.sourcesPreserved) sourcesPreserved = true
       } else if (flags.overwrite === null && rl) {
         const doOverwrite = await askYesNo(rl, 'Existing config has been customized. Overwrite with current defaults?', false)
         if (doOverwrite) {
-          overwriteTeamConfig(repoRoot, flags)
+          const owResult = overwriteTeamConfig(repoRoot, { ...flags, preservedSources })
           overwritten = true
+          if (owResult.sourcesPreserved) sourcesPreserved = true
         }
       }
       // flags.overwrite === false or user said no → keep existing
@@ -383,6 +387,10 @@ async function cmdInit () {
       log(`  Exists:  ${results.teamConfig.path} (customized)`)
     } else {
       log(`  Exists:  ${results.teamConfig.path}`)
+    }
+
+    if (sourcesPreserved) {
+      log('  Preserved: sources globs from previous config')
     }
 
     if (results.localConfig.created) {
@@ -1162,13 +1170,18 @@ function main () {
     case 'deinit':
       cmdDeinit()
       break
-    case 'reinit':
+    case 'reinit': {
+      const { hasCustomSources } = require('./lib/config')
+      const cfgPath = path.join(process.cwd(), '.claude', 'prove_it', 'config.json')
+      const existing = loadJson(cfgPath)
+      const preservedSources = hasCustomSources(existing) ? existing.sources : null
       cmdDeinit()
-      cmdInit().catch(err => {
+      cmdInit({ preservedSources }).catch(err => {
         console.error(`prove_it reinit failed: ${err.message}`)
         process.exit(1)
       })
       break
+    }
     case 'doctor':
     case 'diagnose':
       cmdDoctor()

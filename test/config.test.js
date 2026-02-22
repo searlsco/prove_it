@@ -182,6 +182,37 @@ describe('loadEffectiveConfig ancestor discovery', () => {
   })
 })
 
+describe('hasCustomSources', () => {
+  const { hasCustomSources } = require('../lib/config')
+
+  it('returns false for null/undefined config', () => {
+    assert.strictEqual(hasCustomSources(null), false)
+    assert.strictEqual(hasCustomSources(undefined), false)
+  })
+
+  it('returns false for empty or missing sources', () => {
+    assert.strictEqual(hasCustomSources({}), false)
+    assert.strictEqual(hasCustomSources({ sources: [] }), false)
+    assert.strictEqual(hasCustomSources({ sources: null }), false)
+  })
+
+  it('returns false when sources contain the placeholder glob', () => {
+    assert.strictEqual(hasCustomSources({
+      sources: ['**/*.*', 'replace/these/with/globs/of/your/source/and/test/files.*']
+    }), false)
+  })
+
+  it('returns true when sources are customized', () => {
+    assert.strictEqual(hasCustomSources({ sources: ['src/**/*.js', 'test/**/*.js'] }), true)
+  })
+
+  it('returns false when even one source contains placeholder', () => {
+    assert.strictEqual(hasCustomSources({
+      sources: ['src/**/*.js', 'replace/these/with/globs/foo.*']
+    }), false)
+  })
+})
+
 describe('isIgnoredPath', () => {
   const { isIgnoredPath } = require('../lib/config')
   const home = os.homedir()

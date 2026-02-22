@@ -152,14 +152,15 @@ describe('init/deinit', () => {
     // --no-overwrite → customized
     assert.match(runCli(['init', '--no-overwrite'], { cwd: tmpDir }).stdout, /customized/)
 
-    // --overwrite → overwritten
+    // --overwrite → overwritten, but custom sources preserved
     const ow = runCli(['init', '--overwrite'], { cwd: tmpDir })
     assert.match(ow.stdout, /overwritten with current defaults/)
+    assert.match(ow.stdout, /Preserved: sources globs from previous config/)
     const newCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
     assert.ok(newCfg.initSeed)
-    assert.ok(!newCfg.sources.includes('src/**/*.js'))
+    assert.deepStrictEqual(newCfg.sources, ['src/**/*.js'])
 
-    // --overwrite respects other flags
+    // --overwrite respects other flags (sources still preserved)
     const cfg3 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
     cfg3.sources = ['src/**/*.js']
     fs.writeFileSync(cfgPath, JSON.stringify(cfg3, null, 2) + '\n')
