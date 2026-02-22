@@ -180,6 +180,27 @@ describe('SubagentStart hook', () => {
     })
   })
 
+  describe('error paths use correct schema', () => {
+    it('config validation error emits SubagentStart schema, not Stop schema', () => {
+      // Write a config that parses but fails validation (unknown key triggers error)
+      writeConfig(tmpDir, { enabled: true, hooks: [], bogusKey: true })
+
+      const result = invokeHook('claude:SubagentStart', {
+        hook_event_name: 'SubagentStart',
+        session_id: 'test-subagent-bad-config',
+        agent_type: 'Plan'
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, `Should produce JSON output. stdout: ${result.stdout}, stderr: ${result.stderr}`)
+      assert.ok(result.output.hookSpecificOutput, 'Should use hookSpecificOutput, not Stop schema')
+      assert.strictEqual(result.output.hookSpecificOutput.hookEventName, 'SubagentStart')
+      assert.ok(result.output.hookSpecificOutput.additionalContext.includes('invalid config'),
+        `Should mention invalid config, got: ${result.output.hookSpecificOutput.additionalContext}`)
+      assert.strictEqual(result.output.decision, undefined, 'Should NOT have Stop-style decision field')
+    })
+  })
+
   describe('exits cleanly with no config', () => {
     it('exits silently when no hooks match and no Plan agent', () => {
       writeConfig(tmpDir, makeConfig([]))
