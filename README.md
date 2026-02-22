@@ -211,6 +211,7 @@ Supported conditions:
 | `envSet` | prerequisite | string | Passes when environment variable is set |
 | `envNotSet` | prerequisite | string | Passes when environment variable is not set |
 | `variablesPresent` | prerequisite | string[] | Passes when all listed template variables resolve to non-empty values |
+| `signal` | prerequisite | string | Passes when the named signal (`done`, `stuck`, `idle`) is active for the current session |
 | `linesChanged` | trigger | number | Passes when at least N source lines have changed (additions + deletions) since the task last ran. Backed by git refs — works in both Claude hooks and git hooks. |
 | `linesWritten` | trigger | number | Passes when at least N gross lines have been written by the agent since the task last ran. Tracks cumulative Write/Edit/NotebookEdit activity — catches thrashing (back-and-forth edits that net to zero). Claude Code sessions only. |
 | `sourcesModifiedSinceLastRun` | trigger | boolean | Passes when source file mtimes are newer than the last run |
@@ -278,6 +279,31 @@ These conditions solve cross-session bleed — unlike `sourcesModifiedSinceLastR
   "prompt": "Review Xcode changes...",
   "when": { "toolsUsed": ["XcodeEdit"] }
 }
+```
+
+#### Signals
+
+Signals let the agent declare where it is in a work cycle. The agent runs `prove_it signal done` (or `stuck`, `idle`) and tasks gated with `when: { signal: "done" }` fire on the next Stop. This is useful for heavyweight checks you only want at the end of a coherent unit of work rather than every Stop.
+
+PreToolUse intercepts the `prove_it signal` command automatically — no extra config needed. The signal is cleared after a successful Stop and preserved after a failed one (so the gated tasks re-fire until they pass).
+
+```json
+{
+  "name": "full-tests",
+  "type": "script",
+  "command": "./script/test",
+  "when": { "signal": "done" }
+}
+```
+
+Signal commands:
+
+```
+prove_it signal done                         Declare coherent work complete
+prove_it signal stuck                        Declare stuck / cycling
+prove_it signal idle                         Declare idle / between tasks
+prove_it signal done -m "Ready for review"   Include a message
+prove_it signal clear                        Clear the active signal
 ```
 
 ### Tracking MCP editing tools
@@ -519,6 +545,7 @@ prove_it doctor        Check installation and show effective config
 prove_it monitor       Tail hook results in real time
 prove_it hook <spec>   Run a dispatcher directly (claude:Stop, git:pre-commit)
 prove_it run_builtin <namespace:name> Run a builtin check directly
+prove_it signal <type>  Declare a lifecycle signal (done, stuck, idle, clear)
 prove_it record        Record a test run result (--name <check> --pass|--fail|--result <N>)
 ```
 
