@@ -8,7 +8,9 @@
 
 By far the most frustrating thing about [Claude Code](https://docs.anthropic.com/en/docs/claude-code) is its penchant for prematurely declaring success. Out-of-the-box, Claude will happily announce a task is complete. But has it run the tests? No. Did it add any tests? No. Did it run the code? Also no.
 
-**prove_it** hooks into Claude Code's [lifecycle events](https://code.claude.com/docs/en/hooks) and runs whatever tasks you configure—test suites, lint scripts, AI code reviewers—blocking Claude until they pass. If it's not obvious, **prove_it only works with Claude Code.**
+**prove_it** hooks into Claude Code's [lifecycle events](https://code.claude.com/docs/en/hooks) and runs whatever tasks you configure—test suites, lint scripts, AI code reviewers—blocking Claude until they pass.
+
+(And in case it's not obvious, **prove_it currently only works with Claude Code.**)
 
 ## Quick start
 
