@@ -30,6 +30,12 @@ describe('parseVerdict', () => {
       assert.strictEqual(result.pass, true)
       assert.strictEqual(result.reason, 'no space')
     })
+
+    it('PASS has no body field', () => {
+      const result = parseVerdict('PASS: looks good\n\nSome extra text')
+      assert.strictEqual(result.pass, true)
+      assert.strictEqual(result.body, undefined)
+    })
   })
 
   describe('FAIL responses', () => {
@@ -49,6 +55,32 @@ describe('parseVerdict', () => {
       const result = parseVerdict('FAIL')
       assert.strictEqual(result.pass, false)
       assert.strictEqual(result.reason, '<<Reviewer provided no rationale>>')
+    })
+
+    it('captures multi-line body after FAIL verdict', () => {
+      const input = 'FAIL: missing tests\n\n### Summary\nDetailed analysis here.\n\n### Issues\n1. No tests for foo'
+      const result = parseVerdict(input)
+      assert.strictEqual(result.pass, false)
+      assert.strictEqual(result.reason, 'missing tests')
+      assert.ok(result.body.includes('### Summary'))
+      assert.ok(result.body.includes('Detailed analysis here.'))
+      assert.ok(result.body.includes('### Issues'))
+    })
+
+    it('returns null body when FAIL has verdict line only', () => {
+      const result = parseVerdict('FAIL: no tests')
+      assert.strictEqual(result.pass, false)
+      assert.strictEqual(result.reason, 'no tests')
+      assert.strictEqual(result.body, null)
+    })
+
+    it('captures body after FAIL even with preamble lines', () => {
+      const input = 'Let me check.\nFAIL: bad code\n\n### Summary\nThe code is bad.'
+      const result = parseVerdict(input)
+      assert.strictEqual(result.pass, false)
+      assert.strictEqual(result.reason, 'bad code')
+      assert.ok(result.body.includes('### Summary'))
+      assert.ok(!result.body.includes('Let me check'))
     })
   })
 
@@ -94,6 +126,11 @@ describe('parseVerdict', () => {
     it('SKIP has no pass field', () => {
       const result = parseVerdict('SKIP: reason')
       assert.strictEqual(result.pass, undefined)
+    })
+
+    it('SKIP has no body field', () => {
+      const result = parseVerdict('SKIP: unrelated\n\nSome extra text')
+      assert.strictEqual(result.body, undefined)
     })
   })
 

@@ -598,6 +598,32 @@ describe('backchannel', () => {
     assert.strictEqual(fsResult.pass, false)
     assert.ok(fsResult.reason.includes('no tests'))
   })
+
+  // ---------- Story: structured FAIL report flows through ----------
+  it('bubbles detailed reviewer body through reason and backchannel', () => {
+    const body = '### Summary\\nDetailed analysis.\\n\\n### Issues\\n1. Missing tests for foo'
+    const reviewerPath = path.join(tmpDir, 'structured_fail.sh')
+    fs.writeFileSync(reviewerPath, `#!/usr/bin/env bash\ncat > /dev/null\nprintf "FAIL: bad code\\n\\n${body}\\n"\n`)
+    fs.chmodSync(reviewerPath, 0o755)
+
+    const sid = 'test-session-structured-fail'
+    const result = runAgentCheck(
+      { name: 'structured-review', command: reviewerPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId: sid })
+    )
+    assert.strictEqual(result.pass, false)
+    // reason contains both one-line summary and detailed body
+    assert.ok(result.reason.includes('bad code'), 'reason includes one-line summary')
+    assert.ok(result.reason.includes('### Summary'), 'reason includes body summary heading')
+    assert.ok(result.reason.includes('Missing tests for foo'), 'reason includes body detail')
+
+    // backchannel README contains the full report
+    const readmePath = backchannelReadmePath(tmpDir, sid, 'structured-review')
+    assert.ok(fs.existsSync(readmePath), 'backchannel README created')
+    const bcContent = fs.readFileSync(readmePath, 'utf8')
+    assert.ok(bcContent.includes('bad code'), 'backchannel includes one-line summary')
+    assert.ok(bcContent.includes('### Summary'), 'backchannel includes body')
+  })
 })
 
 describe('defaultModel', () => {
