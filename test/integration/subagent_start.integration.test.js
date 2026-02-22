@@ -148,6 +148,38 @@ describe('SubagentStart hook', () => {
     })
   })
 
+  describe('failed tasks are non-blocking', () => {
+    it('emits failure as context, not Stop schema', () => {
+      createFile(tmpDir, 'fail.sh', '#!/usr/bin/env bash\necho "something broke" >&2\nexit 1\n')
+      makeExecutable(path.join(tmpDir, 'fail.sh'))
+
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'SubagentStart',
+          tasks: [
+            { name: 'fail-check', type: 'script', command: './fail.sh' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:SubagentStart', {
+        hook_event_name: 'SubagentStart',
+        session_id: 'test-subagent-fail',
+        agent_type: 'Explore'
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, 'Should produce JSON output')
+      // Must use SubagentStart schema (hookSpecificOutput), not Stop schema (decision)
+      assert.ok(result.output.hookSpecificOutput, 'Should use hookSpecificOutput, not Stop schema')
+      assert.strictEqual(result.output.hookSpecificOutput.hookEventName, 'SubagentStart')
+      assert.ok(result.output.hookSpecificOutput.additionalContext.includes('failed'),
+        `additionalContext should mention failure, got: ${result.output.hookSpecificOutput.additionalContext}`)
+      assert.strictEqual(result.output.decision, undefined, 'Should NOT have Stop-style decision field')
+    })
+  })
+
   describe('exits cleanly with no config', () => {
     it('exits silently when no hooks match and no Plan agent', () => {
       writeConfig(tmpDir, makeConfig([]))
