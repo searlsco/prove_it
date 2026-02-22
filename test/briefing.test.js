@@ -206,6 +206,20 @@ describe('briefing', () => {
       assert.ok(text.includes('my-task—last ran never'), 'should default to never')
     })
 
+    it('discovers signal-gated tasks with array-form when', () => {
+      const cfg = {
+        hooks: [{
+          type: 'claude',
+          event: 'Stop',
+          tasks: [{ name: 'arr-review', type: 'agent', when: [{ signal: 'done', linesChanged: 500 }] }]
+        }]
+      }
+      const text = renderBriefing(cfg)
+      assert.ok(text.includes('Signaling:'), 'should include signaling section')
+      assert.ok(text.includes('prove_it signal done'), 'should include signal directive')
+      assert.ok(text.includes('arr-review'), 'should list the task')
+    })
+
     it('omits signaling section when no signal-gated tasks', () => {
       const cfg = {
         hooks: [{
@@ -370,6 +384,23 @@ describe('briefing', () => {
       const desc = whenDescription({ fileExists: 'script/test', linesWritten: 500 })
       assert.ok(desc.includes('requires script/test'), 'should include prerequisite')
       assert.ok(desc.includes('after 500+ lines written'), 'should include trigger')
+    })
+
+    it('describes array form with OR', () => {
+      const desc = whenDescription([{ linesChanged: 500 }, { linesWritten: 1000 }])
+      assert.ok(desc.includes('500+ net lines changed'), 'should include first clause')
+      assert.ok(desc.includes('1000+ lines written'), 'should include second clause')
+      assert.ok(desc.includes(' OR '), 'should join clauses with OR')
+    })
+
+    it('single-element array same as object', () => {
+      const arr = whenDescription([{ linesChanged: 200 }])
+      const obj = whenDescription({ linesChanged: 200 })
+      assert.strictEqual(arr, obj)
+    })
+
+    it('returns null for empty array elements', () => {
+      assert.strictEqual(whenDescription([{}]), null)
     })
   })
 
