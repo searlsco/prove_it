@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test')
 const assert = require('node:assert')
-const { renderBriefing, eventLabel, whenDescription, taskLine } = require('../lib/briefing')
+const { renderBriefing, eventLabel, whenDescription, taskLine, timeAgo } = require('../lib/briefing')
 const { buildConfig } = require('../lib/config')
 
 describe('briefing', () => {
@@ -168,6 +168,44 @@ describe('briefing', () => {
       assert.ok(text.includes('prove_it signal clear'), 'should mention clear')
     })
 
+    it('shows "last ran" timing for signal-gated tasks when run data provided', () => {
+      const cfg = {
+        hooks: [{
+          type: 'claude',
+          event: 'Stop',
+          tasks: [{ name: 'full-tests', type: 'script', command: './script/test', when: { signal: 'done' } }]
+        }]
+      }
+      const runs = { 'full-tests': { at: Date.now() - 2 * 60 * 60 * 1000, result: 'pass' } }
+      const text = renderBriefing(cfg, runs)
+      assert.ok(text.includes('Signal-gated tasks:'), 'should include signal-gated tasks heading')
+      assert.ok(text.includes('full-tests — last ran 2h ago'), 'should show timing')
+    })
+
+    it('shows "never" for signal-gated tasks with no run data', () => {
+      const cfg = {
+        hooks: [{
+          type: 'claude',
+          event: 'Stop',
+          tasks: [{ name: 'deploy-check', type: 'agent', when: { signal: 'done' } }]
+        }]
+      }
+      const text = renderBriefing(cfg, {})
+      assert.ok(text.includes('deploy-check — last ran never'), 'should show never')
+    })
+
+    it('backward compat: renderBriefing(cfg) works without runs arg', () => {
+      const cfg = {
+        hooks: [{
+          type: 'claude',
+          event: 'Stop',
+          tasks: [{ name: 'my-task', type: 'script', command: 'true', when: { signal: 'done' } }]
+        }]
+      }
+      const text = renderBriefing(cfg)
+      assert.ok(text.includes('my-task — last ran never'), 'should default to never')
+    })
+
     it('omits signaling section when no signal-gated tasks', () => {
       const cfg = {
         hooks: [{
@@ -333,6 +371,37 @@ describe('briefing', () => {
       const desc = whenDescription({ fileExists: 'script/test', linesWritten: 500 })
       assert.ok(desc.includes('requires script/test'), 'should include prerequisite')
       assert.ok(desc.includes('after 500+ lines written'), 'should include trigger')
+    })
+  })
+
+  describe('timeAgo', () => {
+    it('returns "never" for null/undefined', () => {
+      assert.strictEqual(timeAgo(null), 'never')
+      assert.strictEqual(timeAgo(undefined), 'never')
+    })
+
+    it('returns seconds for < 60s', () => {
+      const result = timeAgo(Date.now() - 30000)
+      assert.match(result, /^\d+s ago$/)
+    })
+
+    it('returns minutes for < 60m', () => {
+      const result = timeAgo(Date.now() - 5 * 60 * 1000)
+      assert.match(result, /^\d+m ago$/)
+    })
+
+    it('returns hours for < 24h', () => {
+      const result = timeAgo(Date.now() - 2 * 60 * 60 * 1000)
+      assert.match(result, /^\d+h ago$/)
+    })
+
+    it('returns days for >= 24h', () => {
+      const result = timeAgo(Date.now() - 3 * 24 * 60 * 60 * 1000)
+      assert.match(result, /^\d+d ago$/)
+    })
+
+    it('returns "just now" for future timestamps', () => {
+      assert.strictEqual(timeAgo(Date.now() + 10000), 'just now')
     })
   })
 
