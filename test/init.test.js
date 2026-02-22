@@ -24,7 +24,6 @@ describe('init', () => {
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
       assert.ok(allChecks.some(c => c.name === 'session-briefing'),
         'Should have session-briefing task')
-      assert.ok(allChecks.some(c => c.name === 'code-quality-review'))
       assert.ok(allChecks.some(c => c.name === 'coverage-review'))
       assert.ok(allChecks.some(c => c.name === 'shipworthy-review'))
       // commit-review and ensure-tests should NOT be in defaults
@@ -50,7 +49,6 @@ describe('init', () => {
       const cfg = buildConfig({ defaultChecks: false })
       assert.ok(cfg.enabled)
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
-      assert.ok(!allChecks.some(c => c.name === 'code-quality-review'))
       assert.ok(!allChecks.some(c => c.name === 'coverage-review'))
       assert.ok(!allChecks.some(c => c.name === 'shipworthy-review'))
     })
@@ -60,24 +58,11 @@ describe('init', () => {
       assert.ok(cfg.enabled)
       assert.ok(!cfg.hooks.some(h => h.type === 'git'))
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
-      assert.ok(!allChecks.some(c => c.name === 'code-quality-review'))
       assert.ok(!allChecks.some(c => c.name === 'coverage-review'))
       assert.ok(!allChecks.some(c => c.name === 'shipworthy-review'))
       // Should still have base checks
       assert.ok(allChecks.some(c => c.name === 'lock-config'))
       assert.ok(allChecks.some(c => c.name === 'fast-tests'))
-    })
-
-    it('code-quality-review uses type agent with promptType reference, async, and gross churn threshold', () => {
-      const cfg = buildConfig()
-      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
-      const codeQuality = allTasks.find(t => t.name === 'code-quality-review')
-      assert.ok(codeQuality, 'Should have code-quality-review task')
-      assert.strictEqual(codeQuality.type, 'agent')
-      assert.strictEqual(codeQuality.async, true)
-      assert.strictEqual(codeQuality.promptType, 'reference')
-      assert.strictEqual(codeQuality.prompt, 'review:code_quality')
-      assert.strictEqual(codeQuality.when.linesWritten, 733)
     })
 
     it('coverage-review uses type agent with promptType reference, async, and net churn threshold', () => {
@@ -96,8 +81,6 @@ describe('init', () => {
       const cfg = buildConfig()
       const stopEntry = cfg.hooks.find(h => h.type === 'claude' && h.event === 'Stop')
       assert.ok(stopEntry, 'Should have Stop entry')
-      assert.ok(stopEntry.tasks.some(t => t.name === 'code-quality-review'),
-        'code-quality-review should be in Stop entry')
       assert.ok(stopEntry.tasks.some(t => t.name === 'coverage-review'),
         'coverage-review should be in Stop entry')
       assert.ok(stopEntry.tasks.some(t => t.name === 'shipworthy-review'),
@@ -122,7 +105,7 @@ describe('init', () => {
       const cfg = buildConfig()
       const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
       const agentTasks = allTasks.filter(t => t.type === 'agent')
-      assert.ok(agentTasks.length >= 3, 'Should have at least 3 agent tasks')
+      assert.ok(agentTasks.length >= 2, 'Should have at least 2 agent tasks')
       for (const task of agentTasks) {
         assert.strictEqual(task.ruleFile, '.claude/rules/testing.md',
           `Agent task "${task.name}" should have ruleFile set`)

@@ -225,7 +225,6 @@ describe('briefing', () => {
       assert.ok(text.includes('lock-config'), 'should include lock-config')
       assert.ok(text.includes('fast-tests'), 'should include fast-tests')
       assert.ok(text.includes('full-tests'), 'should include full-tests')
-      assert.ok(text.includes('code-quality-review'), 'should include code-quality-review')
       assert.ok(text.includes('coverage-review'), 'should include coverage-review')
       assert.ok(text.includes('shipworthy-review'), 'should include shipworthy-review')
       assert.ok(!text.includes('session-briefing'), 'should not mention session-briefing')
