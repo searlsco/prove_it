@@ -16,9 +16,8 @@ in isolation.
 
 ## Arguments
 
-`<prompt_ref>`—the builtin prompt key to test (e.g. `review:test_investment`,
-`review:test_coverage`, `review:commit_quality`). If omitted, test all
-`review:*` prompts in `BUILTIN_PROMPTS`.
+`<prompt_ref>`—the skill name to test (e.g. `prove-coverage`,
+`prove-shipworthy`). If omitted, test all reviewer skills.
 
 ## What "end-to-end" means
 
@@ -64,19 +63,18 @@ Write the prove_it config. Use the real `buildConfig()` output or write a
 focused config that isolates the reviewer you're testing:
 
 ```javascript
-// For testing review:test_investment specifically:
+// For testing prove-coverage specifically:
 {
   "enabled": true,
   "sources": ["src/**/*.js", "test/**/*.js"],
   "hooks": [{
     "type": "claude",
-    "event": "PreToolUse",
-    "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*",
+    "event": "Stop",
     "tasks": [{
-      "name": "ensure-tests",
+      "name": "coverage-review",
       "type": "agent",
-      "promptType": "reference",
-      "prompt": "review:test_investment",
+      "promptType": "skill",
+      "prompt": "prove-coverage",
       "when": { "linesChanged": 500 }
     }]
   }]

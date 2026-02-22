@@ -1,8 +1,8 @@
 const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
-const { spawnSync } = require('child_process')
 const { defaultModel, runAgentCheck, backchannelDir, backchannelReadmePath, createBackchannel } = require('../../lib/checks/agent')
 const { freshRepo } = require('../helpers')
 
@@ -156,25 +156,32 @@ describe('agent check', () => {
     assert.strictEqual(ok.pass, true)
   })
 
-  it('resolves promptType reference and fails for unknown reference', () => {
-    const { reviewerPath, capturePath } = writeCaptureReviewer(tmpDir, 'ref_captured.txt')
-    fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'changed\n')
-    spawnSync('git', ['add', 'file.txt'], { cwd: tmpDir })
+  it('resolves promptType skill and fails for missing skill', () => {
+    const { reviewerPath, capturePath } = writeCaptureReviewer(tmpDir, 'skill_captured.txt')
 
-    const result = runAgentCheck(
-      { name: 'test-review', command: reviewerPath, prompt: 'review:commit_quality', promptType: 'reference' },
-      ctx(tmpDir)
-    )
-    assert.strictEqual(result.pass, true)
-    assert.ok(fs.readFileSync(capturePath, 'utf8').includes('Test coverage gaps'))
+    // Write a temp SKILL.md for the test
+    const skillDir = path.join(os.homedir(), '.claude', 'skills', 'test-skill-' + path.basename(tmpDir))
+    fs.mkdirSync(skillDir, { recursive: true })
+    fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '---\nname: test-skill\n---\nReview {{project_dir}} for quality issues.')
 
-    // Unknown reference → fails
-    const unkn = runAgentCheck(
-      { name: 'test-review', prompt: 'nonexistent:builtin', promptType: 'reference' },
-      ctx(tmpDir)
-    )
-    assert.strictEqual(unkn.pass, false)
-    assert.ok(unkn.reason.includes('unknown prompt reference'))
+    try {
+      const result = runAgentCheck(
+        { name: 'test-review', command: reviewerPath, prompt: 'test-skill-' + path.basename(tmpDir), promptType: 'skill' },
+        ctx(tmpDir)
+      )
+      assert.strictEqual(result.pass, true)
+      assert.ok(fs.readFileSync(capturePath, 'utf8').includes('quality issues'))
+
+      // Missing skill → fails
+      const missing = runAgentCheck(
+        { name: 'test-review', prompt: 'nonexistent-skill', promptType: 'skill' },
+        ctx(tmpDir)
+      )
+      assert.strictEqual(missing.pass, false)
+      assert.ok(missing.reason.includes('not found'))
+    } finally {
+      fs.rmSync(skillDir, { recursive: true, force: true })
+    }
   })
 
   // ---------- Story: model precedence ----------

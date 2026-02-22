@@ -363,7 +363,7 @@ describe('validateConfig', () => {
     it('validates linesChanged and linesWritten when keys', () => {
       // valid values pass
       for (const [field, extra] of [
-        ['linesChanged', { command: 'prove_it run_builtin review:test_investment' }],
+        ['linesChanged', {}],
         ['linesWritten', {}]
       ]) {
         const { errors } = validateConfig(cfgWithTask({
@@ -455,11 +455,11 @@ describe('validateConfig', () => {
     })
 
     it('validates promptType field', () => {
-      // reference with valid builtin passes
-      const validRef = validateConfig(cfgWithTask({
-        name: 'a', type: 'agent', prompt: 'review:commit_quality', promptType: 'reference'
+      // skill with any prompt passes
+      const validSkill = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'prove-coverage', promptType: 'skill'
       }))
-      assert.strictEqual(validRef.errors.length, 0)
+      assert.strictEqual(validSkill.errors.length, 0)
 
       // string promptType with any prompt passes
       const validStr = validateConfig(cfgWithTask({
@@ -471,13 +471,13 @@ describe('validateConfig', () => {
       const badType = validateConfig(cfgWithTask({
         name: 'a', type: 'agent', prompt: 'review this', promptType: 'builtin'
       }))
-      assert.ok(badType.errors.some(e => e.includes('promptType must be "string" or "reference"')))
+      assert.ok(badType.errors.some(e => e.includes('promptType must be "string" or "skill"')))
 
-      // reference with unknown builtin errors
-      const unknownRef = validateConfig(cfgWithTask({
-        name: 'a', type: 'agent', prompt: 'nonexistent:builtin', promptType: 'reference'
+      // skill promptType accepts any string prompt (can't validate file existence at config time)
+      const anySkill = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'my-custom-skill', promptType: 'skill'
       }))
-      assert.ok(unknownRef.errors.some(e => e.includes('references unknown builtin "nonexistent:builtin"')))
+      assert.strictEqual(anySkill.errors.length, 0)
     })
 
     it('validates task-level model field', () => {
@@ -572,7 +572,7 @@ describe('validateConfig', () => {
       const valid = validateConfig(cfgWithTask({
         name: 'a',
         type: 'agent',
-        prompt: 'review:code_quality',
+        prompt: 'Review this',
         when: { signal: 'done' }
       }))
       assert.strictEqual(valid.errors.length, 0)
@@ -581,7 +581,7 @@ describe('validateConfig', () => {
       const bad = validateConfig(cfgWithTask({
         name: 'a',
         type: 'agent',
-        prompt: 'review:code_quality',
+        prompt: 'Review this',
         when: { signal: 'bogus' }
       }))
       assert.ok(bad.errors.some(e => e.includes('when.signal must be one of')))
@@ -590,7 +590,7 @@ describe('validateConfig', () => {
       const nonString = validateConfig(cfgWithTask({
         name: 'a',
         type: 'agent',
-        prompt: 'review:code_quality',
+        prompt: 'Review this',
         when: { signal: true }
       }))
       assert.ok(nonString.errors.some(e => e.includes('when.signal must be one of')))

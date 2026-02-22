@@ -86,7 +86,7 @@ describe('briefing', () => {
           event: 'Stop',
           tasks: [
             { name: 'fast-tests', type: 'script', command: './script/test_fast' },
-            { name: 'code-review', type: 'agent', prompt: 'review:code_quality', when: { linesWritten: 733 } }
+            { name: 'code-review', type: 'agent', prompt: 'Review this', when: { linesWritten: 733 } }
           ]
         }]
       }

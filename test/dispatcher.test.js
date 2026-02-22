@@ -758,8 +758,8 @@ describe('claude dispatcher', () => {
         name: 'coverage-review',
         type: 'agent',
         async: true,
-        prompt: 'review:test_coverage',
-        promptType: 'reference',
+        prompt: 'prove-coverage',
+        promptType: 'skill',
         model: 'haiku',
         when: { linesChanged: 500 }
       }

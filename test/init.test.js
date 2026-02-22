@@ -65,15 +65,15 @@ describe('init', () => {
       assert.ok(allChecks.some(c => c.name === 'fast-tests'))
     })
 
-    it('coverage-review uses type agent with promptType reference, async, and net churn threshold', () => {
+    it('coverage-review uses type agent with promptType skill, async, and net churn threshold', () => {
       const cfg = buildConfig()
       const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
       const coverageReview = allTasks.find(t => t.name === 'coverage-review')
       assert.ok(coverageReview, 'Should have coverage-review task')
       assert.strictEqual(coverageReview.type, 'agent')
       assert.strictEqual(coverageReview.async, true)
-      assert.strictEqual(coverageReview.promptType, 'reference')
-      assert.strictEqual(coverageReview.prompt, 'review:test_coverage')
+      assert.strictEqual(coverageReview.promptType, 'skill')
+      assert.strictEqual(coverageReview.prompt, 'prove-coverage')
       assert.strictEqual(coverageReview.when.linesChanged, 541)
     })
 
@@ -93,8 +93,8 @@ describe('init', () => {
       const signalReview = allTasks.find(t => t.name === 'shipworthy-review')
       assert.ok(signalReview, 'Should have shipworthy-review task')
       assert.strictEqual(signalReview.type, 'agent')
-      assert.strictEqual(signalReview.promptType, 'reference')
-      assert.strictEqual(signalReview.prompt, 'review:shipworthy')
+      assert.strictEqual(signalReview.promptType, 'skill')
+      assert.strictEqual(signalReview.prompt, 'prove-shipworthy')
       assert.strictEqual(signalReview.model, 'opus')
       assert.deepStrictEqual(signalReview.when, { signal: 'done' })
       assert.strictEqual(signalReview.async, undefined,

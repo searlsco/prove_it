@@ -404,12 +404,14 @@ describe('doctor', () => {
     const proveItGitignore = path.join(tmpRepo, '.claude', 'prove_it', '.gitignore')
     fs.mkdirSync(path.dirname(proveItGitignore), { recursive: true })
     fs.writeFileSync(proveItGitignore, 'sessions/\nconfig.local.json\n')
-    const skillDir = path.join(tmpHome, '.claude', 'skills', 'prove')
-    fs.mkdirSync(skillDir, { recursive: true })
-    fs.copyFileSync(
-      path.join(__dirname, '..', '..', 'lib', 'skills', 'prove.md'),
-      path.join(skillDir, 'SKILL.md')
-    )
+    for (const name of ['prove', 'prove-coverage', 'prove-shipworthy']) {
+      const skillDir = path.join(tmpHome, '.claude', 'skills', name)
+      fs.mkdirSync(skillDir, { recursive: true })
+      fs.copyFileSync(
+        path.join(__dirname, '..', '..', 'lib', 'skills', `${name}.md`),
+        path.join(skillDir, 'SKILL.md')
+      )
+    }
 
     let result = run()
     assert.match(result.stdout, /All checks passed/)

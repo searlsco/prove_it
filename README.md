@@ -42,8 +42,8 @@ Out of the box, `prove_it init` generates the Searls-stack of configured tasks:
 - **Config lock** on every edit — silently blocks Claude from modifying your prove_it config
 - **Fast tests on every stop** — runs `./script/test_fast` and blocks until it passes
 - **Full tests on signal** — runs `./script/test` when Claude signals done (and source files were edited)
-- **Async coverage review** — a Haiku-powered `review:test_coverage` subagent fires in the background after 541+ net lines of churn, enforced on the next stop
-- **Shipworthy review on signal** — an Opus-powered `review:shipworthy` subagent runs a thorough pre-ship review when Claude signals done
+- **Async coverage review** — a Haiku-powered `prove-coverage` subagent fires in the background after 541+ net lines of churn, enforced on the next stop
+- **Shipworthy review on signal** — an Opus-powered `prove-shipworthy` subagent runs a thorough pre-ship review when Claude signals done
 - **Full tests on git commit** — pre-commit hook runs `./script/test` (Claude commits only — human commits pass through)
 
 Every one of these is a config entry you can change, disable, or replace. The framework supports any combination of lifecycle events, conditions, and task types — the default config is just a starting point.
@@ -177,8 +177,8 @@ Config files merge (later overrides earlier):
 Set `enabled: false` on a task to skip it without removing it from config:
 
 ```json
-{ "name": "slow-review", "type": "agent", "prompt": "review:test_coverage",
-  "promptType": "reference", "enabled": false }
+{ "name": "slow-review", "type": "agent", "prompt": "prove-coverage",
+  "promptType": "skill", "enabled": false }
 ```
 
 Disabled tasks are logged as SKIP with reason "Disabled".
@@ -254,8 +254,8 @@ Both `envSet` AND `linesChanged` must be true. If either fails, the task is skip
 {
   "name": "coverage-review",
   "type": "agent",
-  "prompt": "review:test_coverage",
-  "promptType": "reference",
+  "prompt": "prove-coverage",
+  "promptType": "skill",
   "when": [
     { "envSet": "CLAUDECODE", "linesChanged": 500 },
     { "envSet": "CLAUDECODE", "linesWritten": 1000 }
@@ -395,21 +395,20 @@ These expand in agent prompts:
 
 Conditional blocks are supported: `{{#var}}content{{/var}}` renders only when the variable is non-empty.
 
-### Builtin prompts
+### Skill-based prompts
 
-Builtin prompts are curated reviewer templates you can reference without writing your own:
+prove_it ships curated reviewer prompts as Claude Code [skills](https://code.claude.com/docs/en/skills). Reference them in your config with `promptType: "skill"`:
 
 ```json
-{ "type": "agent", "promptType": "reference", "prompt": "review:test_coverage" }
+{ "type": "agent", "promptType": "skill", "prompt": "prove-coverage" }
 ```
 
-| Builtin | What it reviews |
-|---------|----------------|
-| `review:shipworthy` | Thorough pre-ship review: correctness, integration, security, tests, omissions. Uses `{{changes_since_last_review}}` for scope. Designed for Opus. |
-| `review:code_quality` | Logic errors, dead code, error handling gaps, naming contradictions |
-| `review:commit_quality` | Staged diff for test coverage gaps, logic errors, dead code |
-| `review:test_coverage` | Session diffs for test coverage adequacy |
-| `review:test_investment` | Whether recent edits include adequate test investment |
+| Skill | What it reviews |
+|-------|----------------|
+| `prove-coverage` | Session diffs for test coverage adequacy |
+| `prove-shipworthy` | Thorough pre-ship review: correctness, integration, security, tests, omissions. Uses `{{changes_since_last_review}}` for scope. Designed for Opus. |
+
+Skills are installed to `~/.claude/skills/<name>/SKILL.md` by `prove_it install`. The prompt body is the skill file with its YAML frontmatter stripped.
 
 ### Rule files
 
@@ -419,8 +418,8 @@ Agent tasks accept a `ruleFile` field that injects the contents of a project-spe
 {
   "name": "coverage-review",
   "type": "agent",
-  "prompt": "review:test_coverage",
-  "promptType": "reference",
+  "prompt": "prove-coverage",
+  "promptType": "skill",
   "ruleFile": ".claude/rules/testing.md"
 }
 ```
@@ -485,8 +484,8 @@ Set `async: true` on an agent task to run it in the background:
   "name": "coverage-review",
   "type": "agent",
   "async": true,
-  "promptType": "reference",
-  "prompt": "review:test_coverage",
+  "promptType": "skill",
+  "prompt": "prove-coverage",
   "model": "haiku",
   "when": { "linesChanged": 541 }
 }
@@ -550,19 +549,14 @@ Multiple env tasks merge in order—later tasks override earlier ones for the sa
 
 ## Builtins
 
-prove_it ships with built-in tasks:
+prove_it ships with built-in runnable tasks:
 
 | Builtin | Type | What it does |
 |---------|------|-------------|
 | `config:lock` | script | Blocks direct edits to prove_it config files. Invoke via `prove_it run_builtin config:lock`. |
 | `session:briefing` | script | Renders a session orientation on SessionStart: active tasks, signal instructions, review process overview. Invoke via `prove_it run_builtin session:briefing`. |
-| `review:shipworthy` | agent prompt | Thorough pre-ship review. Reference via `promptType: "reference"`. |
-| `review:code_quality` | agent prompt | Logic errors, dead code, error handling gaps. Reference via `promptType: "reference"`. |
-| `review:commit_quality` | agent prompt | Staged diff review. Reference via `promptType: "reference"`. |
-| `review:test_coverage` | agent prompt | Session diff coverage review. Reference via `promptType: "reference"`. |
-| `review:test_investment` | agent prompt | Whether recent edits include adequate test investment. Reference via `promptType: "reference"`. |
 
-Script builtins (`config:lock`, `session:briefing`) are configured as `type: "script"` tasks with `command: "prove_it run_builtin <name>"`. Agent prompt builtins are configured as `type: "agent"` tasks with `promptType: "reference"` and `prompt: "<name>"`.
+Script builtins are configured as `type: "script"` tasks with `command: "prove_it run_builtin <name>"`. Reviewer prompts are distributed as skills (see [Skill-based prompts](#skill-based-prompts)).
 
 ## Session briefing
 

@@ -13,7 +13,7 @@ prove_it is a config-driven hook framework for Claude Code. It reads `.claude/pr
 - `lib/checks/script.js`—Runs shell commands as tasks
 - `lib/checks/agent.js`—Runs AI agent reviewer tasks
 - `lib/checks/env.js`—Runs env tasks that inject environment variables via CLAUDE_ENV_FILE
-- `lib/checks/builtins.js`—Built-in tasks (config:lock, review:commit_quality, review:test_coverage)
+- `lib/checks/builtins.js`—Built-in runnable tasks (config:lock, session:briefing)
 - `lib/config.js`—Config loading, merging, and `buildConfig()` for init
 - `lib/init.js`—Project initialization, git hook shim management
 - `lib/template.js`—Template variable expansion for agent prompts
@@ -78,4 +78,5 @@ tasks are configured.
 - No dependencies beyond Node.js stdlib (devDependencies: standard for linting only)
 - Linter: `npx standard --fix` (run automatically by `./script/test_fast`)
 - Config format: `hooks` array containing `tasks`
-- Builtins are invoked via `prove_it run_builtin <namespace>:<name>`
+- Runnable builtins are invoked via `prove_it run_builtin <namespace>:<name>`
+- Agent reviewer prompts are distributed as Claude Code skills (`lib/skills/prove-coverage.md`, `lib/skills/prove-shipworthy.md`), resolved via `promptType: 'skill'`

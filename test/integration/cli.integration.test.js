@@ -304,12 +304,14 @@ describe('install/uninstall', () => {
     assert.ok(cfg.initSeed && cfg.initSeed.length === 12)
     assert.strictEqual(cfg.taskEnv.TURBOCOMMIT_DISABLED, '1')
 
-    // Skill file
-    const skillPath = path.join(tmpDir, '.claude', 'skills', 'prove', 'SKILL.md')
-    assert.ok(fs.existsSync(skillPath))
-    const skillContent = fs.readFileSync(skillPath, 'utf8')
-    assert.match(skillContent, /^---\nname: prove\n/)
-    assert.match(skillContent, /disable-model-invocation: true/)
+    // Skill files (all 3)
+    for (const name of ['prove', 'prove-coverage', 'prove-shipworthy']) {
+      const skillPath = path.join(tmpDir, '.claude', 'skills', name, 'SKILL.md')
+      assert.ok(fs.existsSync(skillPath), `Skill ${name} should exist`)
+      const skillContent = fs.readFileSync(skillPath, 'utf8')
+      assert.match(skillContent, new RegExp(`^---\\nname: ${name}\\n`))
+      assert.match(skillContent, /disable-model-invocation: true/)
+    }
 
     // Idempotent
     runCli(['install'], { env })
@@ -330,8 +332,6 @@ describe('install/uninstall', () => {
     runCli(['install'], { env })
     const settingsPath = path.join(tmpDir, '.claude', 'settings.json')
     const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
-    const skillPath = path.join(tmpDir, '.claude', 'skills', 'prove', 'SKILL.md')
-
     // Outdated hooks
     const s = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
     const ptGroup = s.hooks.PreToolUse.find(g => JSON.stringify(g).includes('prove_it hook'))
@@ -349,10 +349,13 @@ describe('install/uninstall', () => {
     runCli(['install'], { env })
     assert.strictEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).taskEnv.TURBOCOMMIT_DISABLED, '1')
 
-    // Outdated skill file
-    fs.writeFileSync(skillPath, 'outdated content')
-    runCli(['install'], { env })
-    assert.ok(fs.readFileSync(skillPath, 'utf8') !== 'outdated content')
+    // Outdated skill files (all 3)
+    for (const name of ['prove', 'prove-coverage', 'prove-shipworthy']) {
+      const sp = path.join(tmpDir, '.claude', 'skills', name, 'SKILL.md')
+      fs.writeFileSync(sp, 'outdated content')
+      runCli(['install'], { env })
+      assert.ok(fs.readFileSync(sp, 'utf8') !== 'outdated content', `Skill ${name} should be upgraded`)
+    }
   })
 
   it('preserves existing global config fields and handles legacy configs', () => {
@@ -423,13 +426,17 @@ describe('install/uninstall', () => {
     const settings = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'settings.json'), 'utf8'))
     assert.ok(!JSON.stringify(settings).includes('prove_it hook'))
     assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it')))
-    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'skills', 'prove')))
+    for (const name of ['prove', 'prove-coverage', 'prove-shipworthy']) {
+      assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'skills', name)), `Skill ${name} should be removed`)
+    }
   })
 })
 
 describe('skill source', () => {
-  it('has valid frontmatter', () => {
-    const content = fs.readFileSync(path.join(__dirname, '..', '..', 'lib', 'skills', 'prove.md'), 'utf8')
+  const skillsDir = path.join(__dirname, '..', '..', 'lib', 'skills')
+
+  it('prove.md has valid frontmatter', () => {
+    const content = fs.readFileSync(path.join(skillsDir, 'prove.md'), 'utf8')
     assert.ok(content.startsWith('---\n') && !content.startsWith('---\n---'))
     const endIdx = content.indexOf('\n---\n', 4)
     assert.ok(endIdx > 0)
@@ -440,4 +447,17 @@ describe('skill source', () => {
     assert.match(fm, /- Bash/)
     assert.match(fm, /argument-hint:/)
   })
+
+  for (const name of ['prove-coverage', 'prove-shipworthy']) {
+    it(`${name}.md has valid frontmatter`, () => {
+      const content = fs.readFileSync(path.join(skillsDir, `${name}.md`), 'utf8')
+      assert.ok(content.startsWith('---\n') && !content.startsWith('---\n---'))
+      const endIdx = content.indexOf('\n---\n', 4)
+      assert.ok(endIdx > 0)
+      const fm = content.slice(4, endIdx)
+      assert.match(fm, new RegExp(`^name: ${name}$`, 'm'))
+      assert.match(fm, /disable-model-invocation: true/)
+      assert.match(fm, /allowed-tools:/)
+    })
+  }
 })
