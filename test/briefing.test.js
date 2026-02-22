@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test')
 const assert = require('node:assert')
-const { renderBriefing, eventLabel, whenDescription, taskLine, timeAgo } = require('../lib/briefing')
+const { renderBriefing, eventLabel, whenDescription, taskLine, timeAgo, signalDirective } = require('../lib/briefing')
 const { buildConfig } = require('../lib/config')
 
 describe('briefing', () => {
@@ -163,8 +163,8 @@ describe('briefing', () => {
       }
       const text = renderBriefing(cfg)
       assert.ok(text.includes('Signaling:'), 'should include signaling section')
-      assert.ok(text.includes('prove_it signal'), 'should mention signal command')
-      assert.ok(text.includes('done'), 'should list configured signal type')
+      assert.ok(text.includes('prove_it signal done'), 'should include signal directive')
+      assert.ok(text.includes('Include this as a step'), 'should instruct agent to plan for signaling')
       assert.ok(text.includes('prove_it signal clear'), 'should mention clear')
     })
 
@@ -402,6 +402,24 @@ describe('briefing', () => {
 
     it('returns "just now" for future timestamps', () => {
       assert.strictEqual(timeAgo(Date.now() + 10000), 'just now')
+    })
+  })
+
+  describe('signalDirective', () => {
+    it('returns actionable directive for "done"', () => {
+      const d = signalDirective('done')
+      assert.ok(d.includes('prove_it signal done'), 'should include command')
+      assert.ok(d.includes('Include this as a step'), 'should instruct planning')
+    })
+
+    it('returns actionable directive for "stuck"', () => {
+      const d = signalDirective('stuck')
+      assert.ok(d.includes('prove_it signal stuck'), 'should include command')
+    })
+
+    it('returns generic directive for unknown signal types', () => {
+      const d = signalDirective('custom')
+      assert.ok(d.includes('prove_it signal custom'), 'should include command')
     })
   })
 
