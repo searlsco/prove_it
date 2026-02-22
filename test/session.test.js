@@ -17,7 +17,8 @@ const {
   VALID_SIGNALS,
   setSignal,
   getSignal,
-  clearSignal
+  clearSignal,
+  pruneOldSessions
 } = require('../lib/session')
 const { recordSessionBaseline } = require('../lib/dispatcher/claude')
 
@@ -666,6 +667,144 @@ describe('session state functions', () => {
       const data = JSON.parse(fs.readFileSync(sessionFile, 'utf8'))
       assert.strictEqual(data.existing, true,
         'Should not overwrite existing session file')
+    })
+  })
+
+  describe('pruneOldSessions', () => {
+    function makeSessionsDir () {
+      const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
+      fs.mkdirSync(sessionsDir, { recursive: true })
+      return sessionsDir
+    }
+
+    function ageFile (filePath, days) {
+      const mtime = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+      fs.utimesSync(filePath, mtime, mtime)
+    }
+
+    it('deletes session .jsonl files older than maxAgeDays', () => {
+      const sessionsDir = makeSessionsDir()
+      const oldLog = path.join(sessionsDir, 'old-session.jsonl')
+      fs.writeFileSync(oldLog, '{"at":1}\n')
+      ageFile(oldLog, 10)
+
+      pruneOldSessions(7)
+
+      assert.strictEqual(fs.existsSync(oldLog), false, 'Old .jsonl should be deleted')
+    })
+
+    it('deletes matching .json state file alongside .jsonl', () => {
+      const sessionsDir = makeSessionsDir()
+      const oldLog = path.join(sessionsDir, 'old-session.jsonl')
+      const oldState = path.join(sessionsDir, 'old-session.json')
+      fs.writeFileSync(oldLog, '{"at":1}\n')
+      fs.writeFileSync(oldState, '{"key":"val"}')
+      ageFile(oldLog, 10)
+      ageFile(oldState, 10)
+
+      pruneOldSessions(7)
+
+      assert.strictEqual(fs.existsSync(oldLog), false, 'Old .jsonl should be deleted')
+      assert.strictEqual(fs.existsSync(oldState), false, 'Matching .json should be deleted')
+    })
+
+    it('preserves files newer than maxAgeDays', () => {
+      const sessionsDir = makeSessionsDir()
+      const recentLog = path.join(sessionsDir, 'recent-session.jsonl')
+      const recentState = path.join(sessionsDir, 'recent-session.json')
+      fs.writeFileSync(recentLog, '{"at":1}\n')
+      fs.writeFileSync(recentState, '{"key":"val"}')
+
+      pruneOldSessions(7)
+
+      assert.strictEqual(fs.existsSync(recentLog), true, 'Recent .jsonl should survive')
+      assert.strictEqual(fs.existsSync(recentState), true, 'Recent .json should survive')
+    })
+
+    it('deletes old project aggregate .jsonl files', () => {
+      const sessionsDir = makeSessionsDir()
+      const projLog = path.join(sessionsDir, '_project_abc123.jsonl')
+      fs.writeFileSync(projLog, '{"at":1}\n')
+      ageFile(projLog, 10)
+
+      pruneOldSessions(7)
+
+      assert.strictEqual(fs.existsSync(projLog), false, 'Old project aggregate should be deleted')
+    })
+
+    it('deletes orphaned session subdirectories', () => {
+      const sessionsDir = makeSessionsDir()
+      const orphanDir = path.join(sessionsDir, 'orphan-session-id')
+      fs.mkdirSync(path.join(orphanDir, 'async'), { recursive: true })
+      fs.writeFileSync(path.join(orphanDir, 'async', 'result.json'), '{}')
+      ageFile(orphanDir, 10)
+
+      pruneOldSessions(7)
+
+      assert.strictEqual(fs.existsSync(orphanDir), false, 'Orphaned session dir should be deleted')
+    })
+
+    it('skips test-session files', () => {
+      const sessionsDir = makeSessionsDir()
+      const testLog = path.join(sessionsDir, 'test-session-xyz.jsonl')
+      fs.writeFileSync(testLog, '{"at":1}\n')
+      ageFile(testLog, 10)
+
+      pruneOldSessions(7)
+
+      assert.strictEqual(fs.existsSync(testLog), true, 'test-session files should be skipped')
+    })
+
+    it('rate-limits via .last_prune marker', () => {
+      const sessionsDir = makeSessionsDir()
+      const oldLog = path.join(sessionsDir, 'rate-limit-test.jsonl')
+      fs.writeFileSync(oldLog, '{"at":1}\n')
+      ageFile(oldLog, 10)
+
+      // Create a fresh marker
+      const marker = path.join(sessionsDir, '.last_prune')
+      fs.writeFileSync(marker, '')
+
+      pruneOldSessions(7)
+
+      assert.strictEqual(fs.existsSync(oldLog), true,
+        'Old file should survive when marker is fresh')
+    })
+
+    it('prunes when marker is older than 24h', () => {
+      const sessionsDir = makeSessionsDir()
+      const oldLog = path.join(sessionsDir, 'stale-marker-test.jsonl')
+      fs.writeFileSync(oldLog, '{"at":1}\n')
+      ageFile(oldLog, 10)
+
+      // Create an old marker
+      const marker = path.join(sessionsDir, '.last_prune')
+      fs.writeFileSync(marker, '')
+      ageFile(marker, 2)
+
+      pruneOldSessions(7)
+
+      assert.strictEqual(fs.existsSync(oldLog), false,
+        'Old file should be pruned when marker is stale')
+    })
+
+    it('writes .last_prune marker after pruning', () => {
+      const sessionsDir = makeSessionsDir()
+
+      pruneOldSessions(7)
+
+      const marker = path.join(sessionsDir, '.last_prune')
+      assert.strictEqual(fs.existsSync(marker), true, 'Marker should be written after pruning')
+    })
+
+    it('never throws (best-effort)', () => {
+      // Point at a nonexistent directory — should not throw
+      const origDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'nonexistent', 'prove_it')
+
+      assert.doesNotThrow(() => pruneOldSessions(7))
+
+      process.env.PROVE_IT_DIR = origDir
     })
   })
 })
