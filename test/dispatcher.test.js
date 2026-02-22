@@ -62,6 +62,18 @@ describe('claude dispatcher', () => {
       }), false)
     })
 
+    it('matches MCP tools via regex pattern in matcher', () => {
+      const entry = { type: 'claude', event: 'PreToolUse', matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*', tasks: [] }
+      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'mcp__xcode__editFile' }), true)
+      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'mcp__memory__create_entities' }), true)
+    })
+
+    it('regex matcher does not partial-match', () => {
+      const entry = { type: 'claude', event: 'PreToolUse', matcher: 'Edit|Write', tasks: [] }
+      // 'Edit' as regex should NOT match 'MultiEdit' (anchored)
+      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'MultiEdit' }), false)
+    })
+
     it('matches SessionStart source', () => {
       const entry = { type: 'claude', event: 'SessionStart', source: 'startup|resume', tasks: [] }
       assert.strictEqual(matchesHookEntry(entry, 'SessionStart', { source: 'startup' }), true)
