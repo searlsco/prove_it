@@ -204,7 +204,7 @@ describe('briefing', () => {
         }]
       }
       const text = renderBriefing(cfg)
-      assert.ok(text.includes('1. Find the backchannel'), 'should have step 1')
+      assert.ok(text.includes('1. The FAIL message includes'), 'should have step 1')
       assert.ok(text.includes('2. Write your reasoning'), 'should have step 2')
       assert.ok(text.includes('3. The reviewer reads'), 'should have step 3')
     })
