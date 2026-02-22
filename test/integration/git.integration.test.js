@@ -6,7 +6,7 @@ const os = require('os')
 const { spawnSync } = require('child_process')
 const {
   readRef, updateRef, snapshotWorkingTree, deleteAllRefs,
-  churnSinceRef, advanceChurnRef, sanitizeRefName,
+  churnSinceRef, advanceTaskRef, sanitizeRefName,
   readCounterBlob, writeCounterRef, readGrossCounter,
   incrementGross, grossChurnSince, advanceGrossSnapshot
 } = require('../../lib/git')
@@ -176,9 +176,9 @@ describe('snapshot semantics', () => {
   })
 })
 
-// ---------- Story: advanceChurnRef behavior ----------
-// resetOnFail defaults per event type, explicit overrides, dual task
-describe('advanceChurnRef', () => {
+// ---------- Story: advanceTaskRef behavior ----------
+// resetOnFail defaults per event type, explicit overrides, dual task, agent tasks
+describe('advanceTaskRef', () => {
   let tmpDir
 
   beforeEach(() => { tmpDir = freshRepo(setupFileJs) })
@@ -194,50 +194,55 @@ describe('advanceChurnRef', () => {
     return { name: 'my-task', when: { linesChanged: 5 }, ...overrides }
   }
 
-  it('no-ops when task has no churn criteria', () => {
+  it('no-ops when script task has no churn criteria', () => {
     const refBefore = readRef(tmpDir, sanitizeRefName('no-churn'))
-    advanceChurnRef({ name: 'no-churn', when: { fileExists: 'x' } }, true, 'PreToolUse', tmpDir, GLOBS)
+    advanceTaskRef({ name: 'no-churn', type: 'script', when: { fileExists: 'x' } }, true, 'PreToolUse', tmpDir, GLOBS)
     assert.strictEqual(readRef(tmpDir, sanitizeRefName('no-churn')), refBefore)
+  })
+
+  it('advances ref for agent tasks even without churn criteria', () => {
+    advanceTaskRef({ name: 'agent-task', type: 'agent', when: { signal: 'done' } }, true, 'Stop', tmpDir, GLOBS)
+    assert.ok(readRef(tmpDir, sanitizeRefName('agent-task')), 'Agent task should get a ref on pass')
   })
 
   it('always advances on pass regardless of event type', () => {
     makeChurn()
     assert.ok(churnSinceRef(tmpDir, sanitizeRefName('my-task'), GLOBS) > 0)
-    advanceChurnRef(task(), true, 'Stop', tmpDir, GLOBS)
+    advanceTaskRef(task(), true, 'Stop', tmpDir, GLOBS)
     assert.strictEqual(churnSinceRef(tmpDir, sanitizeRefName('my-task'), GLOBS), 0)
   })
 
   it('applies per-event resetOnFail defaults and explicit overrides', () => {
     // PreToolUse defaults to resetting on fail
     makeChurn()
-    advanceChurnRef(task(), false, 'PreToolUse', tmpDir, GLOBS)
+    advanceTaskRef(task(), false, 'PreToolUse', tmpDir, GLOBS)
     assert.strictEqual(churnSinceRef(tmpDir, sanitizeRefName('my-task'), GLOBS), 0,
       'PreToolUse default: reset on fail')
 
     // Stop defaults to NOT resetting on fail
     makeChurn()
     const churnBefore = churnSinceRef(tmpDir, sanitizeRefName('my-task'), GLOBS)
-    advanceChurnRef(task(), false, 'Stop', tmpDir, GLOBS)
+    advanceTaskRef(task(), false, 'Stop', tmpDir, GLOBS)
     assert.strictEqual(churnSinceRef(tmpDir, sanitizeRefName('my-task'), GLOBS), churnBefore,
       'Stop default: keep churn on fail')
 
     // pre-commit defaults to NOT resetting on fail
     makeChurn()
     const churnBefore2 = churnSinceRef(tmpDir, sanitizeRefName('my-task'), GLOBS)
-    advanceChurnRef(task(), false, 'pre-commit', tmpDir, GLOBS)
+    advanceTaskRef(task(), false, 'pre-commit', tmpDir, GLOBS)
     assert.strictEqual(churnSinceRef(tmpDir, sanitizeRefName('my-task'), GLOBS), churnBefore2,
       'pre-commit default: keep churn on fail')
 
     // Explicit resetOnFail: false overrides PreToolUse
     makeChurn()
     const churnBefore3 = churnSinceRef(tmpDir, sanitizeRefName('my-task'), GLOBS)
-    advanceChurnRef(task({ resetOnFail: false }), false, 'PreToolUse', tmpDir, GLOBS)
+    advanceTaskRef(task({ resetOnFail: false }), false, 'PreToolUse', tmpDir, GLOBS)
     assert.strictEqual(churnSinceRef(tmpDir, sanitizeRefName('my-task'), GLOBS), churnBefore3,
       'explicit resetOnFail:false overrides PreToolUse')
 
     // Explicit resetOnFail: true overrides Stop
     makeChurn()
-    advanceChurnRef(task({ resetOnFail: true }), false, 'Stop', tmpDir, GLOBS)
+    advanceTaskRef(task({ resetOnFail: true }), false, 'Stop', tmpDir, GLOBS)
     assert.strictEqual(churnSinceRef(tmpDir, sanitizeRefName('my-task'), GLOBS), 0,
       'explicit resetOnFail:true overrides Stop')
   })
@@ -252,7 +257,7 @@ describe('advanceChurnRef', () => {
     grossChurnSince(tmpDir, sanitizeRefName('dual-task'))
     incrementGross(tmpDir, 200)
 
-    advanceChurnRef(
+    advanceTaskRef(
       { name: 'dual-task', when: { linesChanged: 5, linesWritten: 50 } },
       true, 'Stop', tmpDir, GLOBS
     )
@@ -267,14 +272,14 @@ describe('advanceChurnRef', () => {
     const grossTask = { name: 'gross-task', when: { linesWritten: 50 } }
     grossChurnSince(tmpDir, sanitizeRefName('gross-task'))
     incrementGross(tmpDir, 200)
-    advanceChurnRef(grossTask, true, 'Stop', tmpDir, GLOBS)
+    advanceTaskRef(grossTask, true, 'Stop', tmpDir, GLOBS)
     assert.strictEqual(grossChurnSince(tmpDir, sanitizeRefName('gross-task')), 0)
 
     // Fail on Stop → does NOT advance
     incrementGross(tmpDir, 300)
     const before = grossChurnSince(tmpDir, sanitizeRefName('gross-task'))
     assert.strictEqual(before, 300)
-    advanceChurnRef(grossTask, false, 'Stop', tmpDir, GLOBS)
+    advanceTaskRef(grossTask, false, 'Stop', tmpDir, GLOBS)
     assert.strictEqual(grossChurnSince(tmpDir, sanitizeRefName('gross-task')), 300)
   })
 })
