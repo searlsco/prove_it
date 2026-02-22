@@ -29,6 +29,8 @@ describe('briefing', () => {
       assert.ok(text.includes('YOUR OBLIGATIONS'), 'should show obligations header')
       assert.ok(text.includes('Completion rule'), 'should include completion rule')
       assert.ok(text.includes('Accountability rule'), 'should include accountability rule')
+      assert.ok(text.includes('Planning rule'), 'should include planning rule')
+      assert.ok(text.includes('Verify & Signal'), 'should include verify & signal step in planning rule')
       assert.ok(text.includes('prove_it signal done'), 'should include signal command')
       assert.ok(text.includes('not after every edit'), 'should include anti-spam language')
     })
