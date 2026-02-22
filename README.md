@@ -22,15 +22,31 @@ cd your-project && prove_it init
 
 Restart Claude Code and you're live.
 
-## What prove_it does
+## What can prove_it do?
 
-- **Blocks stop**—every time Claude finishes a response, prove_it runs your fast tests and blocks if they fail. AI reviewers can fire periodically based on churn, or when the agent [signals done](#signals).
-- **Blocks commits**—every time Claude attempts a `git commit`, prove_it runs your full test suite and blocks unless it passes.
-- **Async reviews**—expensive reviewers (coverage, pre-ship) run in the background while Claude keeps working, then enforce their verdict on the next stop.
-- **Git hooks**—pre-commit and pre-push hooks that only activate under Claude Code. Human commits pass through instantly.
-- **Config protection**—blocks Claude from editing your prove_it config files.
-- **Run tracking**—if code hasn't changed since the last successful test run, prove_it skips re-running your tests.
-- **Session briefing**—on session start, Claude gets an orientation showing active tasks, signal instructions, and how the review process works.
+prove_it is a config-driven framework for enforcing quality in Claude Code sessions. You can easily configure **script** and **subagent** tasks in a few lines of JSON that:
+
+- **Block Claude from stopping** until your tests pass
+- **Block git commits** until a full test suite is green
+- **Run AI reviewers** — independent subagents that audit Claude's work for coverage gaps, logic errors, or security issues
+- **Fire reviews asynchronously** — expensive reviewers run in the background while Claude keeps working, then enforce their verdict on the next stop
+- **Gate tasks on signals** — heavyweight checks fire only when Claude declares a unit of work complete (`prove_it signal done`), not on every stop
+- **Gate tasks on churn** — reviews trigger after N lines changed (net git diff) or N lines written (gross, catches thrashing)
+- **Inject context on session start** — environment variables, project state, orientation briefings
+- **Guard tool usage** — block specific tool calls (config file edits, dangerous commands) before they execute
+- **Track runs** — skip re-running tests when code hasn't changed since the last pass
+
+Out of the box, `prove_it init` generates a Searls-style opinionated config:
+
+- **Session briefing** on startup — Claude gets an orientation showing active tasks, signal instructions, and how the review process works
+- **Config lock** on every edit — silently blocks Claude from modifying your prove_it config
+- **Fast tests on every stop** — runs `./script/test_fast` and blocks until it passes
+- **Full tests on signal** — runs `./script/test` when Claude signals done (and source files were edited)
+- **Async coverage review** — a Haiku-powered `review:test_coverage` subagent fires in the background after 541+ net lines of churn, enforced on the next stop
+- **Shipworthy review on signal** — an Opus-powered `review:shipworthy` subagent runs a thorough pre-ship review when Claude signals done
+- **Full tests on git commit** — pre-commit hook runs `./script/test` (Claude commits only — human commits pass through)
+
+Every one of these is a config entry you can change, disable, or replace. The framework supports any combination of lifecycle events, conditions, and task types — the default config is just a starting point.
 
 ## Setup
 
