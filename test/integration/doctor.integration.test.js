@@ -62,6 +62,9 @@ function correctSettings () {
     }],
     Stop: [{
       hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }]
+    }],
+    SubagentStart: [{
+      hooks: [{ type: 'command', command: 'prove_it hook claude:SubagentStart' }]
     }]
   })
 }

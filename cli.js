@@ -87,6 +87,12 @@ function buildHookGroups () {
       group: {
         hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }]
       }
+    },
+    {
+      event: 'SubagentStart',
+      group: {
+        hooks: [{ type: 'command', command: 'prove_it hook claude:SubagentStart' }]
+      }
     }
   ]
 }
@@ -660,6 +666,7 @@ function cmdDoctor () {
     checkDispatcher(settings, 'SessionStart', 'prove_it hook claude:SessionStart', 'startup|resume|clear|compact', issues)
     checkDispatcher(settings, 'PreToolUse', 'prove_it hook claude:PreToolUse', 'Edit|Write|NotebookEdit|Bash', issues)
     checkDispatcher(settings, 'Stop', 'prove_it hook claude:Stop', null, issues)
+    checkDispatcher(settings, 'SubagentStart', 'prove_it hook claude:SubagentStart', null, issues)
   } else {
     log('  [ ] settings.json missing or has no hooks')
     issues.push("Run 'prove_it install' to register hooks")
