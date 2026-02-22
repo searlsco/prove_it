@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-# Mock claude for tests — reads stdin, replies PASS instantly.
+# Mock claude for tests—reads stdin, replies PASS instantly.
 cat > /dev/null
 echo "PASS"

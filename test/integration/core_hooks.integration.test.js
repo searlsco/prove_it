@@ -215,7 +215,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         'Should include check result in additionalContext')
     })
 
-    it('does not block on failing check — collects output instead', () => {
+    it('does not block on failing check—collects output instead', () => {
       createFile(tmpDir, 'fail_check.sh', '#!/usr/bin/env bash\necho "startup failure" >&2\nexit 1\n')
       createFile(tmpDir, 'pass_check.sh', '#!/usr/bin/env bash\necho "session started ok"\nexit 0\n')
       const fs = require('fs')
@@ -241,7 +241,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         cwd: tmpDir
       }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
-      // SessionStart never blocks — exit 0
+      // SessionStart never blocks—exit 0
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'SessionStart should emit JSON')
       // Should include the passing check's output in additionalContext
@@ -662,7 +662,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         }
       ]))
 
-      // First: PreToolUse pass — quiet task should not log
+      // First: PreToolUse pass—quiet task should not log
       const sid = 'test-quiet-log'
       invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
@@ -676,7 +676,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
       assert.strictEqual(afterPass.filter(e => e.reviewer === 'lock-config').length, 0,
         'Quiet passing task should produce no session log entries')
 
-      // Second: Stop fail — quiet task should still log FAIL
+      // Second: Stop fail—quiet task should still log FAIL
       invokeHook('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sid,

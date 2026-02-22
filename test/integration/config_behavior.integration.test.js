@@ -327,7 +327,7 @@ describe('Config-driven hook behavior (v2)', () => {
 
   describe('when conditions', () => {
     it('skips check when fileExists condition is not met', () => {
-      // Task has when: { fileExists: '.missing' } — directory does not exist
+      // Task has when: { fileExists: '.missing' }—directory does not exist
       writeConfig(tmpDir, makeConfig([
         {
           type: 'claude',
@@ -387,7 +387,7 @@ describe('Config-driven hook behavior (v2)', () => {
         cwd: tmpDir
       }, { projectDir: tmpDir, env })
 
-      // Disabled task should not block — silent exit or pass
+      // Disabled task should not block—silent exit or pass
       assert.strictEqual(result.exitCode, 0)
       if (result.output) {
         assert.notStrictEqual(result.output.decision, 'block',

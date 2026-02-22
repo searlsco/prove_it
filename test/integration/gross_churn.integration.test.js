@@ -198,7 +198,7 @@ describe('gross churn accumulation via dispatcher', () => {
   })
 
   it('increments for builtin tools even without matcher', () => {
-    // A config with no PreToolUse hooks at all — the accumulation is infrastructure,
+    // A config with no PreToolUse hooks at all—the accumulation is infrastructure,
     // not task-dependent. It runs before task matching.
     createFile(tmpDir, 'src/app.js', 'code')
     writeConfig(tmpDir, makeConfig([

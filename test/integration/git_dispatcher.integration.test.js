@@ -263,7 +263,7 @@ describe('git dispatcher', () => {
       // --- resetOnFail deadlock fix for uncommitted changes ---
       churnSinceRef(tmpDir, sanitizeRefName('deadlock-check'), ['**/*.js'])
 
-      // Simulate agent Write — uncommitted changes (no commit!)
+      // Simulate agent Write—uncommitted changes (no commit!)
       const lines2 = Array.from({ length: 10 }, (_, i) => `deadlock${i}`).join('\n') + '\n'
       fs.writeFileSync(path.join(tmpDir, 'app.js'), lines2)
 
@@ -284,7 +284,7 @@ describe('git dispatcher', () => {
       // Second run: if snapshot worked, churn is 0 and task is skipped (no deadlock)
       const { failure: f2b } = runGitTasks(deadlockEntries, deadlockCtx)
       assert.strictEqual(f2b, null,
-        'should skip after resetOnFail — ref should capture working tree, not just HEAD')
+        'should skip after resetOnFail—ref should capture working tree, not just HEAD')
     })
 
     it('quiet flag suppresses SKIP log entries', () => {

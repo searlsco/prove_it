@@ -87,18 +87,18 @@ describe('claude dispatcher', () => {
       })
     })
 
-    it('checks fileExists — passes when file exists', () => {
+    it('checks fileExists—passes when file exists', () => {
       assert.strictEqual(evaluateWhen({ fileExists: 'package.json' }, { rootDir: process.cwd() }), true)
     })
 
-    it('checks fileExists — returns reason when file missing', () => {
+    it('checks fileExists—returns reason when file missing', () => {
       const result = evaluateWhen({ fileExists: 'nonexistent-file-xyz.json' }, { rootDir: process.cwd() })
       assert.notStrictEqual(result, true)
       assert.ok(result.includes('was not found'), `Expected 'was not found' reason, got: ${result}`)
       assert.ok(result.includes('nonexistent-file-xyz.json'), `Expected path in reason, got: ${result}`)
     })
 
-    it('checks envSet — passes when env var is set', () => {
+    it('checks envSet—passes when env var is set', () => {
       process.env.PROVE_IT_TEST_VAR = '1'
       try {
         assert.strictEqual(evaluateWhen({ envSet: 'PROVE_IT_TEST_VAR' }, { rootDir: '.' }), true)
@@ -107,7 +107,7 @@ describe('claude dispatcher', () => {
       }
     })
 
-    it('checks envSet — returns reason when env var is unset', () => {
+    it('checks envSet—returns reason when env var is unset', () => {
       delete process.env.PROVE_IT_FAKE_ENV_VAR
       const result = evaluateWhen({ envSet: 'PROVE_IT_FAKE_ENV_VAR' }, { rootDir: '.' })
       assert.notStrictEqual(result, true)
@@ -115,12 +115,12 @@ describe('claude dispatcher', () => {
       assert.ok(result.includes('$PROVE_IT_FAKE_ENV_VAR'), `Expected var name in reason, got: ${result}`)
     })
 
-    it('checks envNotSet — passes when env var is unset', () => {
+    it('checks envNotSet—passes when env var is unset', () => {
       delete process.env.PROVE_IT_FAKE_ENV_VAR2
       assert.strictEqual(evaluateWhen({ envNotSet: 'PROVE_IT_FAKE_ENV_VAR2' }, { rootDir: '.' }), true)
     })
 
-    it('checks envNotSet — returns reason when env var is set', () => {
+    it('checks envNotSet—returns reason when env var is set', () => {
       process.env.PROVE_IT_TEST_VAR2 = 'yes'
       try {
         const result = evaluateWhen({ envNotSet: 'PROVE_IT_TEST_VAR2' }, { rootDir: '.' })
@@ -133,7 +133,7 @@ describe('claude dispatcher', () => {
     })
   })
 
-  describe('evaluateWhen — sourcesModifiedSinceLastRun', () => {
+  describe('evaluateWhen—sourcesModifiedSinceLastRun', () => {
     let tmpDir
 
     beforeEach(() => {
@@ -269,7 +269,7 @@ describe('claude dispatcher', () => {
     })
   })
 
-  describe('evaluateWhen — signal', () => {
+  describe('evaluateWhen—signal', () => {
     let tmpDir
     let origProveItDir
 
@@ -347,7 +347,7 @@ describe('claude dispatcher', () => {
     })
   })
 
-  describe('evaluateWhen — toolsUsed', () => {
+  describe('evaluateWhen—toolsUsed', () => {
     let tmpDir
     let origProveItDir
 
@@ -422,7 +422,7 @@ describe('claude dispatcher', () => {
     })
   })
 
-  describe('evaluateWhen — sourceFilesEdited', () => {
+  describe('evaluateWhen—sourceFilesEdited', () => {
     let tmpDir
     let origProveItDir
 
@@ -591,11 +591,11 @@ describe('claude dispatcher', () => {
     it('collects output on SKIP when not quiet', () => {
       const outputs = []
       const task = { name: 'my-task', type: 'script', command: 'test' }
-      const result = { pass: true, reason: 'empty prompt — skipped', output: '', skipped: true }
+      const result = { pass: true, reason: 'empty prompt—skipped', output: '', skipped: true }
       const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null, latestSourceMtime: 0 }
       const settlement = settleTaskResult(task, result, 'Stop', settlCtx, outputs, [], [])
       assert.strictEqual(settlement.blocked, false)
-      assert.ok(outputs.includes('empty prompt — skipped'))
+      assert.ok(outputs.includes('empty prompt—skipped'))
     })
 
     it('suppresses output on SKIP when quiet', () => {

@@ -19,7 +19,7 @@ const {
 /**
  * Contract tests: verify that all dispatcher outputs conform to Claude Code's
  * expected schema. This prevents bugs like using "block" instead of "deny"
- * for permissionDecision — values Claude Code silently ignores.
+ * for permissionDecision—values Claude Code silently ignores.
  */
 describe('Claude Code hook output contract', () => {
   let tmpDir

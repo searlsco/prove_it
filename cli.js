@@ -97,11 +97,11 @@ function isGlobalConfigCurrent () {
   if (!cfg || !cfg.initSeed) return false
   const contentHash = configHash(cfg)
   if (contentHash === cfg.initSeed) {
-    // Unedited — current only if it matches fresh defaults
+    // Unedited—current only if it matches fresh defaults
     const fresh = buildGlobalConfig()
     return contentHash === configHash(fresh)
   }
-  // Edited — current if all default taskEnv keys are present
+  // Edited—current if all default taskEnv keys are present
   const defaults = buildGlobalConfig()
   if (!cfg.taskEnv) return false
   for (const [k, v] of Object.entries(defaults.taskEnv)) {
@@ -157,16 +157,16 @@ function cmdInstall () {
 
   writeJson(settingsPath, settings)
 
-  // Global config — seed-based 3-way merge (same pattern as project config)
+  // Global config—seed-based 3-way merge (same pattern as project config)
   const globalCfgPath = path.join(getProveItDir(), 'config.json')
   const existingGlobal = loadJson(globalCfgPath)
   if (!existingGlobal) {
-    // No config — write fresh with initSeed
+    // No config—write fresh with initSeed
     const fresh = buildGlobalConfig()
     fresh.initSeed = configHash(fresh)
     writeJson(globalCfgPath, fresh)
   } else if (existingGlobal.initSeed && configHash(existingGlobal) === existingGlobal.initSeed) {
-    // Unedited — auto-upgrade if defaults changed
+    // Unedited—auto-upgrade if defaults changed
     const fresh = buildGlobalConfig()
     const freshHash = configHash(fresh)
     if (configHash(existingGlobal) !== freshHash) {
@@ -174,7 +174,7 @@ function cmdInstall () {
       writeJson(globalCfgPath, fresh)
     }
   } else {
-    // Edited or legacy (no initSeed) — preserve user config, ensure taskEnv defaults
+    // Edited or legacy (no initSeed)—preserve user config, ensure taskEnv defaults
     const defaults = buildGlobalConfig()
     if (existingGlobal.enabled === undefined) existingGlobal.enabled = true
     if (!existingGlobal.taskEnv) existingGlobal.taskEnv = {}
@@ -314,7 +314,7 @@ async function cmdInit () {
 
     const results = initProject(repoRoot, flags)
 
-    // Handle edited config — prompt or respect --overwrite/--no-overwrite
+    // Handle edited config—prompt or respect --overwrite/--no-overwrite
     let overwritten = false
     if (results.teamConfig.edited) {
       if (flags.overwrite === true) {
@@ -425,7 +425,7 @@ async function cmdInit () {
       })
     }
 
-    // Sources glob TODO — check the team config for placeholder globs
+    // Sources glob TODO—check the team config for placeholder globs
     const teamCfg = loadJson(path.join(repoRoot, '.claude', 'prove_it', 'config.json'))
     const teamSources = teamCfg?.sources
     if (Array.isArray(teamSources) && teamSources.some(s => s.includes('replace/these/with/globs'))) {
@@ -653,7 +653,7 @@ function cmdDoctor () {
   log('prove_it doctor\n')
   log('Global installation:')
 
-  // Check settings.json for hook registration — per-dispatcher structured validation
+  // Check settings.json for hook registration—per-dispatcher structured validation
   const settingsPath = path.join(claudeDir, 'settings.json')
   const settings = loadJson(settingsPath)
   if (settings && settings.hooks) {
@@ -674,12 +674,12 @@ function cmdDoctor () {
     if (installed === shipped) {
       log('  [x] /prove skill (current)')
     } else {
-      log('  [!] /prove skill (outdated — run prove_it install to update)')
+      log('  [!] /prove skill (outdated—run prove_it install to update)')
       issues.push('/prove skill is outdated')
     }
   } else {
     log('  [ ] /prove skill not installed')
-    issues.push("/prove skill not installed — run 'prove_it install'")
+    issues.push("/prove skill not installed—run 'prove_it install'")
   }
 
   log('\nCurrent repository:')
@@ -792,7 +792,7 @@ function cmdDoctor () {
       }
     }
 
-    // 3. Git hook shims — for each type:'git' hook in config
+    // 3. Git hook shims—for each type:'git' hook in config
     const gitHooks = (effectiveCfg.hooks || []).filter(h => h.type === 'git')
     if (gitHooks.length > 0 && fs.existsSync(path.join(repoRoot, '.git'))) {
       for (const hook of gitHooks) {

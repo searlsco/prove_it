@@ -17,7 +17,7 @@ function getHead (dir) {
 }
 
 // ---------- Story: variablesPresent ----------
-describe('evaluateWhen — variablesPresent', () => {
+describe('evaluateWhen—variablesPresent', () => {
   let tmpDir
 
   beforeEach(() => {
@@ -54,7 +54,7 @@ describe('evaluateWhen — variablesPresent', () => {
 })
 
 // ---------- Story: linesChanged lifecycle ----------
-describe('evaluateWhen — linesChanged lifecycle', () => {
+describe('evaluateWhen—linesChanged lifecycle', () => {
   let tmpDir
 
   beforeEach(() => { tmpDir = freshRepo(setupAppJs) })
@@ -103,7 +103,7 @@ describe('evaluateWhen — linesChanged lifecycle', () => {
 })
 
 // ---------- Story: linesWritten lifecycle ----------
-describe('evaluateWhen — linesWritten lifecycle', () => {
+describe('evaluateWhen—linesWritten lifecycle', () => {
   let tmpDir
 
   beforeEach(() => { tmpDir = freshRepo(setupAppJs) })
@@ -138,7 +138,7 @@ describe('evaluateWhen — linesWritten lifecycle', () => {
 })
 
 // ---------- Story: prerequisite/trigger split ----------
-describe('evaluateWhen — prerequisite/trigger split', () => {
+describe('evaluateWhen—prerequisite/trigger split', () => {
   let tmpDir
 
   beforeEach(() => { tmpDir = freshRepo(setupAppJs) })

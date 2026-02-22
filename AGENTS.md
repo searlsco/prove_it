@@ -2,11 +2,11 @@
 
 ## The problem
 
-prove_it's hooks reference `prove_it` by name (e.g., `prove_it run_builtin config:lock`). When Claude Code fires hooks, the `prove_it` on PATH determines which version runs. During development, that's usually the Homebrew install — not your working tree.
+prove_it's hooks reference `prove_it` by name (e.g., `prove_it run_builtin config:lock`). When Claude Code fires hooks, the `prove_it` on PATH determines which version runs. During development, that's usually the Homebrew install—not your working tree.
 
 ## The solution
 
-`script/agent` launches Claude Code with `test/bin/prove_it` prepended to PATH. This shim resolves to the repo's `cli.js`, so every `prove_it` invocation — hooks, builtins, transitive calls — uses your local source.
+`script/agent` launches Claude Code with `test/bin/prove_it` prepended to PATH. This shim resolves to the repo's `cli.js`, so every `prove_it` invocation—hooks, builtins, transitive calls—uses your local source.
 
 ```bash
 ./script/agent                    # interactive
@@ -38,7 +38,7 @@ which prove_it | grep -q test/bin/prove_it
 - **Pass**: `prove_it resolves to local shim: .../test/bin/prove_it`
 - **Fail**: `WARNING: prove_it resolves to /opt/homebrew/bin/prove_it, not test/bin/prove_it. Use ./script/agent to launch Claude with the local version.`
 
-This is a SessionStart task, so it warns but doesn't block — the agent sees the message and knows whether it's running against local source or the installed version.
+This is a SessionStart task, so it warns but doesn't block—the agent sees the message and knows whether it's running against local source or the installed version.
 
 ## When to use what
 

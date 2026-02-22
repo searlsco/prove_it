@@ -22,7 +22,7 @@ const {
  *
  * The script check runner tracks run timestamps in prove_it/config.local.json and
  * compares against file mtimes. If tests passed more recently than any tracked
- * file changed, the hook skips re-running. Only passes are cached — failures
+ * file changed, the hook skips re-running. Only passes are cached—failures
  * always re-run so transient issues don't get permanently locked in.
  */
 

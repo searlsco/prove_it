@@ -16,8 +16,8 @@ learn from the friction, and let them shape your code.
   before you write the fix.
 - **Difficulty testing is usually a design signal.** When code is hard to test,
   that's often feedback worth acting on. Restructure for testability when you
-  can. When you genuinely can't — opaque platform APIs, hardware-dependent
-  behavior, framework constraints outside your control — document what isn't
+  can. When you genuinely can't—opaque platform APIs, hardware-dependent
+  behavior, framework constraints outside your control—document what isn't
   covered and why, and push test boundaries as close to the untestable seam
   as possible.
 - **Test behavior, not implementation.** Tests should survive a refactor. If
@@ -25,7 +25,7 @@ learn from the friction, and let them shape your code.
   thing.
 - **Delete tests that don't earn their keep.** Redundant, brittle, or
   chronically slow tests cost attention without providing confidence.
-- **Keep tests readable.** Arrange, Act, Assert — with minimal ceremony. A
+- **Keep tests readable.** Arrange, Act, Assert—with minimal ceremony. A
   good test reads like a specification. If you need extensive setup, extract
   it or reconsider the design.
 - **Don't mock what you don't own.** Wrap third-party dependencies behind your

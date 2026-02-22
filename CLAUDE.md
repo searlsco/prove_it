@@ -6,23 +6,23 @@ prove_it is a config-driven hook framework for Claude Code. It reads `.claude/pr
 
 ### Key modules
 
-- `cli.js` — CLI entry point, commands: install, uninstall, init, deinit, doctor, monitor, hook, run_builtin
-- `lib/dispatcher/claude.js` — Main dispatcher for Claude Code events
-- `lib/dispatcher/git.js` — Dispatcher for git hooks
-- `lib/dispatcher/protocol.js` — Output formatting for Claude Code hook API
-- `lib/checks/script.js` — Runs shell commands as tasks
-- `lib/checks/agent.js` — Runs AI agent reviewer tasks
-- `lib/checks/env.js` — Runs env tasks that inject environment variables via CLAUDE_ENV_FILE
-- `lib/checks/builtins.js` — Built-in tasks (config:lock, review:commit_quality, review:test_coverage)
-- `lib/config.js` — Config loading, merging, and `buildConfig()` for init
-- `lib/init.js` — Project initialization, git hook shim management
-- `lib/template.js` — Template variable expansion for agent prompts
-- `lib/globs.js` — File matching, source detection, config path detection
-- `lib/monitor.js` — `prove_it monitor` CLI: tails session logs in human-readable format
+- `cli.js`—CLI entry point, commands: install, uninstall, init, deinit, doctor, monitor, hook, run_builtin
+- `lib/dispatcher/claude.js`—Main dispatcher for Claude Code events
+- `lib/dispatcher/git.js`—Dispatcher for git hooks
+- `lib/dispatcher/protocol.js`—Output formatting for Claude Code hook API
+- `lib/checks/script.js`—Runs shell commands as tasks
+- `lib/checks/agent.js`—Runs AI agent reviewer tasks
+- `lib/checks/env.js`—Runs env tasks that inject environment variables via CLAUDE_ENV_FILE
+- `lib/checks/builtins.js`—Built-in tasks (config:lock, review:commit_quality, review:test_coverage)
+- `lib/config.js`—Config loading, merging, and `buildConfig()` for init
+- `lib/init.js`—Project initialization, git hook shim management
+- `lib/template.js`—Template variable expansion for agent prompts
+- `lib/globs.js`—File matching, source detection, config path detection
+- `lib/monitor.js`—`prove_it monitor` CLI: tails session logs in human-readable format
 
 ### Claude Code Hook API
 
-- PreToolUse: `permissionDecision` valid values are `"allow"`, `"deny"`, `"ask"` (inside `hookSpecificOutput`). Never use `"block"` or `"approve"` — Claude Code silently ignores them.
+- PreToolUse: `permissionDecision` valid values are `"allow"`, `"deny"`, `"ask"` (inside `hookSpecificOutput`). Never use `"block"` or `"approve"`—Claude Code silently ignores them.
 - Stop: uses top-level `decision: "block"` or `"approve"` (different schema from PreToolUse).
 - SessionStart: outputs JSON with `additionalContext` and optionally `systemMessage`.
 - `session_id` is available in hook input for all events.
@@ -70,7 +70,7 @@ dispatcher, so prove_it does nothing unless explicitly opted in.
 
 Because the global config sets `enabled: true`, prove_it runs in any project once
 installed globally. Deleting a project's `.claude/prove_it/config.json` does not stop
-prove_it if the global config has `enabled: true` — it just means no project-specific
+prove_it if the global config has `enabled: true`—it just means no project-specific
 tasks are configured.
 
 ## Conventions

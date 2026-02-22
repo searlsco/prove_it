@@ -193,7 +193,7 @@ describe('signal integration', () => {
       tool_input: { command: 'prove_it signal bogus' }
     }, { projectDir, env })
 
-    // Falls through — no interception, exits normally
+    // Falls through—no interception, exits normally
     assert.strictEqual(result.exitCode, 0)
     assert.strictEqual(getSignal('sig-unknown'), null, 'No signal should be set for unknown types')
   })

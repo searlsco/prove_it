@@ -1,4 +1,4 @@
-# prove_it — Force Claude to actually verify its work
+# prove_it—Force Claude to actually verify its work
 
 🔥 **Comin' in Hot! Shipping multiple unstable releases per day at the moment. If you want prove_it to actually work, [email Justin](mailto:justin@searls.co) for updates** 🛬🔥
 
@@ -6,9 +6,9 @@
 
 [![Certified Shovelware](https://justin.searls.co/img/shovelware.svg)](https://justin.searls.co/shovelware/)
 
-By far the most frustrating thing about [Claude Code](https://docs.anthropic.com/en/docs/claude-code) is its penchant for prematurely declaring success. Out-of-the-box, Claude will happily announce a task is complete. Has it run the tests? No. Did it add any tests? No. Did it run the code? Also no.
+By far the most frustrating thing about [Claude Code](https://docs.anthropic.com/en/docs/claude-code) is its penchant for prematurely declaring success. Out-of-the-box, Claude will happily announce a task is complete. But has it run the tests? No. Did it add any tests? No. Did it run the code? Also no.
 
-**prove_it** hooks into Claude Code's [lifecycle events](https://code.claude.com/docs/en/hooks) and runs whatever tasks you configure — test suites, lint scripts, AI code reviewers — blocking Claude until they pass. If it's not obvious, **prove_it only works with Claude Code.**
+**prove_it** hooks into Claude Code's [lifecycle events](https://code.claude.com/docs/en/hooks) and runs whatever tasks you configure—test suites, lint scripts, AI code reviewers—blocking Claude until they pass. If it's not obvious, **prove_it only works with Claude Code.**
 
 ## Quick start
 
@@ -22,13 +22,13 @@ Restart Claude Code and you're live.
 
 ## What prove_it does
 
-- **Blocks stop** — every time Claude finishes a response, prove_it runs your fast tests and blocks if they fail. AI reviewers can fire periodically based on churn, or when the agent [signals done](#signals).
-- **Blocks commits** — every time Claude attempts a `git commit`, prove_it runs your full test suite and blocks unless it passes.
-- **Async reviews** — expensive reviewers (coverage, pre-ship) run in the background while Claude keeps working, then enforce their verdict on the next stop.
-- **Git hooks** — pre-commit and pre-push hooks that only activate under Claude Code. Human commits pass through instantly.
-- **Config protection** — blocks Claude from editing your prove_it config files.
-- **Run tracking** — if code hasn't changed since the last successful test run, prove_it skips re-running your tests.
-- **Session briefing** — on session start, Claude gets an orientation showing active tasks, signal instructions, and how the review process works.
+- **Blocks stop**—every time Claude finishes a response, prove_it runs your fast tests and blocks if they fail. AI reviewers can fire periodically based on churn, or when the agent [signals done](#signals).
+- **Blocks commits**—every time Claude attempts a `git commit`, prove_it runs your full test suite and blocks unless it passes.
+- **Async reviews**—expensive reviewers (coverage, pre-ship) run in the background while Claude keeps working, then enforce their verdict on the next stop.
+- **Git hooks**—pre-commit and pre-push hooks that only activate under Claude Code. Human commits pass through instantly.
+- **Config protection**—blocks Claude from editing your prove_it config files.
+- **Run tracking**—if code hasn't changed since the last successful test run, prove_it skips re-running your tests.
+- **Session briefing**—on session start, Claude gets an orientation showing active tasks, signal instructions, and how the review process works.
 
 ## Setup
 
@@ -64,7 +64,7 @@ prove_it init --git-hooks --default-checks
 | `--[no-]git-hooks` | on | Install git pre-commit/pre-push hooks |
 | `--[no-]default-checks` | on | Include AI coverage review, pre-ship review |
 | `--[no-]automatic-git-hook-merge` | off | Merge with existing git hooks (fails if hooks exist) |
-| `--[no-]overwrite` | — | Overwrite customized config with current defaults |
+| `--[no-]overwrite` |—| Overwrite customized config with current defaults |
 
 ## Test scripts
 
@@ -98,9 +98,9 @@ The `trap ... EXIT` pattern ensures results are always recorded, even when `set 
 ### Recording runs
 
 `prove_it record` options:
-- `--result <N>` — record pass (N=0) or fail (N!=0), exit with code N (best for traps)
-- `--pass` / `--fail` — record explicitly (exit 0 / exit 1)
-- `--name <task>` — must match the task name in your config
+- `--result <N>`—record pass (N=0) or fail (N!=0), exit with code N (best for traps)
+- `--pass` / `--fail`—record explicitly (exit 0 / exit 1)
+- `--name <task>`—must match the task name in your config
 
 ## Configuration
 
@@ -127,9 +127,9 @@ prove_it is configured with a `hooks` array in `.claude/prove_it/config.json`. E
 
 Config files merge (later overrides earlier):
 
-1. `~/.claude/prove_it/config.json` — global defaults
-2. `.claude/prove_it/config.json` — project config (commit this)
-3. `.claude/prove_it/config.local.json` — local overrides (gitignored, per-developer)
+1. `~/.claude/prove_it/config.json`—global defaults
+2. `.claude/prove_it/config.json`—project config (commit this)
+3. `.claude/prove_it/config.local.json`—local overrides (gitignored, per-developer)
 
 ### Lifecycle events
 
@@ -145,14 +145,14 @@ Config files merge (later overrides earlier):
 
 | Event | Purpose | Behavior |
 |-------|---------|----------|
-| `pre-commit` | Validating before commit | **Blocking, fail-fast.** Runs only under Claude Code (`CLAUDECODE` env var) — human commits pass through instantly. |
+| `pre-commit` | Validating before commit | **Blocking, fail-fast.** Runs only under Claude Code (`CLAUDECODE` env var)—human commits pass through instantly. |
 | `pre-push` | Validating before push | **Blocking, fail-fast.** Same as pre-commit but triggers on push. |
 
 ### Task types
 
-- **`script`** — runs a shell command, fails on non-zero exit
-- **`agent`** — sends a prompt to an AI reviewer, expects PASS/FAIL response (see [Agent tasks](#agent-tasks))
-- **`env`** — runs a command that outputs environment variables, injected into Claude's session (SessionStart only, see [Env tasks](#env-tasks))
+- **`script`**—runs a shell command, fails on non-zero exit
+- **`agent`**—sends a prompt to an AI reviewer, expects PASS/FAIL response (see [Agent tasks](#agent-tasks))
+- **`env`**—runs a command that outputs environment variables, injected into Claude's session (SessionStart only, see [Env tasks](#env-tasks))
 
 ### Disabling individual tasks
 
@@ -209,7 +209,7 @@ PreToolUse hooks can filter by tool name and command patterns:
 }
 ```
 
-`matcher` filters by Claude's tool name (`Edit`, `Write`, `Bash`, etc.). `triggers` are regex patterns matched against the tool's command argument. Both are optional — omit them to run on every PreToolUse.
+`matcher` filters by Claude's tool name (`Edit`, `Write`, `Bash`, etc.). `triggers` are regex patterns matched against the tool's command argument. Both are optional—omit them to run on every PreToolUse.
 
 ## Conditional tasks (`when`)
 
@@ -222,9 +222,9 @@ Tasks can declare conditions that must be met before they run. This is how you g
 
 ### Prerequisites (AND) vs triggers (OR)
 
-**Prerequisites** are environmental gates — all must pass. **Triggers** are activity signals — any one passing is enough to fire the task. Prerequisites are checked first; if any fails, the task is skipped regardless of triggers. When no triggers are present, prerequisites alone decide.
+**Prerequisites** are environmental gates—all must pass. **Triggers** are activity signals—any one passing is enough to fire the task. Prerequisites are checked first; if any fails, the task is skipped regardless of triggers. When no triggers are present, prerequisites alone decide.
 
-This means you can combine a prerequisite like `envSet` with multiple triggers like `linesChanged` and `linesWritten` — the env var must be set, but either churn threshold will fire the review:
+This means you can combine a prerequisite like `envSet` with multiple triggers like `linesChanged` and `linesWritten`—the env var must be set, but either churn threshold will fire the review:
 
 ```json
 {
@@ -249,7 +249,7 @@ This means you can combine a prerequisite like `envSet` with multiple triggers l
 | `envNotSet` | prerequisite | string | Passes when environment variable is not set |
 | `variablesPresent` | prerequisite | string[] | Passes when all listed template variables resolve to non-empty values |
 | `signal` | prerequisite | string | Passes when the named signal (`done`, `stuck`, `idle`) is active for the current session |
-| `linesChanged` | trigger | number | Passes when at least N source lines have changed (additions + deletions) since the task last ran. Git-based — works in both Claude hooks and git hooks. |
+| `linesChanged` | trigger | number | Passes when at least N source lines have changed (additions + deletions) since the task last ran. Git-based—works in both Claude hooks and git hooks. |
 | `linesWritten` | trigger | number | Passes when at least N gross lines have been written by the agent since the task last ran. Catches thrashing. Claude Code sessions only. |
 | `sourcesModifiedSinceLastRun` | trigger | boolean | Passes when source file mtimes are newer than the last run |
 | `sourceFilesEdited` | trigger | boolean | Passes when source files were edited this turn (session-scoped, tool-agnostic) |
@@ -257,12 +257,12 @@ This means you can combine a prerequisite like `envSet` with multiple triggers l
 
 ### Git-based churn tracking (`linesChanged`)
 
-Each task using `linesChanged` stores a git ref at `refs/worktree/prove_it/<task-name>`. When the condition is evaluated, prove_it diffs the ref against the **working tree** (not just HEAD), filtered to your configured `sources` globs, summing additions and deletions. This means committed, staged, unstaged, and newly-created file changes all count — so Write/Edit tool calls trigger churn immediately without needing a commit. On first run the ref is created at HEAD (bootstrap — returns 0 if the working tree is clean). This is session-independent and worktree-safe. Refs are cleaned up by `prove_it deinit`.
+Each task using `linesChanged` stores a git ref at `refs/worktree/prove_it/<task-name>`. When the condition is evaluated, prove_it diffs the ref against the **working tree** (not just HEAD), filtered to your configured `sources` globs, summing additions and deletions. This means committed, staged, unstaged, and newly-created file changes all count—so Write/Edit tool calls trigger churn immediately without needing a commit. On first run the ref is created at HEAD (bootstrap—returns 0 if the working tree is clean). This is session-independent and worktree-safe. Refs are cleaned up by `prove_it deinit`.
 
-When a task passes or resets, the ref advances to a snapshot of the current working tree state (including untracked source files). This ensures all pending changes are captured — advancing to HEAD alone would be a no-op when churn comes from uncommitted Write/Edit operations.
+When a task passes or resets, the ref advances to a snapshot of the current working tree state (including untracked source files). This ensures all pending changes are captured—advancing to HEAD alone would be a no-op when churn comes from uncommitted Write/Edit operations.
 
 **`resetOnFail` behavior**: When a task fails, the ref advancement depends on the hook event:
-- **PreToolUse** (default `resetOnFail: true`): The ref advances on failure. Without this, the task deadlocks — it blocks every Write/Edit, including writes to test files that would fix the issue.
+- **PreToolUse** (default `resetOnFail: true`): The ref advances on failure. Without this, the task deadlocks—it blocks every Write/Edit, including writes to test files that would fix the issue.
 - **Stop / git hooks** (default `resetOnFail: false`): The ref does NOT advance. The agent gets sent back to fix the issue, and the same accumulated churn keeps triggering the review.
 - You can override the default with an explicit `resetOnFail: true` or `resetOnFail: false` on the task.
 
@@ -270,7 +270,7 @@ When a task passes or resets, the ref advances to a snapshot of the current work
 
 While `linesChanged` measures **net** drift (git diff: what changed on disk), `linesWritten` measures **gross** activity (total lines the agent has written). This catches a different failure mode: thrashing. An agent that writes 500 lines, deletes them, rewrites them differently, and deletes again has written 2000 gross lines but may show 0 net churn. The gross counter catches this.
 
-Gross churn accumulates on every successful PreToolUse for Write/Edit/NotebookEdit to source files. Lines are counted from the tool input (no file I/O needed). The counter is stored as a git blob under `refs/worktree/prove_it/__gross_lines`, with per-task snapshots under `<task>.__gross_lines`. Increment uses compare-and-swap for multi-agent safety — concurrent agents can't lose each other's counts.
+Gross churn accumulates on every successful PreToolUse for Write/Edit/NotebookEdit to source files. Lines are counted from the tool input (no file I/O needed). The counter is stored as a git blob under `refs/worktree/prove_it/__gross_lines`, with per-task snapshots under `<task>.__gross_lines`. Increment uses compare-and-swap for multi-agent safety—concurrent agents can't lose each other's counts.
 
 `resetOnFail` follows the same rules as `linesChanged`.
 
@@ -278,9 +278,9 @@ Gross churn accumulates on every successful PreToolUse for Write/Edit/NotebookEd
 
 `sourceFilesEdited` and `toolsUsed` are **session-scoped**: they track which tools and files each Claude Code session uses, per-turn. After a successful Stop, the tracking resets so the next Stop only fires if new edits occur.
 
-These conditions solve cross-session bleed — unlike `sourcesModifiedSinceLastRun` (which uses global file timestamps), session-scoped conditions ensure Session A's edits don't trigger Session B's reviewers.
+These conditions solve cross-session bleed—unlike `sourcesModifiedSinceLastRun` (which uses global file timestamps), session-scoped conditions ensure Session A's edits don't trigger Session B's reviewers.
 
-**`sourceFilesEdited: true`** — gates a task on source file edits in the current turn:
+**`sourceFilesEdited: true`**—gates a task on source file edits in the current turn:
 
 ```json
 {
@@ -291,7 +291,7 @@ These conditions solve cross-session bleed — unlike `sourcesModifiedSinceLastR
 }
 ```
 
-**`toolsUsed: ["XcodeEdit", "Edit"]`** — gates a task on specific tools being used:
+**`toolsUsed: ["XcodeEdit", "Edit"]`**—gates a task on specific tools being used:
 
 ```json
 {
@@ -306,7 +306,7 @@ These conditions solve cross-session bleed — unlike `sourcesModifiedSinceLastR
 
 Signals let the agent declare where it is in a work cycle. The agent runs `prove_it signal done` (or `stuck`, `idle`) and tasks gated with `when: { signal: "done" }` fire on the next Stop. This is useful for heavyweight checks you only want at the end of a coherent unit of work rather than every Stop.
 
-PreToolUse intercepts the `prove_it signal` command automatically — no extra config needed.
+PreToolUse intercepts the `prove_it signal` command automatically—no extra config needed.
 
 **Clear-on-pass / preserve-on-fail**: After a successful Stop (all tasks pass), the active signal is cleared automatically. After a failed Stop, the signal is preserved so the gated tasks re-fire until they pass. This means you signal once, and the heavy checks keep running until everything is clean.
 
@@ -400,7 +400,7 @@ Agent tasks accept a `ruleFile` field that injects the contents of a project-spe
 }
 ```
 
-The path is resolved relative to the project directory. If the file is missing, the task fails with a clear error — this is intentional so you don't silently run reviews without your rules.
+The path is resolved relative to the project directory. If the file is missing, the task fails with a clear error—this is intentional so you don't silently run reviews without your rules.
 
 `prove_it init` generates a default `.claude/rules/testing.md` with starter rules and a TODO for you to customize. The default agent tasks (`coverage-review`, `shipworthy-review`) both point to this file.
 
@@ -469,11 +469,11 @@ Set `async: true` on an agent task to run it in the background:
 
 Async tasks spawn a detached child process and return immediately, so they don't block Claude from continuing work. The lifecycle is:
 
-1. **Spawn** — prove_it forks a worker, logs SPAWNED, and lets the Stop pass
-2. **Run** — the worker runs the reviewer in the background (RUNNING → PASS/FAIL/SKIP)
-3. **Pend** — the worker writes its result and logs PENDING
-4. **Harvest** — on the next Stop, prove_it reads all pending results *before* running sync tasks
-5. **Enforce** — results are settled: ENFORCED:PASS lets the stop continue, a FAIL blocks just like a sync failure
+1. **Spawn**—prove_it forks a worker, logs SPAWNED, and lets the Stop pass
+2. **Run**—the worker runs the reviewer in the background (RUNNING → PASS/FAIL/SKIP)
+3. **Pend**—the worker writes its result and logs PENDING
+4. **Harvest**—on the next Stop, prove_it reads all pending results *before* running sync tasks
+5. **Enforce**—results are settled: ENFORCED:PASS lets the stop continue, a FAIL blocks just like a sync failure
 
 This means an async FAIL blocks Claude on the *next* stop, not the current one. The default config uses `async: true` for the coverage reviewer.
 
@@ -521,7 +521,7 @@ export DEBUG="true"
 {"API_KEY": "abc123", "DEBUG": "true"}
 ```
 
-Multiple env tasks merge in order — later tasks override earlier ones for the same key. If the command fails or output can't be parsed, the error is reported and execution continues.
+Multiple env tasks merge in order—later tasks override earlier ones for the same key. If the command fails or output can't be parsed, the error is reported and execution continues.
 
 ## Builtins
 
@@ -543,9 +543,9 @@ Script builtins (`config:lock`, `session:briefing`) are configured as `type: "sc
 
 On every SessionStart, the `session:briefing` builtin renders an orientation that's injected into Claude's context. It shows:
 
-- **Active tasks by event** — what runs on Stop, PreToolUse, git commit, etc.
-- **Signal instructions** — if any tasks are gated on signals, Claude gets explicit instructions to run `prove_it signal done` when a unit of work is complete
-- **Review process** — how FAIL verdicts work, how to use the backchannel to appeal, and that a supervisory process audits appeals
+- **Active tasks by event**—what runs on Stop, PreToolUse, git commit, etc.
+- **Signal instructions**—if any tasks are gated on signals, Claude gets explicit instructions to run `prove_it signal done` when a unit of work is complete
+- **Review process**—how FAIL verdicts work, how to use the backchannel to appeal, and that a supervisory process audits appeals
 
 The briefing is generated from your effective config, so it always reflects your actual setup. It filters out the briefing task itself to avoid recursion. If rendering fails, the session continues (briefing failure never blocks).
 
@@ -591,7 +591,7 @@ prove_it monitor <id>        # tail a specific session (prefix match OK)
 | `PASS` | Task passed |
 | `FAIL` | Task failed (blocks the action) |
 | `SKIP` | Task skipped (condition not met, disabled, cached, or reviewer said SKIP) |
-| `CRASH` | Task crashed (unexpected error — treated as a soft skip unless model is explicitly set) |
+| `CRASH` | Task crashed (unexpected error—treated as a soft skip unless model is explicitly set) |
 | `EXEC` | Script task is executing (displayed as EXEC, logged as RUNNING) |
 | `SPAWNED` | Async task was forked to run in the background |
 | `RUNNING` | Async worker is executing the task |
@@ -605,7 +605,7 @@ prove_it monitor <id>        # tail a specific session (prefix match OK)
 ## Skills (`/prove`)
 
 prove_it installs a Claude Code [skill](https://code.claude.com/docs/en/skills)
-called `/prove` — evidence-based verification that forces Claude to actually
+called `/prove`—evidence-based verification that forces Claude to actually
 run the thing and show you the results.
 
 Invoke it with `/prove <claim>` (e.g., `/prove the search API handles
@@ -613,9 +613,9 @@ pagination`). If you just type `/prove` with uncommitted changes, it'll prove
 those changes work. Claude will:
 
 1. **State what it's trying to prove** and what "working" looks like
-2. **Show evidence it works** — commands, output, artifacts
-3. **Show evidence it might not work** — edge cases, error paths, things it tried to break
-4. **Give its honest judgment** — ready to ship, or what needs to change
+2. **Show evidence it works**—commands, output, artifacts
+3. **Show evidence it might not work**—edge cases, error paths, things it tried to break
+4. **Give its honest judgment**—ready to ship, or what needs to change
 
 The skill is installed to `~/.claude/skills/prove/SKILL.md` and updated on
 every `prove_it install`.
@@ -633,12 +633,12 @@ When prove_it spawns reviewer subagents or runs script tasks, other hooks instal
 }
 ```
 
-These variables are merged into the environment of both script tasks and agent reviewer subprocesses. prove_it forces `PROVE_IT_DISABLED` and `PROVE_IT_SKIP_NOTIFY` in all subprocesses to prevent recursion — these cannot be overridden by `taskEnv`. Reviewer subprocesses additionally force `CLAUDECODE` and `LC_ALL`.
+These variables are merged into the environment of both script tasks and agent reviewer subprocesses. prove_it forces `PROVE_IT_DISABLED` and `PROVE_IT_SKIP_NOTIFY` in all subprocesses to prevent recursion—these cannot be overridden by `taskEnv`. Reviewer subprocesses additionally force `CLAUDECODE` and `LC_ALL`.
 
 **Merge order** (last wins):
-1. `process.env` — inherited base environment
-2. `taskEnv` — your config values
-3. prove_it forced vars — recursion prevention, always win
+1. `process.env`—inherited base environment
+2. `taskEnv`—your config values
+3. prove_it forced vars—recursion prevention, always win
 
 ## Tracking MCP editing tools (`fileEditingTools`)
 
@@ -652,11 +652,11 @@ By default, prove_it tracks Claude's built-in editing tools (`Edit`, `Write`, `N
 }
 ```
 
-Tools listed in `fileEditingTools` are tracked alongside the builtins — they participate in `sourceFilesEdited`, `toolsUsed`, gross churn (`linesWritten`), and the `session_diff` git fallback. For gross churn, line counts are estimated from the longest string value in the tool input.
+Tools listed in `fileEditingTools` are tracked alongside the builtins—they participate in `sourceFilesEdited`, `toolsUsed`, gross churn (`linesWritten`), and the `session_diff` git fallback. For gross churn, line counts are estimated from the longest string value in the tool input.
 
 ## Session management
 
-prove_it stores session data in `~/.claude/prove_it/sessions/` — log files (`.jsonl`), state files (`.json`), and async task directories.
+prove_it stores session data in `~/.claude/prove_it/sessions/`—log files (`.jsonl`), state files (`.json`), and async task directories.
 
 **Lazy cleanup**: On every fresh session start (`startup` source), prove_it prunes session files older than 7 days. Pruning is rate-limited to once per 24 hours (tracked via a `.last_prune` marker file), so it adds no overhead to normal operation.
 
@@ -690,7 +690,7 @@ prove_it --version      Show version
 
 ## Disabling prove_it
 
-prove_it defaults to `enabled: false` — it only runs when explicitly opted in via
+prove_it defaults to `enabled: false`—it only runs when explicitly opted in via
 `prove_it install` (global) or `prove_it init` (project). Both write `enabled: true`
 to their respective config files.
 
@@ -708,12 +708,12 @@ Edit `~/.claude/prove_it/config.json`:
 
 ### Disable for a project
 
-For all contributors — edit `.claude/prove_it/config.json`:
+For all contributors—edit `.claude/prove_it/config.json`:
 ```json
 { "enabled": false }
 ```
 
-For just you — edit `.claude/prove_it/config.local.json`:
+For just you—edit `.claude/prove_it/config.local.json`:
 ```json
 { "enabled": false }
 ```
@@ -730,18 +730,18 @@ export PROVE_IT_DISABLED=1
 prove_it doctor
 ```
 
-- **Hooks not firing** — Restart Claude Code after `prove_it install`
-- **Tests not running** — Check `./script/test` exists and is executable (`chmod +x`)
-- **Hooks running in wrong directories** — prove_it only activates in git repos
-- **Reviews never fire** — The default `when` conditions use churn thresholds (`linesChanged`, `linesWritten`). Reviews only trigger after enough code has been written. Check `prove_it monitor` to see skip reasons with current/threshold counts. If you use MCP tools that edit files (e.g. Xcode MCP's `XcodeEdit`), add them to `fileEditingTools` so all churn tracking works for those tools:
+- **Hooks not firing**—Restart Claude Code after `prove_it install`
+- **Tests not running**—Check `./script/test` exists and is executable (`chmod +x`)
+- **Hooks running in wrong directories**—prove_it only activates in git repos
+- **Reviews never fire**—The default `when` conditions use churn thresholds (`linesChanged`, `linesWritten`). Reviews only trigger after enough code has been written. Check `prove_it monitor` to see skip reasons with current/threshold counts. If you use MCP tools that edit files (e.g. Xcode MCP's `XcodeEdit`), add them to `fileEditingTools` so all churn tracking works for those tools:
   ```json
   {
     "fileEditingTools": ["XcodeEdit"],
     "hooks": [...]
   }
   ```
-- **Async reviews not enforcing** — Async results are harvested on the next Stop. If Claude stops work before the async review completes, the result will be enforced on the stop after that. Check `prove_it monitor --verbose` to see SPAWNED/RUNNING/PENDING status progression.
-- **Config errors after upgrade** — Run `prove_it reinstall && prove_it reinit` to reset to current defaults
+- **Async reviews not enforcing**—Async results are harvested on the next Stop. If Claude stops work before the async review completes, the result will be enforced on the stop after that. Check `prove_it monitor --verbose` to see SPAWNED/RUNNING/PENDING status progression.
+- **Config errors after upgrade**—Run `prove_it reinstall && prove_it reinit` to reset to current defaults
 
 ## Examples
 

@@ -8,15 +8,15 @@ domain-specific agent prompts, and `when` conditions.
 - Custom lint check (`script/lint.sh`) runs before tests on commit
 - Agent prompts are tailored to the calculator domain (division by zero, edge cases)
 - Higher `maxOutputChars` (16000 vs 12000)
-- Custom source globs (no `lib/` — just `src/` and `test/`)
+- Custom source globs (no `lib/`—just `src/` and `test/`)
 
 ## What's included
 
-- `src/calculator.js` — arithmetic module with edge case handling
-- `test/calculator.test.js` — tests using `node:test`
-- `script/test` and `script/test_fast` — test runners
-- `script/lint.sh` — custom lint check
-- `.claude/prove_it/config.json` — customized prove_it config
+- `src/calculator.js`—arithmetic module with edge case handling
+- `test/calculator.test.js`—tests using `node:test`
+- `script/test` and `script/test_fast`—test runners
+- `script/lint.sh`—custom lint check
+- `.claude/prove_it/config.json`—customized prove_it config
 
 ## Prerequisites
 

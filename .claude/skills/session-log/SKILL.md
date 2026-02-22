@@ -1,15 +1,15 @@
 ---
 name: session-log
-description: Inspect prove_it session logs — review history, reviewer verdicts, and session state. Use when asked about session logs, reviewer results, or "what did the last hook say".
+description: Inspect prove_it session logs—review history, reviewer verdicts, and session state. Use when asked about session logs, reviewer results, or "what did the last hook say".
 ---
 
 # Inspect prove_it session logs
 
 Session data lives in `~/.claude/prove_it/sessions/`. Two file types per session:
 
-- `<session_id>.json` — session state (project dir, git HEAD, started_at)
-- `<session_id>.jsonl` — reviewer log (one JSON object per line: at, reviewer, status, reason, projectDir, sessionId)
-- `_project_<hash>.jsonl` — project-level reviewer log (when session_id was null)
+- `<session_id>.json`—session state (project dir, git HEAD, started_at)
+- `<session_id>.jsonl`—reviewer log (one JSON object per line: at, reviewer, status, reason, projectDir, sessionId)
+- `_project_<hash>.jsonl`—project-level reviewer log (when session_id was null)
 
 ## Determine the current session ID
 

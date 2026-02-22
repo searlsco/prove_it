@@ -16,7 +16,7 @@ in isolation.
 
 ## Arguments
 
-`<prompt_ref>` — the builtin prompt key to test (e.g. `review:test_investment`,
+`<prompt_ref>`—the builtin prompt key to test (e.g. `review:test_investment`,
 `review:test_coverage`, `review:commit_quality`). If omitted, test all
 `review:*` prompts in `BUILTIN_PROMPTS`.
 
@@ -84,14 +84,14 @@ focused config that isolates the reviewer you're testing:
 ```
 
 Write realistic production code and commit a baseline so `git diff HEAD`
-works. The reviewer is an LLM — toy code won't exercise its judgment. Write
+works. The reviewer is an LLM—toy code won't exercise its judgment. Write
 something with enough surface area that "should this have tests?" is a real
 question (service classes, validation logic, stateful modules).
 
 ### Phase 2: Simulate multi-turn dispatches through the hook harness
 
 Use the hook harness's `invokeHook` to send PreToolUse events through the
-real dispatcher — the same code path Claude Code uses:
+real dispatcher—the same code path Claude Code uses:
 
 ```javascript
 const { invokeHook, isolatedEnv } = require('<repo>/test/integration/hook-harness')
@@ -150,7 +150,7 @@ Every reviewer needs at least three end-to-end scenarios:
 | **Clear PASS** | Production code with real tests | Reviewer fires, returns PASS, dispatcher allows |
 | **Sneaky FAIL** | Test files exist but are stubs/TODOs | Reviewer fires, returns FAIL, dispatcher denies |
 
-The sneaky case is the most important — it's easy to write a prompt that
+The sneaky case is the most important—it's easy to write a prompt that
 catches "zero tests." The hard part is catching tests that exist but don't
 test anything.
 
@@ -206,7 +206,7 @@ deny before proving it can allow.
 anything."
 
 **Observe, don't assume.** Parse dispatcher JSON output and verify exit codes.
-Don't trust that the reviewer fired — prove it by seeing the deny in stdout
+Don't trust that the reviewer fired—prove it by seeing the deny in stdout
 or checking git refs under `refs/worktree/prove_it/`.
 
 ## Reporting
@@ -216,7 +216,7 @@ After all scenarios, present a table with the full dispatcher output:
 ```
 | Scenario        | Threshold | Reviewer fired? | Verdict | Decision |
 |----------------|-----------|-----------------|---------|----------|
-| Under threshold | 300/500   | No              | —       | allow    |
+| Under threshold | 300/500   | No              |—      | allow    |
 | No tests        | 500/500   | Yes             | FAIL    | deny     |
 | Real tests      | 500/500   | Yes             | PASS    | allow    |
 | Stub tests      | 500/500   | Yes             | FAIL    | deny     |

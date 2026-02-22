@@ -62,4 +62,4 @@ Run prove_it from the repo source (not the Homebrew install) to test hook behavi
 
 - The shim at `test/bin/prove_it` just does `exec node ../../cli.js "$@"`
 - All `prove_it run_builtin` commands in configs will also resolve through the shim
-- This tracks with the current git ref — check out any commit to test that version
+- This tracks with the current git ref—check out any commit to test that version

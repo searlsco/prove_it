@@ -131,7 +131,7 @@ describe('loadEffectiveConfig ancestor discovery', () => {
     setup()
     try {
       const { cfg } = loadEffectiveConfig(path.join(tmpBase, 'child'), defaultTestConfig)
-      // Arrays are replaced, not merged — child sources win
+      // Arrays are replaced, not merged—child sources win
       assert.deepStrictEqual(cfg.sources, ['child/**/*.js'])
     } finally {
       cleanup()
@@ -142,7 +142,7 @@ describe('loadEffectiveConfig ancestor discovery', () => {
     setup()
     try {
       const { cfg } = loadEffectiveConfig(path.join(tmpBase, 'child', 'grandchild'), defaultTestConfig)
-      // grandchild has no config — inherits child's sources
+      // grandchild has no config—inherits child's sources
       assert.deepStrictEqual(cfg.sources, ['child/**/*.js'])
     } finally {
       cleanup()

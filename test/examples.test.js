@@ -105,7 +105,7 @@ describe('example projects', () => {
       const actual = JSON.parse(fs.readFileSync(settingsPath, 'utf8')).hooks
 
       // Compare structure: same events, same matchers, same hook shape.
-      // Command prefix differs (../support/prove_it vs prove_it) — normalize it.
+      // Command prefix differs (../support/prove_it vs prove_it)—normalize it.
       const normalize = (hooks) => JSON.parse(
         JSON.stringify(hooks).replace(/\.\.\/support\/prove_it /g, 'prove_it ')
       )

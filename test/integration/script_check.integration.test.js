@@ -7,7 +7,7 @@ const { isBuiltin, getBuiltinName, runScriptCheck } = require('../../lib/checks/
 const { freshRepo } = require('../helpers')
 
 describe('script check', () => {
-  // 1. isBuiltin — parameterized (5 → 1)
+  // 1. isBuiltin—parameterized (5 → 1)
   describe('isBuiltin', () => {
     it('returns expected results for various inputs', () => {
       const cases = [
@@ -24,7 +24,7 @@ describe('script check', () => {
     })
   })
 
-  // 2. getBuiltinName — parameterized (2 → 1)
+  // 2. getBuiltinName—parameterized (2 → 1)
   describe('getBuiltinName', () => {
     it('extracts the name from run_builtin commands', () => {
       const cases = [
@@ -79,7 +79,7 @@ describe('script check', () => {
 
     // 3. basic execution story (4 → 1)
     it('basic execution: pass, fail, script not found, unknown builtin', () => {
-      // pass — exit 0
+      // pass—exit 0
       makeScript('pass', 'exit 0')
       const pass = runScriptCheck(
         { name: 'pass-test', command: './script/pass' },
@@ -88,7 +88,7 @@ describe('script check', () => {
       assert.strictEqual(pass.pass, true)
       assert.strictEqual(pass.cached, undefined)
 
-      // fail — exit 1
+      // fail—exit 1
       makeScript('fail', 'echo "failure" >&2\nexit 1')
       const fail = runScriptCheck(
         { name: 'fail-test', command: './script/fail' },
@@ -127,7 +127,7 @@ describe('script check', () => {
       const past = new Date(runTime - 5000)
       setAllTrackedMtimes(tmpDir, past)
 
-      // cached pass — previous pass + no file changes → cached
+      // cached pass—previous pass + no file changes → cached
       fs.writeFileSync(localCfgPath, JSON.stringify({
         runs: { 'my-test': { at: runTime, pass: true } }
       }))
@@ -139,7 +139,7 @@ describe('script check', () => {
       assert.strictEqual(cached.cached, true)
       assert.ok(cached.reason.includes('cached pass'))
 
-      // failure re-runs — previous fail + no file changes → actually re-runs (exits 0)
+      // failure re-runs—previous fail + no file changes → actually re-runs (exits 0)
       fs.writeFileSync(localCfgPath, JSON.stringify({
         runs: { 'my-test': { at: runTime, pass: false } }
       }))
@@ -148,9 +148,9 @@ describe('script check', () => {
         { rootDir: tmpDir, localCfgPath, sources: null, maxChars: 12000 }
       )
       assert.strictEqual(rerun.pass, true)
-      assert.strictEqual(rerun.cached, undefined, 'Should not be cached — actually re-ran')
+      assert.strictEqual(rerun.cached, undefined, 'Should not be cached—actually re-ran')
 
-      // mtime:false bypass — skips cache entirely, always runs
+      // mtime:false bypass—skips cache entirely, always runs
       fs.writeFileSync(localCfgPath, JSON.stringify({
         runs: { 'my-test': { at: runTime, pass: false } }
       }))
@@ -294,7 +294,7 @@ describe('script check', () => {
       assert.strictEqual(failEntries[1].verbose.command, './script/failing')
       assert.strictEqual(failEntries[1].verbose.exitCode, 1)
 
-      // FAIL — script not found (no RUNNING entry)
+      // FAIL—script not found (no RUNNING entry)
       runScriptCheck(
         { name: 'log-missing', command: './script/nope' },
         { rootDir: tmpDir, projectDir: tmpDir, sessionId: SID, localCfgPath: null, sources: null, maxChars: 12000 }
@@ -304,7 +304,7 @@ describe('script check', () => {
       assert.strictEqual(missingEntries[0].status, 'FAIL')
       assert.ok(missingEntries[0].reason.includes('Script not found'))
 
-      // SKIP — cached pass (no RUNNING entry)
+      // SKIP—cached pass (no RUNNING entry)
       spawnSync('git', ['add', 'script/test'], { cwd: tmpDir })
       spawnSync('git', ['commit', '-m', 'add test'], { cwd: tmpDir })
       const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
@@ -327,7 +327,7 @@ describe('script check', () => {
         'RUNNING must not appear for mtime-cached results')
       assert.ok(cachedEntries[0].reason.includes('cached pass'))
 
-      // FAIL — unknown builtin
+      // FAIL—unknown builtin
       runScriptCheck(
         { name: 'log-bad-builtin', command: 'prove_it run_builtin nonexistent' },
         { rootDir: tmpDir, projectDir: tmpDir, sessionId: SID, localCfgPath: null, sources: null, maxChars: 12000 }
@@ -337,7 +337,7 @@ describe('script check', () => {
       assert.strictEqual(builtinEntries[0].status, 'FAIL')
       assert.ok(builtinEntries[0].reason.includes('Unknown builtin'))
 
-      // no log without session — no sessionId or projectDir
+      // no log without session—no sessionId or projectDir
       const noLogSid = 'test-session-no-log'
       makeScript('nolog', 'exit 0')
       runScriptCheck(
@@ -351,7 +351,7 @@ describe('script check', () => {
 
     // 8. logReview quiet mode story (4 → 1)
     it('logReview quiet mode: PASS suppressed, FAIL not suppressed, SKIP suppressed, builtin PASS suppressed', () => {
-      // quiet PASS — suppressed entirely
+      // quiet PASS—suppressed entirely
       const sidPass = 'test-quiet-pass'
       makeScript('qtest', 'exit 0')
       runScriptCheck(
@@ -361,7 +361,7 @@ describe('script check', () => {
       assert.strictEqual(readLogEntries(sidPass).length, 0,
         'Quiet task pass should produce no log entries')
 
-      // quiet FAIL — not suppressed
+      // quiet FAIL—not suppressed
       const sidFail = 'test-quiet-fail'
       makeScript('qfail', 'exit 1')
       runScriptCheck(
@@ -373,7 +373,7 @@ describe('script check', () => {
         'Quiet task fail should produce exactly one log entry')
       assert.strictEqual(failEntries[0].status, 'FAIL')
 
-      // quiet SKIP — cached pass suppressed
+      // quiet SKIP—cached pass suppressed
       const sidSkip = 'test-quiet-skip'
       spawnSync('git', ['add', 'script/qtest'], { cwd: tmpDir })
       spawnSync('git', ['commit', '-m', 'add qtest'], { cwd: tmpDir })
@@ -393,7 +393,7 @@ describe('script check', () => {
       assert.strictEqual(readLogEntries(sidSkip).length, 0,
         'Quiet task cached pass should produce no log entries')
 
-      // quiet builtin PASS — suppressed
+      // quiet builtin PASS—suppressed
       const sidBuiltin = 'test-quiet-builtin'
       runScriptCheck(
         { name: 'quiet-lock', command: 'prove_it run_builtin config:lock', quiet: true },

@@ -4,10 +4,10 @@ A minimal project showing prove_it's default configuration.
 
 ## What's included
 
-- `src/greet.js` — a simple greeting module
-- `test/greet.test.js` — tests using `node:test`
-- `script/test` and `script/test_fast` — test runners
-- `.claude/prove_it/config.json` — default prove_it config (output of `prove_it init`)
+- `src/greet.js`—a simple greeting module
+- `test/greet.test.js`—tests using `node:test`
+- `script/test` and `script/test_fast`—test runners
+- `.claude/prove_it/config.json`—default prove_it config (output of `prove_it init`)
 
 ## Prerequisites
 

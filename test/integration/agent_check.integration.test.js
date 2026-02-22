@@ -344,7 +344,7 @@ describe('agent check', () => {
     }
 
     try {
-      // PASS — verbose should have prompt, response, model
+      // PASS—verbose should have prompt, response, model
       const passPath = writeReviewer(tmpDir, 'v_pass.sh', 'echo "PASS: looks good"')
       runAgentCheck(
         { name: 'verbose-pass', command: passPath, prompt: 'Review {{project_dir}}', model: 'haiku' },
@@ -363,7 +363,7 @@ describe('agent check', () => {
       assert.strictEqual(passResult[0].verbose.backchannel, false)
       assert.strictEqual(passRunning[0].verbose, undefined, 'RUNNING entry should not have verbose data')
 
-      // FAIL — verbose should have prompt, response, model
+      // FAIL—verbose should have prompt, response, model
       const failPath = writeReviewer(tmpDir, 'v_fail.sh', 'echo "FAIL: missing tests"')
       runAgentCheck(
         { name: 'verbose-fail', command: failPath, prompt: 'Check tests' },
@@ -376,7 +376,7 @@ describe('agent check', () => {
       assert.strictEqual(typeof failResult[0].verbose.prompt, 'string')
       assert.strictEqual(failResult[0].verbose.response, 'FAIL: missing tests')
 
-      // SKIP — verbose should have prompt, response, model
+      // SKIP—verbose should have prompt, response, model
       const skipPath = writeReviewer(tmpDir, 'v_skip.sh', 'echo "SKIP: unrelated"')
       runAgentCheck(
         { name: 'verbose-skip', command: skipPath, prompt: 'Review this' },

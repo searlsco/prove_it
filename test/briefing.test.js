@@ -179,7 +179,7 @@ describe('briefing', () => {
       const runs = { 'full-tests': { at: Date.now() - 2 * 60 * 60 * 1000, result: 'pass' } }
       const text = renderBriefing(cfg, runs)
       assert.ok(text.includes('Signal-gated tasks:'), 'should include signal-gated tasks heading')
-      assert.ok(text.includes('full-tests — last ran 2h ago'), 'should show timing')
+      assert.ok(text.includes('full-tests—last ran 2h ago'), 'should show timing')
     })
 
     it('shows "never" for signal-gated tasks with no run data', () => {
@@ -191,7 +191,7 @@ describe('briefing', () => {
         }]
       }
       const text = renderBriefing(cfg, {})
-      assert.ok(text.includes('deploy-check — last ran never'), 'should show never')
+      assert.ok(text.includes('deploy-check—last ran never'), 'should show never')
     })
 
     it('backward compat: renderBriefing(cfg) works without runs arg', () => {
@@ -203,7 +203,7 @@ describe('briefing', () => {
         }]
       }
       const text = renderBriefing(cfg)
-      assert.ok(text.includes('my-task — last ran never'), 'should default to never')
+      assert.ok(text.includes('my-task—last ran never'), 'should default to never')
     })
 
     it('omits signaling section when no signal-gated tasks', () => {
@@ -426,33 +426,33 @@ describe('briefing', () => {
     it('renders script task', () => {
       assert.strictEqual(
         taskLine({ name: 'fast-tests', type: 'script', command: './script/test_fast' }),
-        'fast-tests — runs `./script/test_fast`'
+        'fast-tests—runs `./script/test_fast`'
       )
     })
 
     it('renders agent task without when', () => {
       assert.strictEqual(
         taskLine({ name: 'review', type: 'agent' }),
-        'review — AI reviewer'
+        'review—AI reviewer'
       )
     })
 
     it('renders agent task with when', () => {
       const line = taskLine({ name: 'review', type: 'agent', when: { linesWritten: 500 } })
-      assert.strictEqual(line, 'review — AI reviewer (after 500+ lines written)')
+      assert.strictEqual(line, 'review—AI reviewer (after 500+ lines written)')
     })
 
     it('renders env task', () => {
       assert.strictEqual(
         taskLine({ name: 'setup', type: 'env' }),
-        'setup — sets environment variables'
+        'setup—sets environment variables'
       )
     })
 
     it('renders script task with no command', () => {
       assert.strictEqual(
         taskLine({ name: 'x', type: 'script' }),
-        'x — runs `(no command)`'
+        'x—runs `(no command)`'
       )
     })
 

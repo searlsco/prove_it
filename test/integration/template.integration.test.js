@@ -8,8 +8,8 @@ const { makeResolvers } = require('../../lib/template')
 const { recordFileEdit, saveSessionState } = require('../../lib/session')
 
 describe('template integration', () => {
-  // ---------- Story: git resolvers — clean tree ----------
-  describe('git resolvers — clean tree', () => {
+  // ---------- Story: git resolvers—clean tree ----------
+  describe('git resolvers—clean tree', () => {
     let tmpDir
 
     beforeEach(() => {
@@ -46,8 +46,8 @@ describe('template integration', () => {
     })
   })
 
-  // ---------- Story: git resolvers — dirty tree ----------
-  describe('git resolvers — dirty tree', () => {
+  // ---------- Story: git resolvers—dirty tree ----------
+  describe('git resolvers—dirty tree', () => {
     let tmpDir
 
     beforeEach(() => {

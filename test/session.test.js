@@ -798,7 +798,7 @@ describe('session state functions', () => {
     })
 
     it('never throws (best-effort)', () => {
-      // Point at a nonexistent directory — should not throw
+      // Point at a nonexistent directory—should not throw
       const origDir = process.env.PROVE_IT_DIR
       process.env.PROVE_IT_DIR = path.join(tmpDir, 'nonexistent', 'prove_it')
 
