@@ -42,6 +42,15 @@
           "command": "./script/test_fast"
         },
         {
+          "name": "full-tests",
+          "type": "script",
+          "command": "./script/test",
+          "when": {
+            "signal": "done",
+            "sourceFilesEdited": true
+          }
+        },
+        {
           "name": "coverage-review",
           "type": "agent",
           "async": true,
@@ -78,5 +87,5 @@
       ]
     }
   ],
-  "initSeed": "ddb0d8e936bb"
+  "initSeed": "d2f20be42d55"
 }
