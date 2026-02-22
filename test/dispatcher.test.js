@@ -3,7 +3,7 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
-const { matchesHookEntry, evaluateWhen, defaultConfig, settleTaskResult, spawnAsyncTask, harvestAsyncResults, cleanAsyncDir, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
+const { matchesHookEntry, evaluateWhen, defaultConfig, settleTaskResult, spawnAsyncTask, harvestAsyncResults, cleanAsyncDir, hasSignalGatedTasks, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
 const { whenHasKey } = require('../lib/git')
 const { recordFileEdit, resetTurnTracking, getAsyncDir } = require('../lib/session')
 
@@ -910,6 +910,67 @@ describe('claude dispatcher', () => {
 
       assert.strictEqual(skipStatus, 'ENFORCED:SKIP')
       assert.strictEqual(passStatus, 'ENFORCED:PASS')
+    })
+  })
+
+  describe('hasSignalGatedTasks', () => {
+    it('returns false for empty hooks array', () => {
+      assert.strictEqual(hasSignalGatedTasks([]), false)
+    })
+
+    it('returns false when hooks have no tasks key', () => {
+      assert.strictEqual(hasSignalGatedTasks([{ type: 'claude', event: 'Stop' }]), false)
+    })
+
+    it('returns false when tasks have no when clause', () => {
+      const hooks = [{ tasks: [{ name: 'plain', type: 'script', command: 'echo ok' }] }]
+      assert.strictEqual(hasSignalGatedTasks(hooks), false)
+    })
+
+    it('returns true for object when with signal: done', () => {
+      const hooks = [{
+        tasks: [{ name: 'gated', type: 'script', command: 'echo ok', when: { signal: 'done' } }]
+      }]
+      assert.strictEqual(hasSignalGatedTasks(hooks), true)
+    })
+
+    it('returns true for array when containing signal: done clause', () => {
+      const hooks = [{
+        tasks: [{
+          name: 'gated',
+          type: 'script',
+          command: 'echo ok',
+          when: [{ linesChanged: 500 }, { signal: 'done' }]
+        }]
+      }]
+      assert.strictEqual(hasSignalGatedTasks(hooks), true)
+    })
+
+    it('returns false for array when with no signal: done clause', () => {
+      const hooks = [{
+        tasks: [{
+          name: 'not-gated',
+          type: 'script',
+          command: 'echo ok',
+          when: [{ linesChanged: 500 }, { envSet: 'CI' }]
+        }]
+      }]
+      assert.strictEqual(hasSignalGatedTasks(hooks), false)
+    })
+
+    it('returns false when signal is not done', () => {
+      const hooks = [{
+        tasks: [{ name: 'other', type: 'script', command: 'echo ok', when: { signal: 'other' } }]
+      }]
+      assert.strictEqual(hasSignalGatedTasks(hooks), false)
+    })
+
+    it('finds signal-gated task across multiple hooks', () => {
+      const hooks = [
+        { tasks: [{ name: 'plain', type: 'script', command: 'echo 1' }] },
+        { tasks: [{ name: 'gated', type: 'script', command: 'echo 2', when: { signal: 'done' } }] }
+      ]
+      assert.strictEqual(hasSignalGatedTasks(hooks), true)
     })
   })
 
