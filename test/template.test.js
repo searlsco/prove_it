@@ -143,14 +143,28 @@ describe('template', () => {
     })
   })
 
+  describe('changes_since_last_review variable', () => {
+    it('returns empty string when no taskName in context', () => {
+      const context = { rootDir: '.', projectDir: '.', sessionId: null, toolInput: null }
+      const resolvers = makeResolvers(context)
+      assert.strictEqual(resolvers.changes_since_last_review(), '')
+    })
+
+    it('returns empty string when no ref exists for the task', () => {
+      const context = { rootDir: '.', projectDir: '.', sessionId: null, toolInput: null, taskName: 'nonexistent-task' }
+      const resolvers = makeResolvers(context)
+      assert.strictEqual(resolvers.changes_since_last_review(), '')
+    })
+  })
+
   describe('KNOWN_VARS', () => {
-    it('has all 17 expected keys', () => {
+    it('has all 18 expected keys', () => {
       const expected = [
         'staged_diff', 'staged_files', 'working_diff', 'changed_files',
         'session_diff', 'test_output', 'tool_command', 'file_path',
         'project_dir', 'root_dir', 'session_id', 'git_head',
         'git_status', 'recent_commits', 'recently_edited_files', 'sources',
-        'signal_message'
+        'signal_message', 'changes_since_last_review'
       ]
       assert.deepStrictEqual(KNOWN_VARS, expected)
     })

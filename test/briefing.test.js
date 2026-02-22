@@ -158,7 +158,7 @@ describe('briefing', () => {
         hooks: [{
           type: 'claude',
           event: 'Stop',
-          tasks: [{ name: 'signal-review', type: 'agent', when: { signal: 'done' } }]
+          tasks: [{ name: 'shipworthy-review', type: 'agent', when: { signal: 'done' } }]
         }]
       }
       const text = renderBriefing(cfg)
@@ -227,7 +227,7 @@ describe('briefing', () => {
       assert.ok(text.includes('full-tests'), 'should include full-tests')
       assert.ok(text.includes('code-quality-review'), 'should include code-quality-review')
       assert.ok(text.includes('coverage-review'), 'should include coverage-review')
-      assert.ok(text.includes('signal-review'), 'should include signal-review')
+      assert.ok(text.includes('shipworthy-review'), 'should include shipworthy-review')
       assert.ok(!text.includes('session-briefing'), 'should not mention session-briefing')
       assert.ok(text.includes('How reviews work'), 'should include review section for default config')
       assert.ok(text.includes('Signaling:'), 'should include signaling section for default config')
