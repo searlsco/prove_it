@@ -31,8 +31,16 @@ describe('SubagentStart hook', () => {
   })
 
   describe('Plan agent injection', () => {
-    it('injects signal instruction for Plan agent type', () => {
-      writeConfig(tmpDir, makeConfig([]))
+    it('injects signal instruction for Plan agent type when signal-gated tasks exist', () => {
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'signal-gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
+          ]
+        }
+      ]))
 
       const result = invokeHook('claude:SubagentStart', {
         hook_event_name: 'SubagentStart',
@@ -48,6 +56,19 @@ describe('SubagentStart hook', () => {
         result.output.hookSpecificOutput.additionalContext.includes('prove_it signal done'),
         `additionalContext should include signal instruction, got: ${result.output.hookSpecificOutput.additionalContext}`
       )
+    })
+
+    it('skips signal instruction when no signal-gated tasks configured', () => {
+      writeConfig(tmpDir, makeConfig([]))
+
+      const result = invokeHook('claude:SubagentStart', {
+        hook_event_name: 'SubagentStart',
+        session_id: 'test-subagent-plan-no-signal',
+        agent_type: 'Plan'
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(result.output, null, 'Should produce no output when no signal-gated tasks')
     })
   })
 
@@ -130,6 +151,13 @@ describe('SubagentStart hook', () => {
           event: 'SubagentStart',
           tasks: [
             { name: 'extra-context', type: 'script', command: './extra.sh' }
+          ]
+        },
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'signal-gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
           ]
         }
       ]))
