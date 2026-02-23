@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 
-const { findLatestSession, listSessions, findProjectLogFiles, projectHash, formatEntry, formatVerbose, formatTime, formatDuration, useColor, stripAnsi, visualWidth, normalizeHookTag, middleTruncatePath, truncateReason, progressiveTruncate, watchFile } = require('../lib/monitor')
+const { findLatestSession, listSessions, getSessionsList, findProjectLogFiles, projectHash, formatEntry, formatVerbose, formatTime, formatDuration, useColor, stripAnsi, visualWidth, normalizeHookTag, middleTruncatePath, truncateReason, progressiveTruncate, watchFile, watchFileCallback, readEntries, loadSessionInfo } = require('../lib/monitor')
 
 describe('monitor', () => {
   let tmpDir
@@ -696,6 +696,132 @@ describe('monitor', () => {
       const output = logs.join('\n')
       assert.ok(output.includes('/home/user/projectA'), 'Should show projectA')
       assert.ok(output.includes('/home/user/projectB'), 'Should show projectB')
+    })
+  })
+
+  describe('getSessionsList', () => {
+    it('returns empty array when sessions dir does not exist', () => {
+      const result = getSessionsList(path.join(tmpDir, 'nonexistent'))
+      assert.deepStrictEqual(result, [])
+    })
+
+    it('returns session data sorted by started_at descending', () => {
+      const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
+      fs.mkdirSync(sessionsDir, { recursive: true })
+
+      const sid1 = 'session-older'
+      fs.writeFileSync(path.join(sessionsDir, `${sid1}.json`), JSON.stringify({
+        project_dir: '/project/a',
+        started_at: '2025-01-15T10:00:00Z'
+      }))
+      fs.writeFileSync(path.join(sessionsDir, `${sid1}.jsonl`), '{"at":1}\n{"at":2}\n')
+
+      const sid2 = 'session-newer'
+      fs.writeFileSync(path.join(sessionsDir, `${sid2}.json`), JSON.stringify({
+        project_dir: '/project/b',
+        started_at: '2025-01-16T10:00:00Z'
+      }))
+      fs.writeFileSync(path.join(sessionsDir, `${sid2}.jsonl`), '{"at":3}\n')
+
+      const result = getSessionsList(sessionsDir)
+      assert.strictEqual(result.length, 2)
+      assert.strictEqual(result[0].id, 'session-newer')
+      assert.strictEqual(result[0].entries, 1)
+      assert.strictEqual(result[1].id, 'session-older')
+      assert.strictEqual(result[1].entries, 2)
+    })
+
+    it('filters by project directory', () => {
+      const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
+      fs.mkdirSync(sessionsDir, { recursive: true })
+
+      const sid1 = 'session-match'
+      fs.writeFileSync(path.join(sessionsDir, `${sid1}.json`), JSON.stringify({
+        project_dir: '/project/target',
+        started_at: '2025-01-15T10:00:00Z'
+      }))
+      fs.writeFileSync(path.join(sessionsDir, `${sid1}.jsonl`), '{"at":1}\n')
+
+      const sid2 = 'session-other'
+      fs.writeFileSync(path.join(sessionsDir, `${sid2}.json`), JSON.stringify({
+        project_dir: '/project/other',
+        started_at: '2025-01-16T10:00:00Z'
+      }))
+      fs.writeFileSync(path.join(sessionsDir, `${sid2}.jsonl`), '{"at":2}\n')
+
+      const result = getSessionsList(sessionsDir, '/project/target')
+      assert.strictEqual(result.length, 1)
+      assert.strictEqual(result[0].id, 'session-match')
+    })
+  })
+
+  describe('watchFileCallback', () => {
+    it('calls callback with parsed entries for existing content', () => {
+      const logFile = path.join(tmpDir, 'callback.jsonl')
+      const entry1 = { at: 1, reviewer: 'a', status: 'PASS' }
+      const entry2 = { at: 2, reviewer: 'b', status: 'FAIL' }
+      fs.writeFileSync(logFile, JSON.stringify(entry1) + '\n' + JSON.stringify(entry2) + '\n')
+
+      const entries = []
+      const cleanup = watchFileCallback(logFile, 0, (entry) => entries.push(entry))
+      try {
+        assert.strictEqual(entries.length, 2)
+        assert.strictEqual(entries[0].reviewer, 'a')
+        assert.strictEqual(entries[1].reviewer, 'b')
+      } finally {
+        cleanup()
+      }
+    })
+
+    it('does not call callback when offset matches file size', () => {
+      const logFile = path.join(tmpDir, 'no-callback.jsonl')
+      fs.writeFileSync(logFile, '{"at":1}\n')
+      const fileSize = fs.statSync(logFile).size
+
+      const entries = []
+      const cleanup = watchFileCallback(logFile, fileSize, (entry) => entries.push(entry))
+      try {
+        assert.strictEqual(entries.length, 0)
+      } finally {
+        cleanup()
+      }
+    })
+  })
+
+  describe('readEntries', () => {
+    it('parses all entries from a jsonl file', () => {
+      const logFile = path.join(tmpDir, 'entries.jsonl')
+      fs.writeFileSync(logFile, '{"at":1,"status":"PASS"}\n{"at":2,"status":"FAIL"}\n')
+      const entries = readEntries(logFile)
+      assert.strictEqual(entries.length, 2)
+      assert.strictEqual(entries[0].status, 'PASS')
+      assert.strictEqual(entries[1].status, 'FAIL')
+    })
+
+    it('returns empty array for nonexistent file', () => {
+      const entries = readEntries(path.join(tmpDir, 'nope.jsonl'))
+      assert.deepStrictEqual(entries, [])
+    })
+  })
+
+  describe('loadSessionInfo', () => {
+    it('loads session state from json file', () => {
+      const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
+      fs.mkdirSync(sessionsDir, { recursive: true })
+      const sid = 'test-info-session'
+      fs.writeFileSync(path.join(sessionsDir, `${sid}.json`), JSON.stringify({
+        project_dir: '/foo/bar',
+        started_at: '2025-01-01T00:00:00Z'
+      }))
+      const info = loadSessionInfo(sessionsDir, sid)
+      assert.strictEqual(info.project_dir, '/foo/bar')
+    })
+
+    it('returns null for nonexistent session', () => {
+      const sessionsDir = path.join(tmpDir, 'prove_it', 'sessions')
+      fs.mkdirSync(sessionsDir, { recursive: true })
+      const info = loadSessionInfo(sessionsDir, 'nonexistent')
+      assert.strictEqual(info, null)
     })
   })
 
