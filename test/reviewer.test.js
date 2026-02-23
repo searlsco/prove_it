@@ -31,6 +31,12 @@ describe('parseVerdict', () => {
       assert.strictEqual(result.reason, 'no space')
     })
 
+    it('parses PASS without colon', () => {
+      const result = parseVerdict('PASS everything looks good')
+      assert.strictEqual(result.pass, true)
+      assert.strictEqual(result.reason, 'everything looks good')
+    })
+
     it('PASS has no body field', () => {
       const result = parseVerdict('PASS: looks good\n\nSome extra text')
       assert.strictEqual(result.pass, true)
@@ -49,6 +55,13 @@ describe('parseVerdict', () => {
       const result = parseVerdict('FAIL:missing tests')
       assert.strictEqual(result.pass, false)
       assert.strictEqual(result.reason, 'missing tests')
+    })
+
+    it('parses FAIL without colon', () => {
+      const result = parseVerdict('FAIL missing tests\n\n### Details\nNo coverage.')
+      assert.strictEqual(result.pass, false)
+      assert.strictEqual(result.reason, 'missing tests')
+      assert.ok(result.body.includes('### Details'))
     })
 
     it("parses bare 'FAIL' with fallback rationale", () => {
@@ -109,6 +122,12 @@ describe('parseVerdict', () => {
       const result = parseVerdict('SKIP')
       assert.strictEqual(result.skip, true)
       assert.strictEqual(result.reason, '<<Reviewer provided no rationale>>')
+    })
+
+    it('parses SKIP without colon', () => {
+      const result = parseVerdict('SKIP unrelated changes')
+      assert.strictEqual(result.skip, true)
+      assert.strictEqual(result.reason, 'unrelated changes')
     })
 
     it("parses 'SKIP: mid-refactor'", () => {
