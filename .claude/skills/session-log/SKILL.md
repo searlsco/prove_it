@@ -27,7 +27,7 @@ ls -t ~/.claude/prove_it/sessions/*.jsonl | head -5
 2. Read it and display each entry as a table or formatted list showing:
    - **Time** (human-readable from the `at` timestamp)
    - **Reviewer** name
-   - **Status** (PASS/FAIL/SKIP/CRASH)
+   - **Status** (PASS/FAIL/SKIP/BOOM)
    - **Reason** (the reviewer's rationale)
 
 ### With a session ID arg: show that specific session
@@ -40,7 +40,7 @@ List all session `.json` files sorted by modification time, showing session ID, 
 
 ### With `--stats` or `stats`: aggregate reviewer stats
 
-Count PASS/FAIL/SKIP/CRASH across all `.jsonl` files and show totals.
+Count PASS/FAIL/SKIP/BOOM across all `.jsonl` files and show totals.
 
 ## Formatting
 

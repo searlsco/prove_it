@@ -191,7 +191,7 @@ Set `quiet: true` on a task to suppress all log output except failures:
 { "name": "lock-config", "type": "script", "command": "prove_it run_builtin config:lock", "quiet": true }
 ```
 
-Quiet tasks don't emit SKIP or PASS entries to the session log. FAIL and CRASH entries are always logged. This is useful for high-frequency guards (like `config:lock` on every PreToolUse) that would otherwise flood the monitor.
+Quiet tasks don't emit SKIP or PASS entries to the session log. FAIL and BOOM entries are always logged. This is useful for high-frequency guards (like `config:lock` on every PreToolUse) that would otherwise flood the monitor.
 
 ### Task timeout
 
@@ -578,7 +578,7 @@ Run in a separate terminal to watch hook results in real time:
 prove_it monitor
 Session: ea0da8e4 | /Users/justin/code/searls/sugoi_tv | started 02/13/2026, 08:53
 
-09:00:48  CRASH  coverage-review       Unexpected reviewer output: Based on my investigation…
+09:00:48  BOOM   coverage-review       Unexpected reviewer output: Based on my investigation…
 09:00:52  PASS   fast-tests            ./script/test_fast passed (2.3s)
 09:01:12  SKIP   fast-tests            cached pass (no code changes)
 09:14:33  PASS   commit-review         All changes look correct and well-tested.
@@ -600,7 +600,7 @@ prove_it monitor <id>        # tail a specific session (prefix match OK)
 | `--project=/path/to/repo` | Scope to a specific project directory |
 | `--verbose` | Show full reviewer prompts, responses, and script output in box-drawn blocks |
 | `--sessions` | Show session ID prefix on each line (useful with `--all`) |
-| `--status=FAIL,CRASH` | Filter to specific status codes (comma-separated) |
+| `--status=FAIL,BOOM` | Filter to specific status codes (comma-separated) |
 | `--list` | List all sessions with summary info instead of tailing |
 
 ### Status of each task
@@ -610,7 +610,7 @@ prove_it monitor <id>        # tail a specific session (prefix match OK)
 | `PASS` | Task passed |
 | `FAIL` | Task failed (blocks the action) |
 | `SKIP` | Task skipped (condition not met, disabled, cached, or reviewer said SKIP) |
-| `CRASH` | Task crashed (unexpected error—treated as a soft skip unless model is explicitly set) |
+| `BOOM` | Task crashed (unexpected error—treated as a soft skip unless model is explicitly set) |
 | `EXEC` | Task is executing |
 | `DONE` | Async review complete, waiting for Stop hook to enforce |
 | `ENFORCED:PASS` | Async result was harvested and settled as pass |

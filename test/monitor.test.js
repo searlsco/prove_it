@@ -305,12 +305,12 @@ describe('monitor', () => {
   })
 
   describe('statusFilter (--status=)', () => {
-    it('cmdMonitor parses --status=FAIL,CRASH into statusFilter array', () => {
+    it('cmdMonitor parses --status=FAIL,BOOM into statusFilter array', () => {
       // Verify the CLI parsing logic by testing the pattern directly
-      const args = ['--all', '--status=FAIL,CRASH']
+      const args = ['--all', '--status=FAIL,BOOM']
       const statusArg = args.find(a => a.startsWith('--status='))
       const statusFilter = statusArg ? statusArg.slice('--status='.length).split(',').map(s => s.trim().toUpperCase()) : null
-      assert.deepStrictEqual(statusFilter, ['FAIL', 'CRASH'])
+      assert.deepStrictEqual(statusFilter, ['FAIL', 'BOOM'])
     })
 
     it('cmdMonitor returns null when no --status flag', () => {

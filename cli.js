@@ -1088,7 +1088,7 @@ Monitor options:
   prove_it monitor --all               Tail all sessions and project logs
   prove_it monitor --all --sessions    Show session IDs
   prove_it monitor --list              List all sessions
-  prove_it monitor --status=FAIL,CRASH Filter by status
+  prove_it monitor --status=FAIL,BOOM  Filter by status
   prove_it monitor --project           Scope to current project directory
   prove_it monitor --project=/foo/bar  Scope to specific project directory
   prove_it monitor --verbose           Show full prompts, responses, and output
