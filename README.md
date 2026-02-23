@@ -603,7 +603,7 @@ prove_it monitor <id>        # tail a specific session (prefix match OK)
 | `--status=FAIL,CRASH` | Filter to specific status codes (comma-separated) |
 | `--list` | List all sessions with summary info instead of tailing |
 
-### Status codes
+### Status of each task
 
 | Code | Meaning |
 |------|---------|
@@ -611,8 +611,7 @@ prove_it monitor <id>        # tail a specific session (prefix match OK)
 | `FAIL` | Task failed (blocks the action) |
 | `SKIP` | Task skipped (condition not met, disabled, cached, or reviewer said SKIP) |
 | `CRASH` | Task crashed (unexpected error—treated as a soft skip unless model is explicitly set) |
-| `EXEC` | Script task is executing (displayed as EXEC, logged as RUNNING) |
-| `RUNNING` | Async worker is executing the task |
+| `EXEC` | Task is executing |
 | `DONE` | Async review complete, waiting for Stop hook to enforce |
 | `ENFORCED:PASS` | Async result was harvested and settled as pass |
 | `ENFORCED:SKIP` | Async result was harvested and settled as skip |
