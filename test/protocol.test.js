@@ -48,16 +48,32 @@ describe('protocol', () => {
       process.stdout.write = origWrite
     })
 
-    it('includes systemMessage when provided', () => {
-      emitPreToolUse('deny', 'reason', 'user-visible msg')
+    it('includes additionalContext in hookSpecificOutput when provided', () => {
+      emitPreToolUse('deny', 'reason', { additionalContext: 'context for claude' })
       const output = JSON.parse(captured)
-      assert.strictEqual(output.systemMessage, 'user-visible msg')
+      assert.strictEqual(output.hookSpecificOutput.additionalContext, 'context for claude')
       assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny')
+      assert.strictEqual(output.systemMessage, undefined)
     })
 
-    it('omits systemMessage when not provided', () => {
+    it('includes systemMessage at top level when provided', () => {
+      emitPreToolUse('deny', 'reason', { systemMessage: 'user-visible msg' })
+      const output = JSON.parse(captured)
+      assert.strictEqual(output.systemMessage, 'user-visible msg')
+      assert.strictEqual(output.hookSpecificOutput.additionalContext, undefined)
+    })
+
+    it('supports both additionalContext and systemMessage together', () => {
+      emitPreToolUse('deny', 'reason', { additionalContext: 'ctx', systemMessage: 'msg' })
+      const output = JSON.parse(captured)
+      assert.strictEqual(output.hookSpecificOutput.additionalContext, 'ctx')
+      assert.strictEqual(output.systemMessage, 'msg')
+    })
+
+    it('omits both fields when opts is empty', () => {
       emitPreToolUse('allow', 'ok')
       const output = JSON.parse(captured)
+      assert.strictEqual(output.hookSpecificOutput.additionalContext, undefined)
       assert.strictEqual(output.systemMessage, undefined)
     })
   })

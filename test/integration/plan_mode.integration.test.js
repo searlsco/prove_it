@@ -53,8 +53,8 @@ describe('Plan mode enforcement via PreToolUse', () => {
       assert.ok(result.output, 'Should produce JSON output')
       assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow')
       assert.ok(
-        result.output.systemMessage.includes('prove_it signal done'),
-        `systemMessage should include signal instruction, got: ${result.output.systemMessage}`
+        result.output.hookSpecificOutput.additionalContext.includes('prove_it signal done'),
+        `additionalContext should include signal instruction, got: ${result.output.hookSpecificOutput.additionalContext}`
       )
     })
 
