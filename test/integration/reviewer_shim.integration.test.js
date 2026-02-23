@@ -3,7 +3,7 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 
-const { runReviewer } = require('../../lib/shared')
+const { runReviewer, classifyVerdict } = require('../../lib/shared')
 
 const FIXTURES_DIR = path.join(__dirname, '..', 'fixtures')
 
@@ -160,5 +160,70 @@ describe('runReviewer with fixture shims', () => {
 
     process.env.PATH = origPath
     cleanup()
+  })
+})
+
+describe('classifyVerdict with mock claude', () => {
+  const tmpDir = path.join(require('os').tmpdir(), 'prove_it_classify_' + Date.now())
+  let origPath
+
+  function shimClaude (script) {
+    fs.mkdirSync(tmpDir, { recursive: true })
+    const p = path.join(tmpDir, 'claude')
+    fs.writeFileSync(p, `#!/usr/bin/env bash\ncat > /dev/null\n${script}\n`)
+    fs.chmodSync(p, 0o755)
+    origPath = process.env.PATH
+    process.env.PATH = `${tmpDir}:${origPath}`
+  }
+
+  function teardown () {
+    process.env.PATH = origPath
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  }
+
+  it('returns { verdict: "PASS" } when classifier outputs PASS', () => {
+    shimClaude('echo PASS')
+    const result = classifyVerdict('The code looks great, all tests pass.')
+    assert.deepStrictEqual(result, { verdict: 'PASS' })
+    teardown()
+  })
+
+  it('returns { verdict: "FAIL" } when classifier outputs FAIL', () => {
+    shimClaude('echo FAIL')
+    const result = classifyVerdict('There are several issues with the implementation.')
+    assert.deepStrictEqual(result, { verdict: 'FAIL' })
+    teardown()
+  })
+
+  it('returns { verdict: "SKIP" } when classifier outputs SKIP', () => {
+    shimClaude('echo SKIP')
+    const result = classifyVerdict('Changes are unrelated to coverage.')
+    assert.deepStrictEqual(result, { verdict: 'SKIP' })
+    teardown()
+  })
+
+  it('returns error when classifier outputs a non-verdict sentence', () => {
+    shimClaude('echo "I cannot determine the verdict from this output."')
+    const result = classifyVerdict('Some gibberish output')
+    assert.ok(result.error)
+    assert.ok(result.error.includes('verdict unclear'))
+    teardown()
+  })
+
+  it('returns error when classifier exits non-zero', () => {
+    shimClaude('exit 1')
+    const result = classifyVerdict('Some reviewer output')
+    assert.ok(result.error)
+    assert.ok(result.error.includes('classifier exited 1'))
+    teardown()
+  })
+
+  it('truncates long input to 2000 chars', () => {
+    // Shim dumps stdin length so we can verify truncation
+    shimClaude('echo PASS')
+    const longOutput = 'x'.repeat(5000)
+    const result = classifyVerdict(longOutput)
+    assert.deepStrictEqual(result, { verdict: 'PASS' })
+    teardown()
   })
 })
