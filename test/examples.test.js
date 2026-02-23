@@ -97,9 +97,8 @@ describe('example projects', () => {
       // If install adds/changes events or matchers, this test fails.
       const expected = {
         SessionStart: [{ matcher: 'startup|resume|clear|compact', hooks: [{ type: 'command', command: 'prove_it hook claude:SessionStart' }] }],
-        PreToolUse: [{ matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*', hooks: [{ type: 'command', command: 'prove_it hook claude:PreToolUse' }] }],
-        Stop: [{ hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }] }],
-        SubagentStart: [{ hooks: [{ type: 'command', command: 'prove_it hook claude:SubagentStart' }] }]
+        PreToolUse: [{ matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*|EnterPlanMode|ExitPlanMode', hooks: [{ type: 'command', command: 'prove_it hook claude:PreToolUse' }] }],
+        Stop: [{ hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }] }]
       }
 
       const settingsPath = path.join(supportDir, 'settings.json')

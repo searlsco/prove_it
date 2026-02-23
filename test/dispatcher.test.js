@@ -974,6 +974,45 @@ describe('claude dispatcher', () => {
     })
   })
 
+  describe('plan mode matcher coverage', () => {
+    it('PreToolUse matcher matches EnterPlanMode', () => {
+      const entry = {
+        type: 'claude',
+        event: 'PreToolUse',
+        matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*|EnterPlanMode|ExitPlanMode',
+        tasks: []
+      }
+      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'EnterPlanMode' }), true)
+    })
+
+    it('PreToolUse matcher matches ExitPlanMode', () => {
+      const entry = {
+        type: 'claude',
+        event: 'PreToolUse',
+        matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*|EnterPlanMode|ExitPlanMode',
+        tasks: []
+      }
+      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'ExitPlanMode' }), true)
+    })
+
+    it('PreToolUse matcher still matches existing tools', () => {
+      const entry = {
+        type: 'claude',
+        event: 'PreToolUse',
+        matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*|EnterPlanMode|ExitPlanMode',
+        tasks: []
+      }
+      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Edit' }), true)
+      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Bash' }), true)
+      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'mcp__xcode__build' }), true)
+    })
+
+    it('PLAN_SIGNAL_CONTEXT contains signal command', () => {
+      const { PLAN_SIGNAL_CONTEXT } = require('../lib/dispatcher/claude')
+      assert.ok(PLAN_SIGNAL_CONTEXT.includes('prove_it signal done'))
+    })
+  })
+
   describe('cleanAsyncDir', () => {
     let tmpDir
     let origProveItDir

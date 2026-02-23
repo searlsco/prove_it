@@ -57,14 +57,11 @@ function correctSettings () {
       hooks: [{ type: 'command', command: 'prove_it hook claude:SessionStart' }]
     }],
     PreToolUse: [{
-      matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*',
+      matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*|EnterPlanMode|ExitPlanMode',
       hooks: [{ type: 'command', command: 'prove_it hook claude:PreToolUse' }]
     }],
     Stop: [{
       hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }]
-    }],
-    SubagentStart: [{
-      hooks: [{ type: 'command', command: 'prove_it hook claude:SubagentStart' }]
     }]
   })
 }
@@ -112,7 +109,7 @@ describe('doctor', () => {
     writeSettings(tmpHome, correctSettings())
     let result = run()
     assert.match(result.stdout, /\[x\] SessionStart dispatcher \(matcher: startup\|resume\|clear\|compact\)/)
-    assert.match(result.stdout, /\[x\] PreToolUse dispatcher \(matcher: Write\|Edit\|MultiEdit\|NotebookEdit\|Bash\|mcp__\.\*\)/)
+    assert.match(result.stdout, /\[x\] PreToolUse dispatcher \(matcher: Write\|Edit\|MultiEdit\|NotebookEdit\|Bash\|mcp__\.\*\|EnterPlanMode\|ExitPlanMode\)/)
     assert.match(result.stdout, /\[x\] Stop dispatcher/)
 
     // Missing dispatchers -> [ ]
