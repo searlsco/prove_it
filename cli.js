@@ -1041,8 +1041,6 @@ function cmdMonitor () {
   const list = args.includes('--list')
   const showSession = args.includes('--sessions')
   const verbose = args.includes('--verbose')
-  const forceTui = args.includes('--tui')
-  const forceNoTui = args.includes('--no-tui')
   const statusArg = args.find(a => a.startsWith('--status='))
   const statusFilter = statusArg ? statusArg.slice('--status='.length).split(',').map(s => s.trim().toUpperCase()) : null
 
@@ -1056,18 +1054,6 @@ function cmdMonitor () {
   }
 
   const sessionId = args.find(a => !a.startsWith('--')) || null
-
-  // TUI mode: default when interactive TTY and no streaming flags
-  const streamingFlags = all || list || verbose
-  const isTTY = process.stdout.isTTY && process.stdin.isTTY
-  const useTui = forceTui || (!forceNoTui && !streamingFlags && isTTY)
-
-  if (useTui) {
-    const { createDashboard } = require('./lib/tui/dashboard')
-    const dashboard = createDashboard({ sessionId, project })
-    dashboard.start()
-    return
-  }
 
   monitor({ all, list, showSession, verbose, statusFilter, project, sessionId })
 }
@@ -1098,9 +1084,7 @@ Commands:
   -v, --version  Show version number
 
 Monitor options:
-  prove_it monitor                     Interactive TUI (default when TTY)
-  prove_it monitor --tui               Force interactive TUI mode
-  prove_it monitor --no-tui            Force streaming mode (tail)
+  prove_it monitor                     Tail most recent session
   prove_it monitor --all               Tail all sessions and project logs
   prove_it monitor --all --sessions    Show session IDs
   prove_it monitor --list              List all sessions
