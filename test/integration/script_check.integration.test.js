@@ -206,7 +206,49 @@ describe('script check', () => {
       assert.strictEqual(compat.cached, true)
     })
 
-    // 6. configEnv story (3 → 1)
+    // 6. stdin piping story
+    it('stdin: script receives hook input when context has toolName/toolInput', () => {
+      makeScript('read_stdin', 'cat')
+      const result = runScriptCheck(
+        { name: 'stdin-test', command: './script/read_stdin', mtime: false },
+        {
+          rootDir: tmpDir,
+          localCfgPath: null,
+          sources: null,
+          maxChars: 12000,
+          hookEvent: 'PreToolUse',
+          sessionId: 'sess-123',
+          toolName: 'WebFetch',
+          toolInput: { url: 'https://github.com/foo/bar' }
+        }
+      )
+      assert.strictEqual(result.pass, true)
+      const parsed = JSON.parse(result.output)
+      assert.strictEqual(parsed.hook_event_name, 'PreToolUse')
+      assert.strictEqual(parsed.session_id, 'sess-123')
+      assert.strictEqual(parsed.tool_name, 'WebFetch')
+      assert.deepStrictEqual(parsed.tool_input, { url: 'https://github.com/foo/bar' })
+    })
+
+    it('stdin: script receives no stdin when context has no tool info', () => {
+      // Script that outputs "empty" if stdin is empty, or the stdin content if present
+      makeScript('check_stdin', [
+        'input=$(cat)',
+        'if [ -z "$input" ]; then',
+        '  echo "empty"',
+        'else',
+        '  echo "$input"',
+        'fi'
+      ].join('\n'))
+      const result = runScriptCheck(
+        { name: 'no-stdin-test', command: './script/check_stdin', mtime: false },
+        { rootDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000 }
+      )
+      assert.strictEqual(result.pass, true)
+      assert.ok(result.output.includes('empty'), `Expected "empty" but got: ${result.output}`)
+    })
+
+    // 7. configEnv story (3 → 1)
     it('configEnv: custom var, PROVE_IT_DISABLED override protection, null configEnv', () => {
       // custom env var passed to subprocess
       makeScript('env_check', [

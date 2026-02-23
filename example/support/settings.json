@@ -13,7 +13,6 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*|EnterPlanMode|ExitPlanMode",
         "hooks": [
           {
             "type": "command",

@@ -775,6 +775,62 @@ prove_it doctor
 - **Async reviews not enforcing**—Async results are harvested on the next Stop. If Claude stops work before the async review completes, the result will be enforced on the stop after that. Check `prove_it monitor --verbose` to see RUNNING/DONE status progression.
 - **Config errors after upgrade**—Run `prove_it reinstall && prove_it reinit` to reset to current defaults
 
+## Cookbook
+
+### Prefer `gh` CLI over WebFetch for GitHub URLs
+
+Claude sometimes uses `WebFetch` for GitHub URLs when the `gh` CLI is faster and handles authentication. This guard script denies `WebFetch` for any `github.com` URL and tells Claude to use `gh` instead.
+
+**1. Create the guard script** (requires `jq`):
+
+```bash
+mkdir -p ~/bin/prove_it_tasks
+cat > ~/bin/prove_it_tasks/prefer_gh_cli_over_fetch << 'SCRIPT'
+#!/usr/bin/env bash
+# Guard: deny WebFetch for GitHub URLs, redirect to gh CLI.
+# Reads hook input from stdin (prove_it pipes tool_name + tool_input).
+
+input=$(cat)
+tool=$(echo "$input" | jq -r '.tool_name // empty')
+
+[ "$tool" = "WebFetch" ] || exit 0
+
+url=$(echo "$input" | jq -r '.tool_input.url // empty')
+
+if echo "$url" | grep -qi 'github\.com'; then
+  echo "Do not use WebFetch for GitHub URLs. Use the gh CLI instead (e.g., gh pr view, gh issue view, gh api)."
+  exit 1
+fi
+SCRIPT
+chmod +x ~/bin/prove_it_tasks/prefer_gh_cli_over_fetch
+```
+
+**2. Add to your global config** (`~/.claude/prove_it/config.json`):
+
+```json
+{
+  "hooks": [
+    {
+      "type": "claude",
+      "event": "PreToolUse",
+      "tasks": [
+        {
+          "name": "prefer-gh-cli-over-fetch",
+          "type": "script",
+          "command": "~/bin/prove_it_tasks/prefer_gh_cli_over_fetch",
+          "mtime": false,
+          "quiet": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+`mtime: false` because the decision depends on the URL, not source files. `quiet: true` suppresses log noise on every pass (most tool calls aren't WebFetch).
+
+**How it works:** prove_it pipes hook context (tool name, tool input, session ID) as JSON to script tasks on stdin. The script reads stdin, checks whether the tool is `WebFetch` with a GitHub URL, and exits 1 to deny it. Non-WebFetch tools exit 0 immediately. Because the PreToolUse registration has no matcher, prove_it sees all tool calls—individual scripts bail early for irrelevant tools.
+
 ## Examples
 
 See [`example/basic/`](example/basic/) and [`example/advanced/`](example/advanced/) for working projects with configs, test suites, and reviewer prompts.
