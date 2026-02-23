@@ -153,6 +153,60 @@ describe('parseVerdict', () => {
     })
   })
 
+  describe('markdown-formatted verdicts', () => {
+    it('parses **FAIL** (bold)', () => {
+      const result = parseVerdict('**FAIL**\n\nThe code has issues.')
+      assert.strictEqual(result.pass, false)
+      assert.ok(result.body.includes('The code has issues'))
+    })
+
+    it('parses **PASS**: reason (bold with colon)', () => {
+      const result = parseVerdict('**PASS**: all tests cover new behavior')
+      assert.strictEqual(result.pass, true)
+      assert.strictEqual(result.reason, 'all tests cover new behavior')
+    })
+
+    it('parses *FAIL*: reason (italic)', () => {
+      const result = parseVerdict('*FAIL*: missing tests')
+      assert.strictEqual(result.pass, false)
+      assert.strictEqual(result.reason, 'missing tests')
+    })
+
+    it('parses **SKIP**: reason', () => {
+      const result = parseVerdict('**SKIP**: unrelated changes')
+      assert.strictEqual(result.skip, true)
+      assert.strictEqual(result.reason, 'unrelated changes')
+    })
+
+    it('parses # FAIL as markdown heading', () => {
+      const result = parseVerdict('# FAIL\n\nDetails here.')
+      assert.strictEqual(result.pass, false)
+    })
+
+    it('parses ## PASS: reason as heading', () => {
+      const result = parseVerdict('## PASS: looks good')
+      assert.strictEqual(result.pass, true)
+      assert.strictEqual(result.reason, 'looks good')
+    })
+
+    it('finds **FAIL** after preamble', () => {
+      const result = parseVerdict('Based on my review:\n\n**FAIL**\n\nIssues found.')
+      assert.strictEqual(result.pass, false)
+    })
+
+    it('parses ***FAIL***: reason (bold italic)', () => {
+      const result = parseVerdict('***FAIL***: no coverage')
+      assert.strictEqual(result.pass, false)
+      assert.strictEqual(result.reason, 'no coverage')
+    })
+
+    it('parses __PASS__: reason (underscore bold)', () => {
+      const result = parseVerdict('__PASS__: tests are adequate')
+      assert.strictEqual(result.pass, true)
+      assert.strictEqual(result.reason, 'tests are adequate')
+    })
+  })
+
   describe('unexpected responses', () => {
     it('returns error for unexpected output', () => {
       const result = parseVerdict('I think the code looks good')
