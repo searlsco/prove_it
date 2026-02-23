@@ -1,6 +1,7 @@
 ---
 name: prove-coverage
 description: Review code changes for test coverage adequacy
+context: fork
 allowed-tools:
   - Bash
   - Read

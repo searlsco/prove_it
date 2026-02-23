@@ -637,6 +637,21 @@ those changes work. Claude will:
 The skill is installed to `~/.claude/skills/prove/SKILL.md` and updated on
 every `prove_it install`.
 
+## Built-in reviews
+
+prove_it ships review prompts that can be run manually or automatically:
+
+| Skill | What it reviews | Designed for |
+|-------|----------------|--------------|
+| `/prove-coverage` | Test coverage adequacy for changed code | Haiku (fast, cheap) |
+| `/prove-shipworthy` | Pre-ship review: correctness, integration, security, tests, omissions | Opus (thorough) |
+
+**Run manually** — invoke `/prove-shipworthy` or `/prove-coverage` as a slash command whenever you want a review. Both run as subagents (`context: fork`), so they don't consume your conversation context.
+
+**Run automatically** — configure the same prompts as prove_it agent tasks and they'll fire on lifecycle events. The default config does this: `prove-coverage` runs async after churn thresholds are hit, and `prove-shipworthy` runs on `prove_it signal done`. See [Skill-based prompts](#skill-based-prompts) for config details.
+
+The manual and automatic paths use the same prompt — the difference is who triggers it (you vs. prove_it) and where it runs (Claude Code subagent vs. `claude -p` subprocess). Both produce an independent review outside the working agent's context.
+
 ## Subprocess environment (`taskEnv`)
 
 When prove_it spawns reviewer subagents or runs script tasks, other hooks installed in your environment (like [turbocommit](https://github.com/Siege/turbocommit)) may fire inside those subprocesses. Use the top-level `taskEnv` field to set environment variables across all prove_it subprocesses:
