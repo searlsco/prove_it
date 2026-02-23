@@ -493,9 +493,9 @@ Set `async: true` on an agent task to run it in the background:
 
 Async tasks spawn a detached child process and return immediately, so they don't block Claude from continuing work. The lifecycle is:
 
-1. **Spawn**—prove_it forks a worker, logs SPAWNED, and lets the Stop pass
+1. **Spawn**—prove_it forks a worker and lets the Stop pass
 2. **Run**—the worker runs the reviewer in the background (RUNNING → PASS/FAIL/SKIP)
-3. **Pend**—the worker writes its result and logs PENDING
+3. **Done**—the worker writes its result and logs DONE
 4. **Harvest**—on the next Stop, prove_it reads all pending results *before* running sync tasks
 5. **Enforce**—results are settled: ENFORCED:PASS lets the stop continue, a FAIL blocks just like a sync failure
 
@@ -612,9 +612,8 @@ prove_it monitor <id>        # tail a specific session (prefix match OK)
 | `SKIP` | Task skipped (condition not met, disabled, cached, or reviewer said SKIP) |
 | `CRASH` | Task crashed (unexpected error—treated as a soft skip unless model is explicitly set) |
 | `EXEC` | Script task is executing (displayed as EXEC, logged as RUNNING) |
-| `SPAWNED` | Async task was forked to run in the background |
 | `RUNNING` | Async worker is executing the task |
-| `PENDING` | Async task completed, awaiting enforcement on next Stop |
+| `DONE` | Async review complete, waiting for Stop hook to enforce |
 | `ENFORCED:PASS` | Async result was harvested and settled as pass |
 | `ENFORCED:SKIP` | Async result was harvested and settled as skip |
 | `APPEAL` | Developer wrote a backchannel appeal before this review cycle |
@@ -759,7 +758,7 @@ prove_it doctor
     "hooks": [...]
   }
   ```
-- **Async reviews not enforcing**—Async results are harvested on the next Stop. If Claude stops work before the async review completes, the result will be enforced on the stop after that. Check `prove_it monitor --verbose` to see SPAWNED/RUNNING/PENDING status progression.
+- **Async reviews not enforcing**—Async results are harvested on the next Stop. If Claude stops work before the async review completes, the result will be enforced on the stop after that. Check `prove_it monitor --verbose` to see RUNNING/DONE status progression.
 - **Config errors after upgrade**—Run `prove_it reinstall && prove_it reinit` to reset to current defaults
 
 ## Examples
