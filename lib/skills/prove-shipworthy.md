@@ -2,6 +2,7 @@
 name: prove-shipworthy
 description: Senior staff-level pre-ship review for correctness, integration, security, and test quality
 context: fork
+model: opus
 allowed-tools:
   - Bash
   - Read
