@@ -11,7 +11,7 @@ describe('example hook dispatch', () => {
   const shimPath = path.join(supportDir, 'prove_it')
   const testBinDir = path.join(__dirname, '..', 'bin')
   const fixturesDir = path.join(__dirname, '..', 'fixtures')
-  const dispatchEnv = { ...process.env, PATH: `${fixturesDir}:${testBinDir}:${process.env.PATH}` }
+  const dispatchEnv = { ...process.env, PATH: `${fixturesDir}:${testBinDir}:${process.env.PATH}`, PROVE_IT_DISABLED: '' }
 
   for (const name of EXAMPLES) {
     describe(name, () => {
