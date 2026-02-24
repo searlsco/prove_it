@@ -39,7 +39,10 @@
         {
           "name": "fast-tests",
           "type": "script",
-          "command": "./script/test_fast"
+          "command": "./script/test_fast",
+          "when": {
+            "sourcesModifiedSinceLastRun": true
+          }
         },
         {
           "name": "full-tests",
@@ -82,10 +85,13 @@
         {
           "name": "full-tests",
           "type": "script",
-          "command": "./script/test"
+          "command": "./script/test",
+          "when": {
+            "sourcesModifiedSinceLastRun": true
+          }
         }
       ]
     }
   ],
-  "initSeed": "d633976f933d"
+  "initSeed": "85acb4683ce8"
 }
