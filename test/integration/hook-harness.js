@@ -192,7 +192,8 @@ function setupSessionWithDiffs (tmpDir, sessionId, projectDir) {
 function isolatedEnv (tmpDir) {
   return {
     HOME: tmpDir,
-    PROVE_IT_DIR: path.join(tmpDir, '.prove_it_test')
+    PROVE_IT_DIR: path.join(tmpDir, '.prove_it_test'),
+    PROVE_IT_DISABLED: ''
   }
 }
 
