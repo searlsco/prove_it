@@ -428,10 +428,105 @@ describe('install/uninstall', () => {
 
     const settings = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'settings.json'), 'utf8'))
     assert.ok(!JSON.stringify(settings).includes('prove_it hook'))
-    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'prove_it')))
+    // Directory preserved but contents cleared
+    const proveItDir = path.join(tmpDir, '.claude', 'prove_it')
+    assert.ok(fs.existsSync(proveItDir), 'prove_it directory should still exist')
+    assert.strictEqual(fs.readdirSync(proveItDir).length, 0, 'prove_it directory should be empty')
     for (const name of ['prove', 'prove-coverage', 'prove-shipworthy']) {
       assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'skills', name)), `Skill ${name} should be removed`)
     }
+  })
+
+  it('uninstall preserves directory when it is a symlink', () => {
+    // Create a real prove_it directory with config
+    const realDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_real_'))
+    const realProveIt = path.join(realDir, 'prove_it')
+    fs.mkdirSync(realProveIt, { recursive: true })
+    fs.writeFileSync(path.join(realProveIt, 'config.json'), '{"enabled": true}')
+
+    try {
+      // Set up tmpDir with a symlink to the real directory
+      const claudeDir = path.join(tmpDir, '.claude')
+      fs.mkdirSync(claudeDir, { recursive: true })
+      const symlinkPath = path.join(claudeDir, 'prove_it')
+      fs.symlinkSync(realProveIt, symlinkPath)
+
+      // Also need settings.json for uninstall to work
+      fs.writeFileSync(path.join(claudeDir, 'settings.json'), '{}')
+
+      const env = { ...process.env, HOME: tmpDir }
+      runCli(['uninstall'], { env })
+
+      // Symlink should still exist and still be a symlink
+      assert.ok(fs.existsSync(symlinkPath), 'symlink should still exist')
+      assert.ok(fs.lstatSync(symlinkPath).isSymbolicLink(), 'should still be a symlink')
+      // Contents should be cleared
+      assert.strictEqual(fs.readdirSync(symlinkPath).length, 0, 'contents should be removed')
+    } finally {
+      fs.rmSync(realDir, { recursive: true, force: true })
+    }
+  })
+
+  it('uninstall backs up global config to tmpdir', () => {
+    const env = { ...process.env, HOME: tmpDir }
+    runCli(['install'], { env })
+
+    // Customize the config
+    const configPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    cfg.customField = 'my-custom-value'
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n')
+
+    const r = runCli(['uninstall'], { env })
+
+    // stdout should contain the backup path
+    assert.match(r.stdout, /Backup:/)
+    // Extract the backup path from output
+    const backupMatch = r.stdout.match(/Backup: (.+config\.json)/)
+    assert.ok(backupMatch, 'should print backup path')
+    const backupPath = backupMatch[1]
+    assert.ok(fs.existsSync(backupPath), 'backup file should exist')
+    const backup = JSON.parse(fs.readFileSync(backupPath, 'utf8'))
+    assert.strictEqual(backup.customField, 'my-custom-value')
+  })
+})
+
+describe('init safety guards', () => {
+  let tmpDir
+
+  beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_guard_')) })
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }) })
+
+  it('init refuses to run in home directory', () => {
+    const env = { ...process.env, HOME: tmpDir }
+    const r = runCli(['init'], { cwd: tmpDir, env })
+    assert.strictEqual(r.exitCode, 1)
+    assert.match(r.stderr, /project directory/)
+  })
+
+  it('init refuses to run inside ~/.claude/', () => {
+    const claudeDir = path.join(tmpDir, '.claude')
+    fs.mkdirSync(claudeDir, { recursive: true })
+    const env = { ...process.env, HOME: tmpDir }
+    const r = runCli(['init'], { cwd: claudeDir, env })
+    assert.strictEqual(r.exitCode, 1)
+    assert.match(r.stderr, /project directory/)
+  })
+
+  it('deinit refuses to run in home directory', () => {
+    const env = { ...process.env, HOME: tmpDir }
+    const r = runCli(['deinit'], { cwd: tmpDir, env })
+    assert.strictEqual(r.exitCode, 1)
+    assert.match(r.stderr, /project directory/)
+  })
+
+  it('deinit refuses to run inside ~/.claude/', () => {
+    const claudeDir = path.join(tmpDir, '.claude')
+    fs.mkdirSync(claudeDir, { recursive: true })
+    const env = { ...process.env, HOME: tmpDir }
+    const r = runCli(['deinit'], { cwd: claudeDir, env })
+    assert.strictEqual(r.exitCode, 1)
+    assert.match(r.stderr, /project directory/)
   })
 })
 

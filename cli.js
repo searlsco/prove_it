@@ -245,6 +245,31 @@ async function cmdInstall () {
 // Uninstall command
 // ============================================================================
 
+function backupGlobalConfig (claudeDir) {
+  const configPath = path.join(claudeDir, 'prove_it', 'config.json')
+  try {
+    const content = fs.readFileSync(configPath, 'utf8')
+    if (!content || content.trim().length === 0) return null
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const backupDir = path.join(os.tmpdir(), `prove_it-backup-${stamp}`)
+    fs.mkdirSync(backupDir, { recursive: true })
+    const backupPath = path.join(backupDir, 'config.json')
+    fs.writeFileSync(backupPath, content)
+    return backupPath
+  } catch {
+    return null
+  }
+}
+
+function clearDirectoryContents (dirPath) {
+  try {
+    if (!fs.existsSync(dirPath)) return
+    for (const entry of fs.readdirSync(dirPath)) {
+      rmIfExists(path.join(dirPath, entry))
+    }
+  } catch {}
+}
+
 function cmdUninstall () {
   const claudeDir = getClaudeDir()
   const settingsPath = path.join(claudeDir, 'settings.json')
@@ -260,8 +285,11 @@ function cmdUninstall () {
     writeJson(settingsPath, settings)
   }
 
-  // Remove prove_it files (best-effort)
-  rmIfExists(path.join(claudeDir, 'prove_it'))
+  // Back up global config before removing it
+  const backupPath = backupGlobalConfig(claudeDir)
+
+  // Remove prove_it directory contents (preserves symlinks and the directory itself)
+  clearDirectoryContents(path.join(claudeDir, 'prove_it'))
   rmIfExists(path.join(claudeDir, 'rules', 'prove_it.md'))
   for (const { name } of SKILLS) {
     rmIfExists(path.join(claudeDir, 'skills', name))
@@ -269,7 +297,10 @@ function cmdUninstall () {
 
   log('prove_it uninstalled.')
   log(`  Settings: ${settingsPath}`)
-  log('  Removed: ~/.claude/prove_it/')
+  if (backupPath) {
+    log(`  Backup: ${backupPath}`)
+  }
+  log('  Removed: ~/.claude/prove_it/ (contents)')
   log('  Removed: ~/.claude/rules/prove_it.md')
   for (const { name } of SKILLS) {
     log(`  Removed: ~/.claude/skills/${name}/`)
@@ -320,7 +351,22 @@ function scriptHasRecord (filePath) {
   }
 }
 
+function guardProjectDir (label) {
+  const cwd = fs.realpathSync(process.cwd())
+  const home = fs.realpathSync(os.homedir())
+  if (cwd === home) {
+    console.error(`prove_it ${label} must be run inside a project directory, not your home directory.`)
+    process.exit(1)
+  }
+  const claudePrefix = path.join(home, '.claude')
+  if (cwd === claudePrefix || cwd.startsWith(claudePrefix + path.sep)) {
+    console.error(`prove_it ${label} must be run inside a project directory, not inside ~/.claude/.`)
+    process.exit(1)
+  }
+}
+
 async function cmdInit (options = {}) {
+  guardProjectDir('init')
   const { initProject, overwriteTeamConfig } = require('./lib/init')
   const repoRoot = process.cwd()
   const { preservedSources } = options
@@ -528,6 +574,7 @@ async function cmdInit (options = {}) {
 // ============================================================================
 
 function cmdDeinit () {
+  guardProjectDir('deinit')
   const { isScriptTestStub, isDefaultRuleFile, removeGitHookShim } = require('./lib/init')
   const repoRoot = process.cwd()
   const removed = []
