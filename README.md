@@ -34,7 +34,7 @@ prove_it is a config-driven framework for enforcing quality in Claude Code sessi
 - **Gate tasks on churn** — reviews trigger after N lines changed (net git diff) or N lines written (gross, catches thrashing)
 - **Inject context on session start** — briefs your agent on what prove_it will inspect for and when, along with instructions on how to use it
 - **Guard tool usage** — block specific tool calls (config file edits, dangerous commands) before they execute
-- **Track runs** — skip re-running tests when code hasn't changed since the last pass
+- **Track runs** — skip re-running tasks when code hasn't changed since the last pass (via `when: { sourcesModifiedSinceLastRun: true }`)
 
 Out of the box, `prove_it init` generates the Searls-stack of configured tasks:
 
@@ -203,16 +203,6 @@ Set `timeout` (in milliseconds) to override the default execution timeout:
 
 Defaults: 60s for script tasks, 120s for agent tasks, 30s for env tasks.
 
-### Run caching (`mtime`)
-
-Script tasks cache their results by default. When `mtime: true` (the default for script tasks), prove_it checks whether source files have been modified since the last successful run. If nothing changed, the task is skipped with a "cached pass" reason.
-
-Set `mtime: false` to disable caching and force the task to run every time:
-
-```json
-{ "name": "always-run", "type": "script", "command": "./script/check", "mtime": false }
-```
-
 ### Matchers and triggers
 
 PreToolUse hooks can filter by tool name and command patterns:
@@ -276,7 +266,7 @@ The env var must be set in both clauses, but either churn threshold firing is en
 | `signal` | string | Passes when the named signal (`done`, `stuck`, `idle`) is active for the current session |
 | `linesChanged` | number | Passes when at least N source lines have changed (additions + deletions) since the task last ran. Git-based—works in both Claude hooks and git hooks. |
 | `linesWritten` | number | Passes when at least N gross lines have been written by the agent since the task last ran. Catches thrashing. Claude Code sessions only. |
-| `sourcesModifiedSinceLastRun` | boolean | Passes when source file mtimes are newer than the last run |
+| `sourcesModifiedSinceLastRun` | boolean | Passes when source file mtimes are newer than the last successful run. Works for any task type (script, agent, env). The dispatcher records run data on pass; failures are never cached so the task re-fires until it passes. Tasks without this condition always run (no implicit caching). |
 | `sourceFilesEdited` | boolean | Passes when source files were edited this turn (session-scoped, tool-agnostic) |
 | `toolsUsed` | string[] | Passes when any of the listed tools were used this turn |
 
@@ -818,7 +808,6 @@ chmod +x ~/bin/prove_it_tasks/prefer_gh_cli_over_fetch
           "name": "prefer-gh-cli-over-fetch",
           "type": "script",
           "command": "~/bin/prove_it_tasks/prefer_gh_cli_over_fetch",
-          "mtime": false,
           "quiet": true
         }
       ]
@@ -827,7 +816,7 @@ chmod +x ~/bin/prove_it_tasks/prefer_gh_cli_over_fetch
 }
 ```
 
-`mtime: false` because the decision depends on the URL, not source files. `quiet: true` suppresses log noise on every pass (most tool calls aren't WebFetch).
+`quiet: true` suppresses log noise on every pass (most tool calls aren't WebFetch).
 
 **How it works:** prove_it pipes hook context (tool name, tool input, session ID) as JSON to script tasks on stdin. The script reads stdin, checks whether the tool is `WebFetch` with a GitHub URL, and exits 1 to deny it. Non-WebFetch tools exit 0 immediately. Because the PreToolUse registration has no matcher, prove_it sees all tool calls—individual scripts bail early for irrelevant tools.
 

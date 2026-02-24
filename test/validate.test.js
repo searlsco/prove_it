@@ -310,11 +310,11 @@ describe('validateConfig', () => {
       assert.ok(errors.some(e => e.includes('timeout must be a positive number')))
     })
 
-    it('errors on non-boolean mtime', () => {
+    it('errors when mtime (removed key) is present in config', () => {
       const { errors } = validateConfig(cfgWithTask({
-        name: 'a', type: 'script', command: 'x', mtime: 'yes'
+        name: 'a', type: 'script', command: 'x', mtime: true
       }))
-      assert.ok(errors.some(e => e.includes('mtime must be a boolean')))
+      assert.ok(errors.some(e => e.includes('unknown key "mtime"')))
     })
 
     it('validates boolean task fields (enabled, resetOnFail, quiet, async)', () => {

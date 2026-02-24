@@ -114,103 +114,11 @@ describe('script check', () => {
       assert.ok(badBuiltin.reason.includes('Unknown builtin'))
     })
 
-    // 4. mtime caching story (3 → 1)
-    it('mtime caching: cached pass, failure re-runs, mtime:false bypass', () => {
-      makeScript('test', 'exit 0')
-      spawnSync('git', ['add', 'script/test'], { cwd: tmpDir })
-      spawnSync('git', ['commit', '-m', 'add test'], { cwd: tmpDir })
-
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
-      fs.mkdirSync(path.dirname(localCfgPath), { recursive: true })
-      const runTime = Date.now()
-
-      const past = new Date(runTime - 5000)
-      setAllTrackedMtimes(tmpDir, past)
-
-      // cached pass—previous pass + no file changes → cached
-      fs.writeFileSync(localCfgPath, JSON.stringify({
-        runs: { 'my-test': { at: runTime, pass: true } }
-      }))
-      const cached = runScriptCheck(
-        { name: 'my-test', command: './script/test' },
-        { rootDir: tmpDir, localCfgPath, sources: null, maxChars: 12000 }
-      )
-      assert.strictEqual(cached.pass, true)
-      assert.strictEqual(cached.cached, true)
-      assert.ok(cached.reason.includes('cached pass'))
-
-      // failure re-runs—previous fail + no file changes → actually re-runs (exits 0)
-      fs.writeFileSync(localCfgPath, JSON.stringify({
-        runs: { 'my-test': { at: runTime, pass: false } }
-      }))
-      const rerun = runScriptCheck(
-        { name: 'my-test', command: './script/test' },
-        { rootDir: tmpDir, localCfgPath, sources: null, maxChars: 12000 }
-      )
-      assert.strictEqual(rerun.pass, true)
-      assert.strictEqual(rerun.cached, undefined, 'Should not be cached—actually re-ran')
-
-      // mtime:false bypass—skips cache entirely, always runs
-      fs.writeFileSync(localCfgPath, JSON.stringify({
-        runs: { 'my-test': { at: runTime, pass: false } }
-      }))
-      const bypass = runScriptCheck(
-        { name: 'my-test', command: './script/test', mtime: false },
-        { rootDir: tmpDir, localCfgPath, sources: null, maxChars: 12000 }
-      )
-      assert.strictEqual(bypass.pass, true)
-      assert.strictEqual(bypass.cached, undefined)
-    })
-
-    // 5. run data persistence story (4 → 1)
-    it('run data persistence: result enum, fail result, old format backward compat', () => {
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
-      fs.mkdirSync(path.dirname(localCfgPath), { recursive: true })
-
-      // saves pass result as enum
-      makeScript('pass', 'exit 0')
-      runScriptCheck(
-        { name: 'my-test', command: './script/pass' },
-        { rootDir: tmpDir, localCfgPath, sources: null, maxChars: 12000 }
-      )
-      const passData = JSON.parse(fs.readFileSync(localCfgPath, 'utf8'))
-      assert.strictEqual(passData.runs['my-test'].result, 'pass')
-      assert.strictEqual(passData.runs['my-test'].pass, undefined)
-
-      // saves fail result
-      makeScript('fail', 'exit 1')
-      runScriptCheck(
-        { name: 'fail-test', command: './script/fail' },
-        { rootDir: tmpDir, localCfgPath, sources: null, maxChars: 12000 }
-      )
-      const failData = JSON.parse(fs.readFileSync(localCfgPath, 'utf8'))
-      assert.strictEqual(failData.runs['fail-test'].result, 'fail')
-
-      // backward compat: reads old format { at, pass: true } as cached pass
-      makeScript('compat', 'exit 0')
-      spawnSync('git', ['add', 'script/compat'], { cwd: tmpDir })
-      spawnSync('git', ['commit', '-m', 'add compat'], { cwd: tmpDir })
-
-      const runTime = Date.now()
-      fs.writeFileSync(localCfgPath, JSON.stringify({
-        runs: { 'compat-test': { at: runTime, pass: true } }
-      }))
-      const past = new Date(runTime - 5000)
-      setAllTrackedMtimes(tmpDir, past)
-
-      const compat = runScriptCheck(
-        { name: 'compat-test', command: './script/compat' },
-        { rootDir: tmpDir, localCfgPath, sources: null, maxChars: 12000 }
-      )
-      assert.strictEqual(compat.pass, true)
-      assert.strictEqual(compat.cached, true)
-    })
-
-    // 6. stdin piping story
+    // 4. stdin piping story
     it('stdin: script receives hook input when context has toolName/toolInput', () => {
       makeScript('read_stdin', 'cat')
       const result = runScriptCheck(
-        { name: 'stdin-test', command: './script/read_stdin', mtime: false },
+        { name: 'stdin-test', command: './script/read_stdin' },
         {
           rootDir: tmpDir,
           localCfgPath: null,
@@ -241,7 +149,7 @@ describe('script check', () => {
         'fi'
       ].join('\n'))
       const result = runScriptCheck(
-        { name: 'no-stdin-test', command: './script/check_stdin', mtime: false },
+        { name: 'no-stdin-test', command: './script/check_stdin' },
         { rootDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000 }
       )
       assert.strictEqual(result.pass, true)
@@ -346,29 +254,6 @@ describe('script check', () => {
       assert.strictEqual(missingEntries[0].status, 'FAIL')
       assert.ok(missingEntries[0].reason.includes('Script not found'))
 
-      // SKIP—cached pass (no RUNNING entry)
-      spawnSync('git', ['add', 'script/test'], { cwd: tmpDir })
-      spawnSync('git', ['commit', '-m', 'add test'], { cwd: tmpDir })
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
-      fs.mkdirSync(path.dirname(localCfgPath), { recursive: true })
-      const runTime = Date.now()
-      fs.writeFileSync(localCfgPath, JSON.stringify({
-        runs: { 'log-cached': { at: runTime, pass: true } }
-      }))
-      const past = new Date(runTime - 5000)
-      setAllTrackedMtimes(tmpDir, past)
-
-      runScriptCheck(
-        { name: 'log-cached', command: './script/test' },
-        { rootDir: tmpDir, projectDir: tmpDir, sessionId: SID, localCfgPath, sources: null, maxChars: 12000 }
-      )
-      const cachedEntries = readLogEntries(SID).filter(e => e.reviewer === 'log-cached')
-      assert.strictEqual(cachedEntries.length, 1, 'Cached skip should not emit RUNNING')
-      assert.strictEqual(cachedEntries[0].status, 'SKIP')
-      assert.ok(!cachedEntries.some(e => e.status === 'RUNNING'),
-        'RUNNING must not appear for mtime-cached results')
-      assert.ok(cachedEntries[0].reason.includes('cached pass'))
-
       // FAIL—unknown builtin
       runScriptCheck(
         { name: 'log-bad-builtin', command: 'prove_it run_builtin nonexistent' },
@@ -414,26 +299,6 @@ describe('script check', () => {
       assert.strictEqual(failEntries.length, 1,
         'Quiet task fail should produce exactly one log entry')
       assert.strictEqual(failEntries[0].status, 'FAIL')
-
-      // quiet SKIP—cached pass suppressed
-      const sidSkip = 'test-quiet-skip'
-      spawnSync('git', ['add', 'script/qtest'], { cwd: tmpDir })
-      spawnSync('git', ['commit', '-m', 'add qtest'], { cwd: tmpDir })
-      const localCfgPath = path.join(tmpDir, '.claude', 'prove_it/config.local.json')
-      fs.mkdirSync(path.dirname(localCfgPath), { recursive: true })
-      const runTime = Date.now()
-      fs.writeFileSync(localCfgPath, JSON.stringify({
-        runs: { 'quiet-skip': { at: runTime, pass: true } }
-      }))
-      const past = new Date(runTime - 5000)
-      setAllTrackedMtimes(tmpDir, past)
-
-      runScriptCheck(
-        { name: 'quiet-skip', command: './script/qtest', quiet: true },
-        { rootDir: tmpDir, projectDir: tmpDir, sessionId: sidSkip, localCfgPath, sources: null, maxChars: 12000 }
-      )
-      assert.strictEqual(readLogEntries(sidSkip).length, 0,
-        'Quiet task cached pass should produce no log entries')
 
       // quiet builtin PASS—suppressed
       const sidBuiltin = 'test-quiet-builtin'
