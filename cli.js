@@ -1045,41 +1045,13 @@ function cmdRunCheck () {
 // ============================================================================
 
 function cmdSignal () {
-  const { VALID_SIGNALS } = require('./lib/session')
-  const args = process.argv.slice(3)
-  const type = args[0]
-
-  if (!type) {
-    console.error('Usage: prove_it signal <done|stuck|idle|clear> [--message "..."]')
-    process.exit(1)
-  }
-
-  if (type === 'clear') {
-    log('prove_it: signal cleared')
-    process.exit(0)
-  }
-
-  if (!VALID_SIGNALS.includes(type)) {
-    console.error(`Unknown signal type: ${type}`)
-    console.error(`Valid types: ${VALID_SIGNALS.join(', ')}, clear`)
-    process.exit(1)
-  }
-
-  // Parse --message / -m
-  let message = null
-  for (let i = 1; i < args.length; i++) {
-    if ((args[i] === '--message' || args[i] === '-m') && i + 1 < args.length) {
-      message = args[i + 1]
-      break
-    }
-  }
-
-  if (message) {
-    log(`prove_it: signal "${type}" recorded (${message})`)
-  } else {
-    log(`prove_it: signal "${type}" recorded`)
-  }
-  process.exit(0)
+  // Signals are intercepted by the hook dispatcher (PreToolUse + Bash),
+  // which has the session ID from Claude Code's hook input. If the CLI
+  // reaches this code, it means the command was run outside the hook
+  // context (e.g. a local ! command) where there's no session to target.
+  console.error('prove_it signal must be run by Claude, not directly.')
+  console.error('Ask Claude to run: prove_it signal <done|stuck|idle|clear>')
+  process.exit(1)
 }
 
 // ============================================================================

@@ -51,42 +51,10 @@ describe('CLI', () => {
   })
 
   // ---------- Story: signal ----------
-  it('signal done exits 0 with confirmation', () => {
+  it('signal exits 1 outside hook context', () => {
     const r = runCli(['signal', 'done'])
-    assert.strictEqual(r.exitCode, 0)
-    assert.match(r.stdout, /signal "done" recorded/)
-  })
-
-  it('signal with --message includes message in output', () => {
-    const r = runCli(['signal', 'stuck', '--message', 'Cannot test async'])
-    assert.strictEqual(r.exitCode, 0)
-    assert.match(r.stdout, /signal "stuck" recorded/)
-    assert.match(r.stdout, /Cannot test async/)
-  })
-
-  it('signal with -m shorthand works', () => {
-    const r = runCli(['signal', 'idle', '-m', 'Between tasks'])
-    assert.strictEqual(r.exitCode, 0)
-    assert.match(r.stdout, /signal "idle" recorded/)
-    assert.match(r.stdout, /Between tasks/)
-  })
-
-  it('signal clear exits 0', () => {
-    const r = runCli(['signal', 'clear'])
-    assert.strictEqual(r.exitCode, 0)
-    assert.match(r.stdout, /signal cleared/)
-  })
-
-  it('signal bogus exits 1 with error', () => {
-    const r = runCli(['signal', 'bogus'])
     assert.strictEqual(r.exitCode, 1)
-    assert.match(r.stderr, /Unknown signal type/)
-  })
-
-  it('signal with no type exits 1 with usage', () => {
-    const r = runCli(['signal'])
-    assert.strictEqual(r.exitCode, 1)
-    assert.match(r.stderr, /Usage/)
+    assert.match(r.stderr, /must be run by Claude/)
   })
 
   // ---------- Story: reinstall ----------
