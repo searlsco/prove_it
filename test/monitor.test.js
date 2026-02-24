@@ -187,6 +187,47 @@ describe('monitor', () => {
       assert.ok(!line.includes('RUNNING'), `Should not show RUNNING in: ${line}`)
     })
 
+    it('displays SET as DING', () => {
+      const entry = {
+        at: Date.now(),
+        reviewer: 'signal',
+        status: 'SET',
+        reason: 'done',
+        hookEvent: 'PreToolUse'
+      }
+      const line = formatEntry(entry)
+      assert.ok(line.includes('DING'), `Expected DING in: ${line}`)
+      assert.ok(!line.includes('SET'), `Should not show SET in: ${line}`)
+    })
+
+    it('displays ENFORCED:PASS as PASS with (Deferred) prefix', () => {
+      const entry = {
+        at: Date.now(),
+        reviewer: 'coverage-review',
+        status: 'ENFORCED:PASS',
+        reason: '<<Reviewer provided no rationale>>',
+        hookEvent: 'Stop'
+      }
+      const line = formatEntry(entry)
+      assert.ok(line.includes('PASS'), `Expected PASS in: ${line}`)
+      assert.ok(!line.includes('ENFORCED'), `Should not show ENFORCED in: ${line}`)
+      assert.ok(line.includes('(Deferred)'), `Expected (Deferred) prefix in: ${line}`)
+    })
+
+    it('displays ENFORCED:SKIP as SKIP with (Deferred) prefix', () => {
+      const entry = {
+        at: Date.now(),
+        reviewer: 'coverage-review',
+        status: 'ENFORCED:SKIP',
+        reason: 'skipped',
+        hookEvent: 'Stop'
+      }
+      const line = formatEntry(entry)
+      assert.ok(line.includes('SKIP'), `Expected SKIP in: ${line}`)
+      assert.ok(!line.includes('ENFORCED'), `Should not show ENFORCED in: ${line}`)
+      assert.ok(line.includes('(Deferred)'), `Expected (Deferred) prefix in: ${line}`)
+    })
+
     it('formats APPEAL status', () => {
       const entry = {
         at: Date.now(),
