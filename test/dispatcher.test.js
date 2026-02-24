@@ -627,7 +627,7 @@ describe('claude dispatcher', () => {
       const systemMessages = []
       const task = { name: 'my-task', type: 'script', command: 'test' }
       const result = { pass: false, reason: 'tests failed', output: '' }
-      const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null, latestSourceMtime: 0 }
+      const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null }
       const settlement = settleTaskResult(task, result, 'Stop', settlCtx, outputs, contextParts, systemMessages)
       assert.strictEqual(settlement.blocked, true)
       assert.ok(settlement.message.includes('my-task failed'))
@@ -640,7 +640,7 @@ describe('claude dispatcher', () => {
       const systemMessages = []
       const task = { name: 'briefing', type: 'script', command: 'test' }
       const result = { pass: false, reason: 'oops', output: '' }
-      const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null, latestSourceMtime: 0 }
+      const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null }
       const settlement = settleTaskResult(task, result, 'SessionStart', settlCtx, outputs, contextParts, systemMessages)
       assert.strictEqual(settlement.blocked, false)
       assert.ok(systemMessages.includes('oops'))
@@ -651,7 +651,7 @@ describe('claude dispatcher', () => {
       const outputs = []
       const task = { name: 'my-task', type: 'script', command: 'test' }
       const result = { pass: true, reason: 'empty prompt—skipped', output: '', skipped: true }
-      const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null, latestSourceMtime: 0 }
+      const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null }
       const settlement = settleTaskResult(task, result, 'Stop', settlCtx, outputs, [], [])
       assert.strictEqual(settlement.blocked, false)
       assert.ok(outputs.includes('empty prompt—skipped'))
@@ -661,7 +661,7 @@ describe('claude dispatcher', () => {
       const outputs = []
       const task = { name: 'my-task', type: 'script', command: 'test', quiet: true }
       const result = { pass: true, reason: 'skipped', output: '', skipped: true }
-      const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null, latestSourceMtime: 0 }
+      const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null }
       settleTaskResult(task, result, 'Stop', settlCtx, outputs, [], [])
       assert.strictEqual(outputs.length, 0)
     })
@@ -670,7 +670,7 @@ describe('claude dispatcher', () => {
       const outputs = []
       const task = { name: 'my-task', type: 'script', command: 'test' }
       const result = { pass: true, reason: 'all good', output: '' }
-      const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null, latestSourceMtime: 0 }
+      const settlCtx = { rootDir: '/tmp', sources: null, localCfgPath: null }
       const settlement = settleTaskResult(task, result, 'Stop', settlCtx, outputs, [], [])
       assert.strictEqual(settlement.blocked, false)
       assert.ok(outputs.includes('all good'))

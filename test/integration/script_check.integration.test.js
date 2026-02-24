@@ -2,7 +2,6 @@ const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
-const { spawnSync } = require('child_process')
 const { isBuiltin, getBuiltinName, runScriptCheck } = require('../../lib/checks/script')
 const { freshRepo } = require('../helpers')
 
@@ -60,13 +59,6 @@ describe('script check', () => {
       const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${sessionId}.jsonl`)
       if (!fs.existsSync(logFile)) return []
       return fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
-    }
-
-    function setAllTrackedMtimes (dir, time) {
-      const tracked = spawnSync('git', ['ls-files'], { cwd: dir, encoding: 'utf8' })
-      for (const file of tracked.stdout.trim().split('\n').filter(Boolean)) {
-        fs.utimesSync(path.join(dir, file), time, time)
-      }
     }
 
     function makeScript (name, body) {

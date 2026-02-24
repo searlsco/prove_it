@@ -713,49 +713,6 @@ describe('Config-driven hook behavior (v2)', () => {
       assert.strictEqual(result3.output.decision, 'approve')
     })
 
-    it('does not conflict with script mtime cache when task has mtime: true', () => {
-      const sessionId = 'test-smslr-mtime-compat'
-      createFile(tmpDir, 'src/app.js', 'code\n')
-      createFile(tmpDir, 'script/check', '#!/usr/bin/env bash\nexit 0\n')
-      fs.chmodSync(path.join(tmpDir, 'script', 'check'), 0o755)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            {
-              name: 'mtime-compat',
-              type: 'script',
-              command: './script/check',
-              mtime: true,
-              when: { sourcesModifiedSinceLastRun: true }
-            }
-          ]
-        }
-      ], { sources: ['src/**/*.js'] }))
-
-      const env = isolatedEnv(tmpDir)
-
-      // First run: should pass (script runs successfully)
-      const result1 = invokeHook('claude:Stop', {
-        hook_event_name: 'Stop',
-        session_id: sessionId,
-        cwd: tmpDir
-      }, { projectDir: tmpDir, env })
-      assert.strictEqual(result1.exitCode, 0)
-      assert.ok(result1.output, 'First invocation should produce output')
-      assert.strictEqual(result1.output.decision, 'approve')
-
-      // Second run: should skip via sourcesModifiedSinceLastRun
-      // (script.js wrote { at, pass: true } which satisfies both caches)
-      const result2 = invokeHook('claude:Stop', {
-        hook_event_name: 'Stop',
-        session_id: sessionId,
-        cwd: tmpDir
-      }, { projectDir: tmpDir, env })
-      assert.strictEqual(result2.exitCode, 0)
-    })
-
     it('re-runs failing task instead of silently skipping', () => {
       const sessionId = 'test-smslr-failure-sticky'
       createFile(tmpDir, 'src/app.js', 'code\n')

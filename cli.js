@@ -12,7 +12,7 @@
  *   hook      - Run a hook dispatcher (claude:<Event> or git:<event>)
  *   run_builtin - Run a builtin check directly
  *   signal    - Declare a lifecycle signal (done, stuck, idle)
- *   record    - Record a test run result for mtime caching
+ *   record    - Record a test run result for run caching
  */
 const fs = require('fs')
 const os = require('os')
@@ -524,7 +524,7 @@ async function cmdInit (options = {}) {
       todos.push({
         done: false,
         text: 'Replace the placeholder sources globs in .claude/prove_it/config.json\n' +
-          '        Sources controls which files trigger mtime-based reviewer gating\n' +
+          '        Sources controls which files trigger run caching, reviewer gating,\n' +
           '        and git-based churn tracking (e.g. ["src/**/*.*", "test/**/*.*"])'
       })
     } else if (Array.isArray(teamSources) && teamSources.length > 0) {
@@ -953,7 +953,7 @@ function cmdHook (hookSpec) {
 }
 
 // ============================================================================
-// Record command - record a test run result for mtime caching
+// Record command - record a test run result for run caching
 // ============================================================================
 
 function cmdRecord () {
@@ -1132,7 +1132,7 @@ Commands:
   monitor     Tail hook results in real time (run in a separate terminal)
   hook        Run a hook dispatcher (claude:<Event> or git:<event>)
   run_builtin   Run a builtin check directly (e.g. prove_it run_builtin config:lock)
-  record      Record a test run result for mtime caching
+  record      Record a test run result for run caching
   help        Show this help message
   -v, --version  Show version number
 
