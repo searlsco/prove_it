@@ -269,6 +269,10 @@ describe('init integration', () => {
       assert.deepStrictEqual(srcCfg.sources, ['src/**/*.js'])
       assert.strictEqual(srcCfg.initSeed, configHash(srcCfg))
 
+      // Re-init with same flags → upToDate, no spurious re-upgrade
+      r = initProject(tmpDir, { gitHooks: false, defaultChecks: true })
+      assert.ok(r.teamConfig.upToDate && !r.teamConfig.upgraded)
+
       // edited (non-sources modification)
       const cfg2 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
       cfg2.hooks = []
@@ -393,6 +397,11 @@ describe('init integration', () => {
       const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
       assert.deepStrictEqual(cfg.sources, ['cli.js', 'lib/**/*.js', 'test/**/*.js'])
       assert.strictEqual(cfg.initSeed, configHash(cfg))
+
+      // Re-init with same flags → upToDate, not a spurious re-upgrade
+      const r3 = initProject(tmpDir, { gitHooks: false, defaultChecks: true })
+      assert.ok(r3.teamConfig.upToDate)
+      assert.ok(!r3.teamConfig.upgraded)
     })
   })
 })
