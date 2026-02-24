@@ -258,10 +258,21 @@ describe('init integration', () => {
       const upgCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
       assert.strictEqual(upgCfg.initSeed, configHash(upgCfg))
 
-      // edited (user modification)
+      // sources-only change → auto-upgraded with sources preserved
       const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
       cfg.sources = ['src/**/*.js']
       fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
+      r = initProject(tmpDir, { gitHooks: false, defaultChecks: true })
+      assert.ok(r.teamConfig.upgraded && !r.teamConfig.edited)
+      assert.ok(r.teamConfig.sourcesPreserved)
+      const srcCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      assert.deepStrictEqual(srcCfg.sources, ['src/**/*.js'])
+      assert.strictEqual(srcCfg.initSeed, configHash(srcCfg))
+
+      // edited (non-sources modification)
+      const cfg2 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      cfg2.hooks = []
+      fs.writeFileSync(cfgPath, JSON.stringify(cfg2, null, 2) + '\n')
       r = initProject(tmpDir, { gitHooks: false, defaultChecks: true })
       assert.ok(r.teamConfig.edited)
 
@@ -363,6 +374,25 @@ describe('init integration', () => {
       const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
       assert.ok(results.teamConfig.created)
       assert.strictEqual(results.teamConfig.sourcesPreserved, undefined)
+    })
+
+    it('auto-upgrade preserves sources set via preservedSources', () => {
+      // Init with preservedSources (simulates deinit → init round-trip)
+      const r1 = initProject(tmpDir, {
+        gitHooks: false,
+        defaultChecks: false,
+        preservedSources: ['cli.js', 'lib/**/*.js', 'test/**/*.js']
+      })
+      assert.ok(r1.teamConfig.created)
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+
+      // Re-init with different flags → auto-upgrade should preserve sources
+      const r2 = initProject(tmpDir, { gitHooks: false, defaultChecks: true })
+      assert.ok(r2.teamConfig.upgraded)
+      assert.ok(r2.teamConfig.sourcesPreserved)
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      assert.deepStrictEqual(cfg.sources, ['cli.js', 'lib/**/*.js', 'test/**/*.js'])
+      assert.strictEqual(cfg.initSeed, configHash(cfg))
     })
   })
 })

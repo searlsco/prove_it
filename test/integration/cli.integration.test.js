@@ -145,15 +145,25 @@ describe('init/deinit', () => {
 
     const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
 
-    // Customize the config
+    // Sources-only customization → auto-upgraded (no prompt needed)
     const cfg2 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
     cfg2.sources = ['src/**/*.js']
     fs.writeFileSync(cfgPath, JSON.stringify(cfg2, null, 2) + '\n')
 
-    // --no-overwrite → customized
+    const srcUpgrade = runCli(['init'], { cwd: tmpDir })
+    assert.match(srcUpgrade.stdout, /upgraded to current defaults/)
+    assert.match(srcUpgrade.stdout, /Preserved: sources globs from previous config/)
+    const srcCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    assert.deepStrictEqual(srcCfg.sources, ['src/**/*.js'])
+
+    // Non-sources customization → --no-overwrite preserves, --overwrite replaces
+    const cfg3 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    cfg3.hooks = []
+    cfg3.sources = ['src/**/*.js']
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg3, null, 2) + '\n')
+
     assert.match(runCli(['init', '--no-overwrite'], { cwd: tmpDir }).stdout, /customized/)
 
-    // --overwrite → overwritten, but custom sources preserved
     const ow = runCli(['init', '--overwrite'], { cwd: tmpDir })
     assert.match(ow.stdout, /overwritten with current defaults/)
     assert.match(ow.stdout, /Preserved: sources globs from previous config/)
@@ -162,12 +172,13 @@ describe('init/deinit', () => {
     assert.deepStrictEqual(newCfg.sources, ['src/**/*.js'])
 
     // --overwrite respects other flags (sources still preserved)
-    const cfg3 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
-    cfg3.sources = ['src/**/*.js']
-    fs.writeFileSync(cfgPath, JSON.stringify(cfg3, null, 2) + '\n')
+    const cfg5 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    cfg5.hooks = []
+    cfg5.sources = ['src/**/*.js']
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg5, null, 2) + '\n')
     runCli(['init', '--overwrite', '--no-default-checks'], { cwd: tmpDir })
-    const cfg4 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
-    const allTasks = cfg4.hooks.flatMap(h => h.tasks || [])
+    const cfg6 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    const allTasks = cfg6.hooks.flatMap(h => h.tasks || [])
     assert.ok(!allTasks.some(t => t.name === 'coverage-review'))
   })
 
