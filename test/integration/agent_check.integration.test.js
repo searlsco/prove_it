@@ -3,7 +3,8 @@ const assert = require('node:assert')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { defaultModel, runAgentCheck, backchannelDir, backchannelReadmePath, createBackchannel } = require('../../lib/checks/agent')
+const { defaultModel, runAgentCheck, backchannelDir, backchannelReadmePath, createBackchannel, notepadDir, notepadFilePath, writeNotepad } = require('../../lib/checks/agent')
+const { saveSessionState, loadSessionState } = require('../../lib/session')
 const { freshRepo } = require('../helpers')
 
 function writeReviewer (dir, name, body) {
@@ -630,6 +631,183 @@ describe('backchannel', () => {
     const bcContent = fs.readFileSync(readmePath, 'utf8')
     assert.ok(bcContent.includes('bad code'), 'backchannel includes one-line summary')
     assert.ok(bcContent.includes('### Summary'), 'backchannel includes body')
+  })
+})
+
+describe('notepad', () => {
+  let tmpDir, origProveItDir
+  const sessionId = 'test-session-notepad'
+
+  beforeEach(() => {
+    tmpDir = freshRepo()
+    origProveItDir = process.env.PROVE_IT_DIR
+    process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
+  })
+
+  afterEach(() => {
+    if (origProveItDir === undefined) delete process.env.PROVE_IT_DIR
+    else process.env.PROVE_IT_DIR = origProveItDir
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  // ---------- Story: notepad lifecycle ----------
+  // FAIL → created (fallback), second FAIL → overwritten, PASS → cleaned, SKIP → cleaned
+  it('lifecycle: created on FAIL (fallback), overwritten on repeat FAIL, cleaned on PASS/SKIP', () => {
+    // FAIL → notepad created with fallback content
+    const failPath = writeReviewer(tmpDir, 'fail.sh', 'echo "FAIL: missing tests"')
+    runAgentCheck(
+      { name: 'test-review', command: failPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId })
+    )
+    const npPath = notepadFilePath(tmpDir, sessionId, 'test-review')
+    assert.ok(fs.existsSync(npPath), 'notepad should be created on FAIL')
+    assert.ok(fs.readFileSync(npPath, 'utf8').includes('missing tests'))
+
+    // Second FAIL → notepad overwritten with new findings
+    const fail2Path = writeReviewer(tmpDir, 'fail2.sh', 'echo "FAIL: still broken"')
+    runAgentCheck(
+      { name: 'test-review', command: fail2Path, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId })
+    )
+    const updated = fs.readFileSync(npPath, 'utf8')
+    assert.ok(updated.includes('still broken'), 'notepad should be overwritten with latest')
+
+    // PASS → notepad cleaned
+    const passPath = writeReviewer(tmpDir, 'pass.sh', 'echo "PASS: looks good"')
+    runAgentCheck(
+      { name: 'test-review', command: passPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId })
+    )
+    assert.ok(!fs.existsSync(notepadDir(tmpDir, sessionId, 'test-review')), 'notepad cleaned on PASS')
+
+    // Re-create for SKIP cleanup test
+    writeNotepad(tmpDir, sessionId, 'test-review', 'leftover notes')
+    const skipPath = writeReviewer(tmpDir, 'skip.sh', 'echo "SKIP: unrelated changes"')
+    runAgentCheck(
+      { name: 'test-review', command: skipPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId })
+    )
+    assert.ok(!fs.existsSync(notepadDir(tmpDir, sessionId, 'test-review')), 'notepad cleaned on SKIP')
+  })
+
+  // ---------- Story: notepad prompt injection ----------
+  it('injects continuation section when notepad exists, omits when absent', () => {
+    const { reviewerPath, capturePath } = writeCaptureReviewer(tmpDir, 'np_captured.txt')
+
+    // No notepad → no continuation section
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId })
+    )
+    assert.ok(!fs.readFileSync(capturePath, 'utf8').includes('Reviewer Continuation'))
+
+    // With notepad → continuation section injected
+    writeNotepad(tmpDir, sessionId, 'test-review', 'Previous findings: missing tests for foo')
+    saveSessionState(sessionId, 'notepad_round_test-review', 1)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId })
+    )
+    const captured = fs.readFileSync(capturePath, 'utf8')
+    assert.ok(captured.includes('--- Reviewer Continuation'), 'should have continuation header')
+    assert.ok(captured.includes('Previous findings: missing tests for foo'), 'should include notepad content')
+    assert.ok(captured.includes('round 2'), 'should show round number')
+    assert.ok(captured.includes('--- End Reviewer Continuation ---'), 'should have continuation footer')
+  })
+
+  it('includes FAIL instruction when sessionId present, omits when null', () => {
+    const { reviewerPath, capturePath } = writeCaptureReviewer(tmpDir, 'fail_instr.txt')
+
+    // With sessionId → FAIL instruction present
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId })
+    )
+    const withSession = fs.readFileSync(capturePath, 'utf8')
+    assert.ok(withSession.includes('If you FAIL this review, write a continuation note'))
+
+    // Without sessionId → no FAIL instruction
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId: null })
+    )
+    const noSession = fs.readFileSync(capturePath, 'utf8')
+    assert.ok(!noSession.includes('If you FAIL this review, write a continuation note'))
+  })
+
+  // ---------- Story: round tracking ----------
+  it('increments round on FAIL, resets on PASS and SKIP', () => {
+    const roundKey = 'notepad_round_test-review'
+
+    // Initial state: no round
+    assert.strictEqual(loadSessionState(sessionId, roundKey), null)
+
+    // FAIL → round 1
+    const failPath = writeReviewer(tmpDir, 'fail.sh', 'echo "FAIL: issue"')
+    runAgentCheck(
+      { name: 'test-review', command: failPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId })
+    )
+    assert.strictEqual(loadSessionState(sessionId, roundKey), 1)
+
+    // Second FAIL → round 2
+    runAgentCheck(
+      { name: 'test-review', command: failPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId })
+    )
+    assert.strictEqual(loadSessionState(sessionId, roundKey), 2)
+
+    // PASS → reset to 0
+    const passPath = writeReviewer(tmpDir, 'pass.sh', 'echo "PASS: fixed"')
+    runAgentCheck(
+      { name: 'test-review', command: passPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId })
+    )
+    assert.strictEqual(loadSessionState(sessionId, roundKey), 0)
+
+    // FAIL again → round 1
+    runAgentCheck(
+      { name: 'test-review', command: failPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId })
+    )
+    assert.strictEqual(loadSessionState(sessionId, roundKey), 1)
+
+    // SKIP → reset to 0
+    const skipPath = writeReviewer(tmpDir, 'skip.sh', 'echo "SKIP: unrelated"')
+    runAgentCheck(
+      { name: 'test-review', command: skipPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId })
+    )
+    assert.strictEqual(loadSessionState(sessionId, roundKey), 0)
+  })
+
+  // ---------- Story: reviewer-written notepad takes precedence ----------
+  it('preserves reviewer-written notepad instead of overwriting with fallback', () => {
+    // Create a reviewer that writes to notepad AND returns FAIL
+    const npPath = notepadFilePath(tmpDir, sessionId, 'test-review')
+    const npDir = notepadDir(tmpDir, sessionId, 'test-review')
+    const reviewerPath = path.join(tmpDir, 'write_notepad_reviewer.sh')
+    fs.writeFileSync(reviewerPath, [
+      '#!/usr/bin/env bash',
+      'cat > /dev/null',
+      `mkdir -p "${npDir}"`,
+      `echo "Reviewer-written: check function bar" > "${npPath}"`,
+      'echo "FAIL: needs work"'
+    ].join('\n'))
+    fs.chmodSync(reviewerPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId })
+    )
+
+    assert.ok(fs.existsSync(npPath), 'notepad should exist')
+    const content = fs.readFileSync(npPath, 'utf8')
+    assert.ok(content.includes('Reviewer-written: check function bar'),
+      'should preserve reviewer-written notepad')
+    assert.ok(!content.includes('needs work'),
+      'should not overwrite with fallback')
   })
 })
 
