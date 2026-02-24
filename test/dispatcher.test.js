@@ -999,9 +999,9 @@ describe('claude dispatcher', () => {
       assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'mcp__xcode__build' }), true)
     })
 
-    it('PLAN_SIGNAL_CONTEXT contains signal command', () => {
-      const { PLAN_SIGNAL_CONTEXT } = require('../lib/dispatcher/claude')
-      assert.ok(PLAN_SIGNAL_CONTEXT.includes('prove_it signal done'))
+    it('SIGNAL_TASK_MARKER contains expected heading', () => {
+      const { SIGNAL_TASK_MARKER } = require('../lib/dispatcher/claude')
+      assert.ok(SIGNAL_TASK_MARKER.includes('prove_it signal done'))
     })
   })
 

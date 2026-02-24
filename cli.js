@@ -86,6 +86,12 @@ function buildHookGroups () {
       group: {
         hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }]
       }
+    },
+    {
+      event: 'TaskCompleted',
+      group: {
+        hooks: [{ type: 'command', command: 'prove_it hook claude:TaskCompleted' }]
+      }
     }
   ]
 }
@@ -700,6 +706,7 @@ function cmdDoctor () {
     checkDispatcher(settings, 'SessionStart', 'prove_it hook claude:SessionStart', 'startup|resume|clear|compact', issues)
     checkDispatcher(settings, 'PreToolUse', 'prove_it hook claude:PreToolUse', null, issues)
     checkDispatcher(settings, 'Stop', 'prove_it hook claude:Stop', null, issues)
+    checkDispatcher(settings, 'TaskCompleted', 'prove_it hook claude:TaskCompleted', null, issues)
   } else {
     log('  [ ] settings.json missing or has no hooks')
     issues.push("Run 'prove_it install' to register hooks")

@@ -98,7 +98,8 @@ describe('example projects', () => {
       const expected = {
         SessionStart: [{ matcher: 'startup|resume|clear|compact', hooks: [{ type: 'command', command: 'prove_it hook claude:SessionStart' }] }],
         PreToolUse: [{ hooks: [{ type: 'command', command: 'prove_it hook claude:PreToolUse' }] }],
-        Stop: [{ hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }] }]
+        Stop: [{ hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }] }],
+        TaskCompleted: [{ hooks: [{ type: 'command', command: 'prove_it hook claude:TaskCompleted' }] }]
       }
 
       const settingsPath = path.join(supportDir, 'settings.json')

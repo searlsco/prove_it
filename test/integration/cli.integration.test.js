@@ -102,6 +102,7 @@ describe('CLI', () => {
       assert.ok(s.includes('prove_it hook claude:Stop'))
       assert.ok(s.includes('prove_it hook claude:PreToolUse'))
       assert.ok(s.includes('prove_it hook claude:SessionStart'))
+      assert.ok(s.includes('prove_it hook claude:TaskCompleted'))
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
@@ -294,6 +295,7 @@ describe('install/uninstall', () => {
     assert.ok(serialized.includes('prove_it hook claude:Stop'))
     assert.ok(serialized.includes('prove_it hook claude:PreToolUse'))
     assert.ok(serialized.includes('prove_it hook claude:SessionStart'))
+    assert.ok(serialized.includes('prove_it hook claude:TaskCompleted'))
 
     // No rules file (v2)
     assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'prove_it.md')))

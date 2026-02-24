@@ -49,7 +49,7 @@ function writeTeamConfig (repoDir, cfg) {
   )
 }
 
-// Standard 3-dispatcher settings matching what `prove_it install` creates
+// Standard 4-dispatcher settings matching what `prove_it install` creates
 function correctSettings () {
   return makeSettings({
     SessionStart: [{
@@ -61,6 +61,9 @@ function correctSettings () {
     }],
     Stop: [{
       hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }]
+    }],
+    TaskCompleted: [{
+      hooks: [{ type: 'command', command: 'prove_it hook claude:TaskCompleted' }]
     }]
   })
 }
@@ -104,12 +107,13 @@ describe('doctor', () => {
   })
 
   it('dispatcher validation', () => {
-    // All 3 dispatchers correctly installed -> [x]
+    // All 4 dispatchers correctly installed -> [x]
     writeSettings(tmpHome, correctSettings())
     let result = run()
     assert.match(result.stdout, /\[x\] SessionStart dispatcher \(matcher: startup\|resume\|clear\|compact\)/)
     assert.match(result.stdout, /\[x\] PreToolUse dispatcher/)
     assert.match(result.stdout, /\[x\] Stop dispatcher/)
+    assert.match(result.stdout, /\[x\] TaskCompleted dispatcher/)
 
     // Missing dispatchers -> [ ]
     writeSettings(tmpHome, makeSettings({
@@ -122,8 +126,10 @@ describe('doctor', () => {
     assert.match(result.stdout, /\[x\] SessionStart dispatcher/)
     assert.match(result.stdout, /\[ \] PreToolUse dispatcher/)
     assert.match(result.stdout, /\[ \] Stop dispatcher/)
+    assert.match(result.stdout, /\[ \] TaskCompleted dispatcher/)
     assert.match(result.stdout, /PreToolUse dispatcher not registered/)
     assert.match(result.stdout, /Stop dispatcher not registered/)
+    assert.match(result.stdout, /TaskCompleted dispatcher not registered/)
 
     // Wrong command -> [!]
     writeSettings(tmpHome, makeSettings({

@@ -30,6 +30,16 @@
           }
         ]
       }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "../support/prove_it hook claude:TaskCompleted"
+          }
+        ]
+      }
     ]
   }
 }
