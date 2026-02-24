@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -e
-trap 'command -v prove_it >/dev/null 2>&1 && prove_it record --name fast-tests --result $?' EXIT
+trap 'rc=$?; command -v prove_it >/dev/null 2>&1 && prove_it record --name fast-tests --result $rc' EXIT
 npx standard --fix
 npm test
