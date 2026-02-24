@@ -605,7 +605,7 @@ prove_it monitor <id>        # tail a specific session (prefix match OK)
 | `DONE` | Async review complete, waiting for Stop hook to enforce |
 | `ENFORCED:PASS` | Async result was harvested and settled as pass |
 | `ENFORCED:SKIP` | Async result was harvested and settled as skip |
-| `APPEAL` | Developer wrote a backchannel appeal before this review cycle |
+| `PLEA` | Developer wrote a backchannel appeal before this review cycle |
 | `SET` | Signal was set (`prove_it signal done/stuck/idle`) |
 | `CLEAR` | Signal was cleared (`prove_it signal clear` or auto-clear after successful Stop) |
 

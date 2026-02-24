@@ -492,7 +492,7 @@ describe('backchannel', () => {
   })
 
   // ---------- Story: backchannel logging ----------
-  it('logs RUNNING → PASS/FAIL with hookEvent/triggerProgress, and APPEAL when backchannel exists', () => {
+  it('logs RUNNING → PASS/FAIL with hookEvent/triggerProgress, and PLEA when backchannel exists', () => {
     // RUNNING → PASS
     const passPath = writeReviewer(tmpDir, 'pass.sh', 'echo "PASS: all good"')
     runAgentCheck(
@@ -508,8 +508,8 @@ describe('backchannel', () => {
     assert.strictEqual(entries[0].triggerProgress, 'linesChanged: 512/500')
     assert.strictEqual(entries[1].status, 'PASS')
 
-    // No APPEAL without backchannel
-    assert.strictEqual(entries.find(e => e.status === 'APPEAL'), undefined)
+    // No PLEA without backchannel
+    assert.strictEqual(entries.find(e => e.status === 'PLEA'), undefined)
 
     // RUNNING → FAIL
     const sid2 = 'test-session-fail-log'
@@ -523,7 +523,7 @@ describe('backchannel', () => {
     assert.strictEqual(entries2[0].status, 'RUNNING')
     assert.strictEqual(entries2[entries2.length - 1].status, 'FAIL')
 
-    // APPEAL when backchannel exists
+    // PLEA when backchannel exists
     const sid3 = 'test-session-appeal'
     const bcDir3 = backchannelDir(tmpDir, sid3, 'test-review')
     fs.mkdirSync(bcDir3, { recursive: true })
@@ -534,9 +534,9 @@ describe('backchannel', () => {
     )
     const logFile3 = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sid3}.jsonl`)
     const entries3 = fs.readFileSync(logFile3, 'utf8').trim().split('\n').map(l => JSON.parse(l))
-    const appeal = entries3.find(e => e.status === 'APPEAL')
-    assert.ok(appeal)
-    assert.strictEqual(appeal.reason, 'appealed via backchannel')
+    const plea = entries3.find(e => e.status === 'PLEA')
+    assert.ok(plea)
+    assert.strictEqual(plea.reason, 'appealed via backchannel')
   })
 
   // ---------- Story: backchannel path sanitization ----------

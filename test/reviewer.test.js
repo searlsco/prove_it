@@ -80,6 +80,15 @@ describe('parseVerdict', () => {
       assert.ok(result.body.includes('### Issues'))
     })
 
+    it('folds body into reason when FAIL has no inline reason', () => {
+      const input = 'FAIL\n\n#### Summary\nThis changeset has issues.\n\n#### Issues\n1. Missing tests'
+      const result = parseVerdict(input)
+      assert.strictEqual(result.pass, false)
+      assert.ok(result.reason.includes('Summary'))
+      assert.ok(result.reason.includes('This changeset has issues'))
+      assert.strictEqual(result.body, null)
+    })
+
     it('returns null body when FAIL has verdict line only', () => {
       const result = parseVerdict('FAIL: no tests')
       assert.strictEqual(result.pass, false)
@@ -157,7 +166,8 @@ describe('parseVerdict', () => {
     it('parses **FAIL** (bold)', () => {
       const result = parseVerdict('**FAIL**\n\nThe code has issues.')
       assert.strictEqual(result.pass, false)
-      assert.ok(result.body.includes('The code has issues'))
+      assert.ok(result.reason.includes('The code has issues'))
+      assert.strictEqual(result.body, null)
     })
 
     it('parses **PASS**: reason (bold with colon)', () => {

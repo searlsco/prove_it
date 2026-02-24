@@ -228,16 +228,16 @@ describe('monitor', () => {
       assert.ok(line.includes('(Deferred)'), `Expected (Deferred) prefix in: ${line}`)
     })
 
-    it('formats APPEAL status', () => {
+    it('formats PLEA status', () => {
       const entry = {
         at: Date.now(),
         reviewer: 'commit-review',
-        status: 'APPEAL',
+        status: 'PLEA',
         reason: 'appealed via backchannel',
         hookEvent: 'Stop'
       }
       const line = formatEntry(entry)
-      assert.ok(line.includes('APPEAL'), `Expected APPEAL in: ${line}`)
+      assert.ok(line.includes('PLEA'), `Expected PLEA in: ${line}`)
       assert.ok(line.includes('appealed via backchannel'), `Expected reason in: ${line}`)
     })
 
