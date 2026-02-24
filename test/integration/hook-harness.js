@@ -26,7 +26,8 @@ const VALID_PERMISSION_DECISIONS = ['allow', 'deny', 'ask']
  * @returns {object} - { exitCode, stdout, stderr, output (parsed JSON if valid) }
  */
 function invokeHook (hookSpec, input, options = {}) {
-  const base = options.cleanEnv ? {} : process.env
+  const cleanEnv = options.cleanEnv !== undefined ? options.cleanEnv : !!options.env
+  const base = cleanEnv ? {} : process.env
   const env = { ...base, ...options.env }
   if (options.projectDir) {
     env.CLAUDE_PROJECT_DIR = options.projectDir
@@ -191,9 +192,9 @@ function setupSessionWithDiffs (tmpDir, sessionId, projectDir) {
  */
 function isolatedEnv (tmpDir) {
   return {
+    PATH: process.env.PATH,
     HOME: tmpDir,
-    PROVE_IT_DIR: path.join(tmpDir, '.prove_it_test'),
-    PROVE_IT_DISABLED: ''
+    PROVE_IT_DIR: path.join(tmpDir, '.prove_it_test')
   }
 }
 
