@@ -142,6 +142,9 @@ describe('doctor', () => {
       }],
       Stop: [{
         hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }]
+      }],
+      TaskCompleted: [{
+        hooks: [{ type: 'command', command: 'prove_it hook claude:TaskCompleted' }]
       }]
     }))
     result = run()
@@ -159,6 +162,9 @@ describe('doctor', () => {
       }],
       Stop: [{
         hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }]
+      }],
+      TaskCompleted: [{
+        hooks: [{ type: 'command', command: 'prove_it hook claude:TaskCompleted' }]
       }]
     }))
     result = run()
