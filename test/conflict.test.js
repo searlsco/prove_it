@@ -218,6 +218,23 @@ describe('askConflict', () => {
       assert.ok(spawn.calls.some(c => c.cmd === 'claude'))
       assert.ok(prompts[0].includes('Conflict:'), 'first prompt should say Conflict')
       assert.ok(prompts[1].includes('Accept merge:'), 'post-merge prompt should say Accept merge')
+      assert.ok(prompts[1].includes('[Ynd?]'), 'post-merge prompt should show reduced hint')
+    })
+
+    it('post-merge unknown key shows merge-specific help', async () => {
+      const capture = captureLog()
+      const spawn = mockSpawnSync({
+        claude: { status: 0, stdout: 'merged content', stderr: '' },
+        diff: { status: 1, stdout: 'diff\n', stderr: '' }
+      })
+      const rl = mockRl(['a', 'x', 'y'])
+      const result = await askConflict(rl, {
+        ...baseOpts(),
+        _log: capture.log,
+        _spawnSync: spawn.fn
+      })
+      assert.strictEqual(result.answer, 'yes')
+      assert.ok(capture.lines.some(l => l.includes('accept the merged version')))
     })
 
     it('MERGE_FAILED falls through to manual merge and resolves no', async () => {
