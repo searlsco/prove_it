@@ -19,6 +19,7 @@ const os = require('os')
 const path = require('path')
 const readline = require('readline')
 const { loadJson, writeJson, getProveItDir, buildGlobalConfig, configHash } = require('./lib/shared')
+const { askConflict } = require('./lib/conflict')
 
 function rmIfExists (p) {
   try {
@@ -200,28 +201,41 @@ async function cmdInstall () {
 
   // Install skills
   const isTTY = process.stdin.isTTY && process.stdout.isTTY
-  for (const { name, src } of SKILLS) {
-    const skillDir = path.join(claudeDir, 'skills', name)
-    const skillPath = path.join(skillDir, 'SKILL.md')
-    const shippedPath = path.join(__dirname, 'lib', 'skills', src)
-    const shippedContent = fs.readFileSync(shippedPath, 'utf8')
+  const skillRl = isTTY
+    ? readline.createInterface({ input: process.stdin, output: process.stdout })
+    : null
+  try {
+    for (const { name, src } of SKILLS) {
+      const skillDir = path.join(claudeDir, 'skills', name)
+      const skillPath = path.join(skillDir, 'SKILL.md')
+      const shippedPath = path.join(__dirname, 'lib', 'skills', src)
+      const shippedContent = fs.readFileSync(shippedPath, 'utf8')
 
-    let doWrite = true
-    if (fs.existsSync(skillPath)) {
-      const existing = fs.readFileSync(skillPath, 'utf8')
-      if (existing !== shippedContent && isTTY) {
-        const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-        try {
-          doWrite = await askYesNo(rl, `Overwrite ~/.claude/skills/${name}/SKILL.md?`)
-        } finally {
-          rl.close()
+      let doWrite = true
+      if (fs.existsSync(skillPath)) {
+        const existing = fs.readFileSync(skillPath, 'utf8')
+        if (existing !== shippedContent && skillRl) {
+          const answer = await askConflict(skillRl, {
+            label: `~/.claude/skills/${name}/SKILL.md`,
+            existingPath: skillPath,
+            existing,
+            proposed: shippedContent,
+            defaultYes: true
+          })
+          if (answer === 'quit') {
+            log('Aborted.')
+            process.exit(1)
+          }
+          doWrite = answer === 'yes'
         }
       }
+      if (doWrite) {
+        fs.mkdirSync(skillDir, { recursive: true })
+        fs.writeFileSync(skillPath, shippedContent)
+      }
     }
-    if (doWrite) {
-      fs.mkdirSync(skillDir, { recursive: true })
-      fs.writeFileSync(skillPath, shippedContent)
-    }
+  } finally {
+    if (skillRl) skillRl.close()
   }
 
   log('prove_it installed.')
@@ -408,8 +422,31 @@ async function cmdInit (options = {}) {
         overwritten = true
         if (owResult.sourcesPreserved) sourcesPreserved = true
       } else if (flags.overwrite === null && rl) {
-        const doOverwrite = await askYesNo(rl, 'Existing config has been customized. Overwrite with current defaults?', false)
-        if (doOverwrite) {
+        const { buildConfig: buildCfg, configHash: cfgHash, hasCustomSources } = require('./lib/config')
+        const teamConfigPath = path.join(repoRoot, '.claude', 'prove_it', 'config.json')
+        const existingContent = fs.readFileSync(teamConfigPath, 'utf8')
+        const existingCfg = JSON.parse(existingContent)
+
+        // Build proposed config (mirrors overwriteTeamConfig logic)
+        let sources = preservedSources
+        if (!sources && hasCustomSources(existingCfg)) sources = existingCfg.sources
+        const proposedCfg = buildCfg({ gitHooks: flags.gitHooks, defaultChecks: flags.defaultChecks })
+        if (sources) proposedCfg.sources = sources
+        proposedCfg.initSeed = cfgHash(proposedCfg)
+        const proposedContent = JSON.stringify(proposedCfg, null, 2) + '\n'
+
+        const answer = await askConflict(rl, {
+          label: '.claude/prove_it/config.json',
+          existingPath: teamConfigPath,
+          existing: existingContent,
+          proposed: proposedContent,
+          defaultYes: false
+        })
+        if (answer === 'quit') {
+          log('Aborted.')
+          process.exit(1)
+        }
+        if (answer === 'yes') {
           const owResult = overwriteTeamConfig(repoRoot, { ...flags, preservedSources })
           overwritten = true
           if (owResult.sourcesPreserved) sourcesPreserved = true

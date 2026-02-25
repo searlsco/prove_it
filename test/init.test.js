@@ -120,6 +120,14 @@ describe('init', () => {
       assert.strictEqual(lockConfig.quiet, true, 'lock-config should have quiet: true')
     })
 
+    it('session-briefing task has quiet: true', () => {
+      const cfg = buildConfig()
+      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
+      const briefing = allTasks.find(t => t.name === 'session-briefing')
+      assert.ok(briefing, 'Should have session-briefing task')
+      assert.strictEqual(briefing.quiet, true, 'session-briefing should have quiet: true')
+    })
+
     it('generated config passes validation', () => {
       const { validateConfig } = require('../lib/validate')
       const cfg = buildConfig()
