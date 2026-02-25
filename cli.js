@@ -1115,6 +1115,15 @@ function cmdMonitor () {
   const statusArg = args.find(a => a.startsWith('--status='))
   const statusFilter = statusArg ? statusArg.slice('--status='.length).split(',').map(s => s.trim().toUpperCase()) : null
 
+  const noStatusArg = args.find(a => a.startsWith('--no-status='))
+  const statusExclude = noStatusArg ? noStatusArg.slice('--no-status='.length).split(',').map(s => s.trim().toUpperCase()) : null
+
+  const taskArg = args.find(a => a.startsWith('--task='))
+  const taskFilter = taskArg ? taskArg.slice('--task='.length).split(',').map(s => s.trim().toLowerCase()) : null
+
+  const noTaskArg = args.find(a => a.startsWith('--no-task='))
+  const taskExclude = noTaskArg ? noTaskArg.slice('--no-task='.length).split(',').map(s => s.trim().toLowerCase()) : null
+
   // --project alone → CWD, --project=/path → specified path
   const projectArg = args.find(a => a === '--project' || a.startsWith('--project='))
   let project = null
@@ -1126,7 +1135,7 @@ function cmdMonitor () {
 
   const sessionId = args.find(a => !a.startsWith('--')) || null
 
-  monitor({ all, list, showSession, verbose, statusFilter, project, sessionId })
+  monitor({ all, list, showSession, verbose, statusFilter, statusExclude, taskFilter, taskExclude, project, sessionId })
 }
 
 // ============================================================================
@@ -1155,11 +1164,14 @@ Commands:
   -v, --version  Show version number
 
 Monitor options:
-  prove_it monitor                     Tail most recent session
+  prove_it monitor                     Tail current project (or guidance if not in one)
   prove_it monitor --all               Tail all sessions and project logs
   prove_it monitor --all --sessions    Show session IDs
   prove_it monitor --list              List all sessions
-  prove_it monitor --status=FAIL,BOOM  Filter by status
+  prove_it monitor --status=PASS,FAIL  Show only these types
+  prove_it monitor --no-status=SKIP    Hide these types
+  prove_it monitor --task=fast-tests   Show only these tasks
+  prove_it monitor --no-task=briefing  Hide these tasks
   prove_it monitor --project           Scope to current project directory
   prove_it monitor --project=/foo/bar  Scope to specific project directory
   prove_it monitor --verbose           Show full prompts, responses, and output

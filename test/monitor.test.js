@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 
-const { findLatestSession, listSessions, findProjectLogFiles, projectHash, formatEntry, formatVerbose, formatTime, formatDuration, useColor, stripAnsi, visualWidth, normalizeHookTag, middleTruncatePath, truncateReason, progressiveTruncate, watchFile } = require('../lib/monitor')
+const { findLatestSession, listSessions, findProjectLogFiles, projectHash, formatEntry, formatVerbose, formatTime, formatDuration, useColor, stripAnsi, visualWidth, normalizeHookTag, middleTruncatePath, truncateReason, progressiveTruncate, watchFile, shouldDisplay, displayStatusOf, findProveItProject } = require('../lib/monitor')
 
 describe('monitor', () => {
   let tmpDir
@@ -1106,6 +1106,129 @@ describe('monitor', () => {
         console.log = origLog
         if (cleanup) cleanup()
       }
+    })
+  })
+
+  describe('displayStatusOf', () => {
+    it('maps RUNNING to EXEC', () => {
+      assert.strictEqual(displayStatusOf('RUNNING'), 'EXEC')
+    })
+
+    it('maps SET to DING', () => {
+      assert.strictEqual(displayStatusOf('SET'), 'DING')
+    })
+
+    it('strips ENFORCED: prefix', () => {
+      assert.strictEqual(displayStatusOf('ENFORCED:PASS'), 'PASS')
+      assert.strictEqual(displayStatusOf('ENFORCED:SKIP'), 'SKIP')
+    })
+
+    it('passes through normal statuses', () => {
+      assert.strictEqual(displayStatusOf('PASS'), 'PASS')
+      assert.strictEqual(displayStatusOf('FAIL'), 'FAIL')
+      assert.strictEqual(displayStatusOf('SKIP'), 'SKIP')
+      assert.strictEqual(displayStatusOf('BOOM'), 'BOOM')
+    })
+
+    it('returns ??? for null/undefined', () => {
+      assert.strictEqual(displayStatusOf(null), '???')
+      assert.strictEqual(displayStatusOf(undefined), '???')
+    })
+  })
+
+  describe('shouldDisplay', () => {
+    it('returns true when no opts', () => {
+      assert.strictEqual(shouldDisplay({ status: 'PASS', reviewer: 'test' }, null), true)
+      assert.strictEqual(shouldDisplay({ status: 'PASS', reviewer: 'test' }, undefined), true)
+    })
+
+    it('returns true when opts has no filters', () => {
+      assert.strictEqual(shouldDisplay({ status: 'PASS', reviewer: 'test' }, {}), true)
+    })
+
+    it('statusFilter matches on display status, not raw status', () => {
+      // RUNNING raw → EXEC display
+      assert.strictEqual(shouldDisplay({ status: 'RUNNING', reviewer: 'a' }, { statusFilter: ['EXEC'] }), true)
+      assert.strictEqual(shouldDisplay({ status: 'RUNNING', reviewer: 'a' }, { statusFilter: ['RUNNING'] }), false)
+
+      // SET raw → DING display
+      assert.strictEqual(shouldDisplay({ status: 'SET', reviewer: 'a' }, { statusFilter: ['DING'] }), true)
+      assert.strictEqual(shouldDisplay({ status: 'SET', reviewer: 'a' }, { statusFilter: ['SET'] }), false)
+
+      // ENFORCED:PASS → PASS display
+      assert.strictEqual(shouldDisplay({ status: 'ENFORCED:PASS', reviewer: 'a' }, { statusFilter: ['PASS'] }), true)
+      assert.strictEqual(shouldDisplay({ status: 'ENFORCED:PASS', reviewer: 'a' }, { statusFilter: ['ENFORCED:PASS'] }), false)
+    })
+
+    it('statusFilter includes matching statuses', () => {
+      assert.strictEqual(shouldDisplay({ status: 'PASS', reviewer: 'a' }, { statusFilter: ['PASS', 'FAIL'] }), true)
+      assert.strictEqual(shouldDisplay({ status: 'SKIP', reviewer: 'a' }, { statusFilter: ['PASS', 'FAIL'] }), false)
+    })
+
+    it('statusExclude excludes matching display statuses', () => {
+      assert.strictEqual(shouldDisplay({ status: 'SKIP', reviewer: 'a' }, { statusExclude: ['SKIP'] }), false)
+      assert.strictEqual(shouldDisplay({ status: 'PASS', reviewer: 'a' }, { statusExclude: ['SKIP'] }), true)
+
+      // Excludes by display status, not raw
+      assert.strictEqual(shouldDisplay({ status: 'RUNNING', reviewer: 'a' }, { statusExclude: ['EXEC'] }), false)
+      assert.strictEqual(shouldDisplay({ status: 'RUNNING', reviewer: 'a' }, { statusExclude: ['RUNNING'] }), true)
+    })
+
+    it('taskFilter includes matching reviewers (case-insensitive)', () => {
+      assert.strictEqual(shouldDisplay({ status: 'PASS', reviewer: 'Fast-Tests' }, { taskFilter: ['fast-tests'] }), true)
+      assert.strictEqual(shouldDisplay({ status: 'PASS', reviewer: 'FAST-TESTS' }, { taskFilter: ['fast-tests'] }), true)
+      assert.strictEqual(shouldDisplay({ status: 'PASS', reviewer: 'other' }, { taskFilter: ['fast-tests'] }), false)
+    })
+
+    it('taskExclude excludes matching reviewers (case-insensitive)', () => {
+      assert.strictEqual(shouldDisplay({ status: 'PASS', reviewer: 'Session-Briefing' }, { taskExclude: ['session-briefing'] }), false)
+      assert.strictEqual(shouldDisplay({ status: 'PASS', reviewer: 'fast-tests' }, { taskExclude: ['session-briefing'] }), true)
+    })
+
+    it('combines status and task filters', () => {
+      const opts = { statusFilter: ['PASS', 'FAIL'], taskFilter: ['fast-tests'] }
+      assert.strictEqual(shouldDisplay({ status: 'PASS', reviewer: 'fast-tests' }, opts), true)
+      assert.strictEqual(shouldDisplay({ status: 'SKIP', reviewer: 'fast-tests' }, opts), false)
+      assert.strictEqual(shouldDisplay({ status: 'PASS', reviewer: 'other' }, opts), false)
+    })
+
+    it('combines inclusion and exclusion filters', () => {
+      const opts = { statusFilter: ['PASS', 'SKIP'], statusExclude: ['SKIP'] }
+      assert.strictEqual(shouldDisplay({ status: 'PASS', reviewer: 'a' }, opts), true)
+      assert.strictEqual(shouldDisplay({ status: 'SKIP', reviewer: 'a' }, opts), false)
+      assert.strictEqual(shouldDisplay({ status: 'FAIL', reviewer: 'a' }, opts), false)
+    })
+
+    it('handles missing reviewer gracefully', () => {
+      assert.strictEqual(shouldDisplay({ status: 'PASS' }, { taskFilter: ['fast-tests'] }), false)
+      assert.strictEqual(shouldDisplay({ status: 'PASS' }, { taskExclude: ['fast-tests'] }), true)
+    })
+  })
+
+  describe('findProveItProject', () => {
+    it('finds project when .claude/prove_it/config.json exists', () => {
+      const projectDir = path.join(tmpDir, 'myproject')
+      fs.mkdirSync(path.join(projectDir, '.claude', 'prove_it'), { recursive: true })
+      fs.writeFileSync(path.join(projectDir, '.claude', 'prove_it', 'config.json'), '{}')
+
+      assert.strictEqual(findProveItProject(projectDir), projectDir)
+    })
+
+    it('finds project in ancestor directory', () => {
+      const projectDir = path.join(tmpDir, 'myproject')
+      const subDir = path.join(projectDir, 'src', 'lib')
+      fs.mkdirSync(subDir, { recursive: true })
+      fs.mkdirSync(path.join(projectDir, '.claude', 'prove_it'), { recursive: true })
+      fs.writeFileSync(path.join(projectDir, '.claude', 'prove_it', 'config.json'), '{}')
+
+      assert.strictEqual(findProveItProject(subDir), projectDir)
+    })
+
+    it('returns null when no config exists', () => {
+      const noProjectDir = path.join(tmpDir, 'empty')
+      fs.mkdirSync(noProjectDir, { recursive: true })
+
+      assert.strictEqual(findProveItProject(noProjectDir), null)
     })
   })
 })
