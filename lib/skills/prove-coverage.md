@@ -50,8 +50,8 @@ When a ruleFile is provided, respect the project's testing conventions. The proj
 team knows their framework constraints and what constitutes meaningful test coverage
 in their domain.
 
-Files changed since last commit (most recent first):
-{{recently_edited_files}}
+Files to review (most recent first):
+{{files_changed_since_last_run}}
 {{#session_diff}}
 Diffs for files edited with Claude's Edit tool:
 {{session_diff}}

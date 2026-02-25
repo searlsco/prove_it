@@ -33,13 +33,11 @@ Think like an attacker, a tired on-call engineer, and a new hire reading this co
 
 ## Phase 1: Determine Scope
 
-{{#changes_since_last_review}}
-Changes since last review:
-{{changes_since_last_review}}
-{{/changes_since_last_review}}
+Changes since last run:
+{{changes_since_last_run}}
 
-Files changed since last commit (most recent first):
-{{recently_edited_files}}
+Files to review (most recent first):
+{{files_changed_since_last_run}}
 
 {{#signal_message}}
 Signal message from the developer: {{signal_message}}

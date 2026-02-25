@@ -354,7 +354,7 @@ By default, agent tasks use `claude -p` (Claude Code in pipe mode). The reviewer
 {
   "name": "my-review",
   "type": "agent",
-  "prompt": "Review recent changes for:\n1. Test coverage gaps\n2. Logic errors or edge cases\n3. Dead code\n\n{{recently_edited_files}}\n\n{{recent_commits}}\n\n{{git_status}}"
+  "prompt": "Review recent changes for:\n1. Test coverage gaps\n2. Logic errors or edge cases\n3. Dead code\n\n{{files_changed_since_last_run}}\n\n{{recent_commits}}\n\n{{git_status}}"
 }
 ```
 
@@ -378,10 +378,10 @@ These expand in agent prompts:
 | `{{git_head}}` | Current HEAD commit SHA |
 | `{{git_status}}` | `git status --short` (staged/modified/untracked files) |
 | `{{recent_commits}}` | `git log --oneline --stat -5` (last 5 commits with file stats) |
-| `{{recently_edited_files}}` | Source files changed since last commit (sorted by recency) |
+| `{{files_changed_since_last_run}}` | Source files changed since this task's last run (sorted by recency; uses task ref → session baseline → HEAD cascade) |
 | `{{sources}}` | Configured source globs (one per line) |
 | `{{signal_message}}` | Message from the active signal (e.g., from `prove_it signal done -m "message"`) |
-| `{{changes_since_last_review}}` | `git diff --stat` since this task's ref was last advanced (shows what changed since the reviewer last passed) |
+| `{{changes_since_last_run}}` | `git diff --stat` since this task's last run (uses task ref → session baseline → HEAD cascade) |
 
 Conditional blocks are supported: `{{#var}}content{{/var}}` renders only when the variable is non-empty.
 
@@ -396,7 +396,7 @@ prove_it ships curated reviewer prompts as Claude Code [skills](https://code.cla
 | Skill | What it reviews |
 |-------|----------------|
 | `prove-coverage` | Session diffs for test coverage adequacy |
-| `prove-shipworthy` | Thorough pre-ship review: correctness, integration, security, tests, omissions. Uses `{{changes_since_last_review}}` for scope. Designed for Opus. |
+| `prove-shipworthy` | Thorough pre-ship review: correctness, integration, security, tests, omissions. Uses `{{changes_since_last_run}}` for scope. Designed for Opus. |
 
 Skills are installed to `~/.claude/skills/<name>/SKILL.md` by `prove_it install`. The prompt body is the skill file with its YAML frontmatter stripped.
 

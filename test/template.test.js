@@ -143,17 +143,171 @@ describe('template', () => {
     })
   })
 
-  describe('changes_since_last_review variable', () => {
-    it('returns empty string when no taskName in context', () => {
-      const context = { rootDir: '.', projectDir: '.', sessionId: null, toolInput: null }
-      const resolvers = makeResolvers(context)
-      assert.strictEqual(resolvers.changes_since_last_review(), '')
+  describe('files_changed_since_last_run variable', () => {
+    const fs = require('fs')
+    const path = require('path')
+    const { spawnSync } = require('child_process')
+    const { freshRepo } = require('./helpers')
+
+    it('uses task ref as baseline when available', () => {
+      const tmpDir = freshRepo((dir) => {
+        fs.writeFileSync(path.join(dir, 'src.js'), 'initial\n')
+      })
+      try {
+        // Record a task ref at current HEAD
+        const { updateRef, sanitizeRefName, gitHead } = require('../lib/git')
+        const head = gitHead(tmpDir)
+        updateRef(tmpDir, sanitizeRefName('my-review'), head)
+
+        // Make a commit after the ref
+        fs.writeFileSync(path.join(tmpDir, 'src.js'), 'changed\n')
+        spawnSync('git', ['add', '.'], { cwd: tmpDir })
+        spawnSync('git', ['commit', '-m', 'change'], { cwd: tmpDir })
+
+        const r = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, taskName: 'my-review', sources: ['**/*.js'] })
+        const files = r.files_changed_since_last_run()
+        assert.ok(files.includes('src.js'), `Expected src.js in output, got: ${files}`)
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
     })
 
-    it('returns empty string when no ref exists for the task', () => {
-      const context = { rootDir: '.', projectDir: '.', sessionId: null, toolInput: null, taskName: 'nonexistent-task' }
-      const resolvers = makeResolvers(context)
-      assert.strictEqual(resolvers.changes_since_last_review(), '')
+    it('falls back to session baseline when no task ref', () => {
+      const tmpDir = freshRepo((dir) => {
+        fs.writeFileSync(path.join(dir, 'src.js'), 'initial\n')
+      })
+      const origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
+      try {
+        const { saveSessionState } = require('../lib/session')
+        const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
+        saveSessionState('sess-files-1', 'git', { head })
+
+        // Commit after baseline
+        fs.writeFileSync(path.join(tmpDir, 'src.js'), 'changed\n')
+        spawnSync('git', ['add', '.'], { cwd: tmpDir })
+        spawnSync('git', ['commit', '-m', 'change'], { cwd: tmpDir })
+
+        const r = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: 'sess-files-1', toolInput: null, sources: ['**/*.js'] })
+        const files = r.files_changed_since_last_run()
+        assert.ok(files.includes('src.js'), `Expected src.js in output, got: ${files}`)
+      } finally {
+        if (origProveItDir === undefined) delete process.env.PROVE_IT_DIR
+        else process.env.PROVE_IT_DIR = origProveItDir
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    it('falls back to HEAD when no session and no task ref', () => {
+      const tmpDir = freshRepo((dir) => {
+        fs.writeFileSync(path.join(dir, 'src.js'), 'initial\n')
+      })
+      try {
+        // Only uncommitted changes visible with HEAD fallback
+        fs.writeFileSync(path.join(tmpDir, 'src.js'), 'dirty\n')
+        const r = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, sources: ['**/*.js'] })
+        const files = r.files_changed_since_last_run()
+        assert.ok(files.includes('src.js'), `Expected src.js in output, got: ${files}`)
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    it('filters by source globs', () => {
+      const tmpDir = freshRepo((dir) => {
+        fs.writeFileSync(path.join(dir, 'src.js'), 'initial\n')
+        fs.writeFileSync(path.join(dir, 'readme.md'), 'docs\n')
+      })
+      try {
+        fs.writeFileSync(path.join(tmpDir, 'src.js'), 'changed\n')
+        fs.writeFileSync(path.join(tmpDir, 'readme.md'), 'updated\n')
+        const r = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, sources: ['**/*.js'] })
+        const files = r.files_changed_since_last_run()
+        assert.ok(files.includes('src.js'))
+        assert.ok(!files.includes('readme.md'))
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+  })
+
+  describe('changes_since_last_run variable', () => {
+    const fs = require('fs')
+    const path = require('path')
+    const os = require('os')
+    const { spawnSync } = require('child_process')
+    const { freshRepo } = require('./helpers')
+
+    it('uses task ref as baseline and returns stat format', () => {
+      const tmpDir = freshRepo((dir) => {
+        fs.writeFileSync(path.join(dir, 'src.js'), 'initial\n')
+      })
+      try {
+        const { updateRef, sanitizeRefName, gitHead } = require('../lib/git')
+        const head = gitHead(tmpDir)
+        updateRef(tmpDir, sanitizeRefName('my-review'), head)
+
+        fs.writeFileSync(path.join(tmpDir, 'src.js'), 'changed\n')
+        spawnSync('git', ['add', '.'], { cwd: tmpDir })
+        spawnSync('git', ['commit', '-m', 'change'], { cwd: tmpDir })
+
+        const r = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, taskName: 'my-review', sources: ['**/*.js'] })
+        const stat = r.changes_since_last_run()
+        assert.ok(stat.includes('src.js'), `Expected src.js in stat, got: ${stat}`)
+        // --stat output includes insertions/deletions summary
+        assert.ok(stat.includes('changed') || stat.includes('insertion') || stat.includes('deletion'), `Expected stat format, got: ${stat}`)
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    it('falls back to session baseline', () => {
+      const tmpDir = freshRepo((dir) => {
+        fs.writeFileSync(path.join(dir, 'src.js'), 'initial\n')
+      })
+      const origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
+      try {
+        const { saveSessionState } = require('../lib/session')
+        const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
+        saveSessionState('sess-stat-1', 'git', { head })
+
+        fs.writeFileSync(path.join(tmpDir, 'src.js'), 'changed\n')
+        spawnSync('git', ['add', '.'], { cwd: tmpDir })
+        spawnSync('git', ['commit', '-m', 'change'], { cwd: tmpDir })
+
+        const r = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: 'sess-stat-1', toolInput: null, sources: ['**/*.js'] })
+        const stat = r.changes_since_last_run()
+        assert.ok(stat.includes('src.js'), `Expected src.js in stat, got: ${stat}`)
+      } finally {
+        if (origProveItDir === undefined) delete process.env.PROVE_IT_DIR
+        else process.env.PROVE_IT_DIR = origProveItDir
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    it('falls back to HEAD and shows uncommitted changes', () => {
+      const tmpDir = freshRepo((dir) => {
+        fs.writeFileSync(path.join(dir, 'src.js'), 'initial\n')
+      })
+      try {
+        fs.writeFileSync(path.join(tmpDir, 'src.js'), 'dirty\n')
+        const r = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, sources: ['**/*.js'] })
+        const stat = r.changes_since_last_run()
+        assert.ok(stat.includes('src.js'), `Expected src.js in stat, got: ${stat}`)
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    it('returns empty for non-git directory', () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_nogit_'))
+      try {
+        const r = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null })
+        assert.strictEqual(r.changes_since_last_run(), '')
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
     })
   })
 
@@ -163,8 +317,8 @@ describe('template', () => {
         'staged_diff', 'staged_files', 'working_diff', 'changed_files',
         'session_diff', 'test_output', 'tool_command', 'file_path',
         'project_dir', 'root_dir', 'session_id', 'git_head',
-        'git_status', 'recent_commits', 'recently_edited_files', 'sources',
-        'signal_message', 'changes_since_last_review'
+        'git_status', 'recent_commits', 'files_changed_since_last_run', 'sources',
+        'signal_message', 'changes_since_last_run'
       ]
       assert.deepStrictEqual(KNOWN_VARS, expected)
     })
@@ -259,7 +413,7 @@ describe('template', () => {
         'staged_diff', 'staged_files', 'working_diff', 'changed_files',
         'session_diff', 'test_output', 'tool_command', 'file_path',
         'project_dir', 'root_dir', 'session_id', 'git_head',
-        'git_status', 'recent_commits', 'recently_edited_files', 'sources'
+        'git_status', 'recent_commits', 'files_changed_since_last_run', 'sources'
       ]
       for (const key of expectedKeys) {
         assert.strictEqual(typeof resolvers[key], 'function', `Missing resolver: ${key}`)

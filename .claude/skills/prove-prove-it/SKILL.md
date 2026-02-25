@@ -28,7 +28,7 @@ hook event (stdin JSON)
   → config loading
     → hook entry matching (event + matcher)
       → when-condition evaluation (linesChanged, variablesPresent, etc.)
-        → template variable expansion (recently_edited_files, session_diff, etc.)
+        → template variable expansion (files_changed_since_last_run, session_diff, etc.)
           → agent check invocation (claude -p with expanded prompt)
             → verdict parsing (PASS/FAIL)
 ```

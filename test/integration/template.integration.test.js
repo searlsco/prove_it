@@ -40,9 +40,9 @@ describe('template integration', () => {
       const rn = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, sources: null })
       assert.strictEqual(rn.sources(), '')
 
-      // recently_edited_files empty on clean tree
+      // files_changed_since_last_run empty on clean tree
       const re = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, sources: ['**/*.txt'] })
-      assert.strictEqual(re.recently_edited_files(), '')
+      assert.strictEqual(re.files_changed_since_last_run(), '')
     })
   })
 
@@ -73,11 +73,11 @@ describe('template integration', () => {
       assert.ok(r2.changed_files().includes('file.txt'))
       assert.ok(r2.git_status().includes('file.txt'))
 
-      // recently_edited_files: modified + untracked, filtered by source glob
+      // files_changed_since_last_run: modified + untracked, filtered by source glob
       fs.writeFileSync(path.join(tmpDir, 'readme.md'), 'docs\n')
       fs.writeFileSync(path.join(tmpDir, 'brand_new.txt'), 'new stuff\n')
       const r3 = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, sources: ['**/*.txt'] })
-      const recent = r3.recently_edited_files()
+      const recent = r3.files_changed_since_last_run()
       assert.ok(recent.includes('file.txt'))
       assert.ok(recent.includes('brand_new.txt'))
       assert.ok(!recent.includes('readme.md'))
