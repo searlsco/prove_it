@@ -560,6 +560,93 @@ describe('monitor', () => {
       assert.ok(joined.includes('prompt'), 'Should have prompt box')
       assert.ok(!joined.includes('response'), 'Should not have response box when null')
     })
+
+    it('renders appeal text on verdict entry when backchannel content present', () => {
+      const entry = {
+        at: Date.now(),
+        verbose: {
+          prompt: 'Review these changes',
+          response: 'PASS: addressed the issues',
+          model: 'haiku',
+          backchannel: true,
+          backchannelContent: 'The test failure is unrelated to my changes.\nRecommend: PASS'
+        }
+      }
+      const lines = formatVerbose(entry)
+      const joined = lines.join('\n')
+      assert.ok(joined.includes('appeal'), 'Should have appeal box')
+      assert.ok(joined.includes('unrelated to my changes'), 'Should include appeal text')
+      assert.ok(joined.includes('Recommend: PASS'), 'Should include full appeal content')
+    })
+
+    it('renders continuation notes with round number on verdict entry', () => {
+      const entry = {
+        at: Date.now(),
+        verbose: {
+          prompt: 'Review these changes',
+          response: 'FAIL: still missing tests',
+          model: 'haiku',
+          backchannel: false,
+          notepadContent: 'Found 3 untested functions.\nOnly 1 was addressed.',
+          notepadRound: 2
+        }
+      }
+      const lines = formatVerbose(entry)
+      const joined = lines.join('\n')
+      assert.ok(joined.includes('continuation notes'), 'Should have continuation notes box')
+      assert.ok(joined.includes('round 2'), 'Should include round number')
+      assert.ok(joined.includes('3 untested functions'), 'Should include notepad content')
+      assert.ok(joined.includes('Only 1 was addressed'), 'Should include full notepad text')
+    })
+
+    it('renders appeal text on PLEA entry without prompt/response', () => {
+      const entry = {
+        at: Date.now(),
+        reviewer: 'commit-review',
+        status: 'PLEA',
+        reason: 'appealed via backchannel',
+        verbose: {
+          backchannelContent: 'These changes are planning-only.\nRecommend: SKIP'
+        }
+      }
+      const lines = formatVerbose(entry)
+      const joined = lines.join('\n')
+      assert.ok(joined.includes('appeal'), 'Should have appeal box')
+      assert.ok(joined.includes('planning-only'), 'Should include appeal text')
+    })
+
+    it('omits appeal box when backchannelContent is null', () => {
+      const entry = {
+        at: Date.now(),
+        verbose: {
+          prompt: 'Review',
+          response: 'PASS: ok',
+          model: 'haiku',
+          backchannel: false,
+          backchannelContent: null
+        }
+      }
+      const lines = formatVerbose(entry)
+      const joined = lines.join('\n')
+      assert.ok(!joined.includes('appeal'), 'Should not have appeal box when content is null')
+    })
+
+    it('omits continuation notes when notepadContent is null', () => {
+      const entry = {
+        at: Date.now(),
+        verbose: {
+          prompt: 'Review',
+          response: 'PASS: ok',
+          model: 'haiku',
+          backchannel: false,
+          notepadContent: null,
+          notepadRound: null
+        }
+      }
+      const lines = formatVerbose(entry)
+      const joined = lines.join('\n')
+      assert.ok(!joined.includes('continuation'), 'Should not have continuation notes when null')
+    })
   })
 
   describe('projectHash', () => {
