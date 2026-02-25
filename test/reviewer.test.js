@@ -37,10 +37,20 @@ describe('parseVerdict', () => {
       assert.strictEqual(result.reason, 'everything looks good')
     })
 
-    it('PASS has no body field', () => {
+    it('PASS has no body field when inline reason present', () => {
       const result = parseVerdict('PASS: looks good\n\nSome extra text')
       assert.strictEqual(result.pass, true)
+      assert.strictEqual(result.reason, 'looks good')
       assert.strictEqual(result.body, undefined)
+    })
+
+    it('folds body into reason when PASS has no inline reason', () => {
+      const input = 'PASS\n\n#### Summary\nAll changes have corresponding tests.\n\n#### Coverage\nFull coverage.'
+      const result = parseVerdict(input)
+      assert.strictEqual(result.pass, true)
+      assert.ok(result.reason.includes('Summary'))
+      assert.ok(result.reason.includes('All changes have corresponding tests'))
+      assert.ok(result.reason.includes('Coverage'))
     })
   })
 
