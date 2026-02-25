@@ -20,6 +20,7 @@ const path = require('path')
 const readline = require('readline')
 const { loadJson, writeJson, getProveItDir, buildGlobalConfig, configHash } = require('./lib/shared')
 const { askConflict } = require('./lib/conflict')
+const { generateStandaloneSkill } = require('./lib/skills')
 
 function rmIfExists (p) {
   try {
@@ -138,7 +139,9 @@ function areSkillsCurrent (claudeDir) {
     const skillPath = path.join(claudeDir, 'skills', name, 'SKILL.md')
     const shippedPath = path.join(__dirname, 'lib', 'skills', src)
     if (!fs.existsSync(skillPath)) return false
-    if (fs.readFileSync(skillPath, 'utf8') !== fs.readFileSync(shippedPath, 'utf8')) return false
+    const shippedContent = fs.readFileSync(shippedPath, 'utf8')
+    const expected = generateStandaloneSkill(shippedContent)
+    if (fs.readFileSync(skillPath, 'utf8') !== expected) return false
   }
   return true
 }
@@ -210,17 +213,18 @@ async function cmdInstall () {
       const skillPath = path.join(skillDir, 'SKILL.md')
       const shippedPath = path.join(__dirname, 'lib', 'skills', src)
       const shippedContent = fs.readFileSync(shippedPath, 'utf8')
+      const standaloneContent = generateStandaloneSkill(shippedContent)
 
       let doWrite = true
-      let writeContent = shippedContent
+      let writeContent = standaloneContent
       if (fs.existsSync(skillPath)) {
         const existing = fs.readFileSync(skillPath, 'utf8')
-        if (existing !== shippedContent && skillRl) {
+        if (existing !== standaloneContent && skillRl) {
           const result = await askConflict(skillRl, {
             label: `~/.claude/skills/${name}/SKILL.md`,
             existingPath: skillPath,
             existing,
-            proposed: shippedContent,
+            proposed: standaloneContent,
             defaultYes: true
           })
           if (result.answer === 'quit') {
