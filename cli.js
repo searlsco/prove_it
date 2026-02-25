@@ -1046,9 +1046,15 @@ function cmdRunCheck () {
 
 function cmdSignal () {
   // Signals are intercepted by the hook dispatcher (PreToolUse + Bash),
-  // which has the session ID from Claude Code's hook input. If the CLI
-  // reaches this code, it means the command was run outside the hook
-  // context (e.g. a local ! command) where there's no session to target.
+  // which has the session ID from Claude Code's hook input. When running
+  // inside Claude Code (CLAUDECODE=1), the dispatcher already recorded the
+  // signal before allowing the Bash call through—exit 0 so the caller
+  // doesn't see a spurious failure.
+  if (process.env.CLAUDECODE) {
+    const type = process.argv[3] || 'unknown'
+    log(`prove_it: signal "${type}" acknowledged`)
+    process.exit(0)
+  }
   console.error('prove_it signal must be run by Claude, not directly.')
   console.error('Ask Claude to run: prove_it signal <done|stuck|idle|clear>')
   process.exit(1)

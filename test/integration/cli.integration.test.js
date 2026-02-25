@@ -51,10 +51,16 @@ describe('CLI', () => {
   })
 
   // ---------- Story: signal ----------
-  it('signal exits 1 outside hook context', () => {
-    const r = runCli(['signal', 'done'])
+  it('signal exits 1 outside Claude Code', () => {
+    const r = runCli(['signal', 'done'], { env: { ...process.env, CLAUDECODE: '' } })
     assert.strictEqual(r.exitCode, 1)
     assert.match(r.stderr, /must be run by Claude/)
+  })
+
+  it('signal exits 0 inside Claude Code (dispatcher handled it)', () => {
+    const r = runCli(['signal', 'done'], { env: { ...process.env, CLAUDECODE: '1' } })
+    assert.strictEqual(r.exitCode, 0)
+    assert.match(r.stdout, /signal "done" acknowledged/)
   })
 
   // ---------- Story: reinstall ----------
