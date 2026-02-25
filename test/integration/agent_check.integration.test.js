@@ -324,6 +324,40 @@ describe('agent check', () => {
     }
   })
 
+  it('constructs allowedTools with notepad path when sessionId present', () => {
+    // Reviewer that echoes its args so we can verify --allowedTools was passed
+    const shimDir = path.join(tmpDir, 'bin')
+    fs.mkdirSync(shimDir, { recursive: true })
+    const claudeShim = path.join(shimDir, 'claude')
+    fs.writeFileSync(claudeShim, '#!/usr/bin/env bash\ncat > /dev/null\necho "PASS: args=$*"\n')
+    fs.chmodSync(claudeShim, 0o755)
+
+    const origPath = process.env.PATH
+    process.env.PATH = `${shimDir}:${origPath}`
+
+    try {
+      // With sessionId → --allowedTools with Write(notepad) format
+      const result = runAgentCheck(
+        { name: 'test-review', prompt: 'Review {{project_dir}}' },
+        ctx(tmpDir, { sessionId: 'test-session-tools' })
+      )
+      assert.ok(result.pass)
+      assert.ok(result.reason.includes('--allowedTools'), 'should pass --allowedTools flag')
+      assert.ok(result.reason.includes('Write('), 'should include Write( in allowedTools value')
+      assert.ok(result.reason.includes('README.md'), 'should include notepad filename')
+
+      // Without sessionId → no --allowedTools
+      const noSessionResult = runAgentCheck(
+        { name: 'test-review', prompt: 'Review {{project_dir}}' },
+        ctx(tmpDir, { sessionId: null })
+      )
+      assert.ok(noSessionResult.pass)
+      assert.ok(!noSessionResult.reason.includes('--allowedTools'), 'should not pass --allowedTools without session')
+    } finally {
+      process.env.PATH = origPath
+    }
+  })
+
   it('passes configEnv through to reviewer subprocess', () => {
     const reviewerPath = path.join(tmpDir, 'env_reviewer.sh')
     fs.writeFileSync(reviewerPath, [
@@ -651,28 +685,20 @@ describe('notepad', () => {
   })
 
   // ---------- Story: notepad lifecycle ----------
-  // FAIL → created (fallback), second FAIL → overwritten, PASS → cleaned, SKIP → cleaned
-  it('lifecycle: created on FAIL (fallback), overwritten on repeat FAIL, cleaned on PASS/SKIP', () => {
-    // FAIL → notepad created with fallback content
+  // FAIL without reviewer-written notepad → no notepad, PASS → cleaned, SKIP → cleaned
+  it('lifecycle: no fallback on FAIL, cleaned on PASS/SKIP', () => {
+    // FAIL → notepad NOT created (no fallback)
     const failPath = writeReviewer(tmpDir, 'fail.sh', 'echo "FAIL: missing tests"')
     runAgentCheck(
       { name: 'test-review', command: failPath, prompt: 'Review this' },
       ctx(tmpDir, { sessionId })
     )
     const npPath = notepadFilePath(tmpDir, sessionId, 'test-review')
-    assert.ok(fs.existsSync(npPath), 'notepad should be created on FAIL')
-    assert.ok(fs.readFileSync(npPath, 'utf8').includes('missing tests'))
+    assert.ok(!fs.existsSync(npPath), 'notepad should NOT be created on FAIL without reviewer writing')
 
-    // Second FAIL → notepad overwritten with new findings
-    const fail2Path = writeReviewer(tmpDir, 'fail2.sh', 'echo "FAIL: still broken"')
-    runAgentCheck(
-      { name: 'test-review', command: fail2Path, prompt: 'Review this' },
-      ctx(tmpDir, { sessionId })
-    )
-    const updated = fs.readFileSync(npPath, 'utf8')
-    assert.ok(updated.includes('still broken'), 'notepad should be overwritten with latest')
-
-    // PASS → notepad cleaned
+    // PASS → notepad cleaned (pre-create to verify cleanup)
+    writeNotepad(tmpDir, sessionId, 'test-review', 'leftover notes')
+    assert.ok(fs.existsSync(npPath), 'precondition: notepad exists before PASS')
     const passPath = writeReviewer(tmpDir, 'pass.sh', 'echo "PASS: looks good"')
     runAgentCheck(
       { name: 'test-review', command: passPath, prompt: 'Review this' },
@@ -725,7 +751,7 @@ describe('notepad', () => {
       ctx(tmpDir, { sessionId })
     )
     const withSession = fs.readFileSync(capturePath, 'utf8')
-    assert.ok(withSession.includes('If you FAIL this review, write a continuation note'))
+    assert.ok(withSession.includes('When you FAIL this review, you MUST silently write'))
 
     // Without sessionId → no FAIL instruction
     runAgentCheck(
@@ -733,7 +759,7 @@ describe('notepad', () => {
       ctx(tmpDir, { sessionId: null })
     )
     const noSession = fs.readFileSync(capturePath, 'utf8')
-    assert.ok(!noSession.includes('If you FAIL this review, write a continuation note'))
+    assert.ok(!noSession.includes('When you FAIL this review'))
   })
 
   // ---------- Story: round tracking ----------

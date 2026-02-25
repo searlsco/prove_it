@@ -46,6 +46,38 @@ describe('runReviewer with fixture shims', () => {
     cleanup()
   })
 
+  // ---------- Story: allowedTools support ----------
+  it('appends --allowedTools for claude/codex, omits for custom/null', () => {
+    setup()
+
+    // Claude: --allowedTools
+    const claudePath = path.join(tmpDir, 'claude')
+    fs.writeFileSync(claudePath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
+    fs.chmodSync(claudePath, 0o755)
+    const r1 = runReviewer(tmpDir, { command: `${claudePath} -p`, allowedTools: 'Write(/tmp/notepad.md)' }, 'test')
+    assert.ok(r1.pass && r1.reason.includes('--allowedTools'))
+
+    // Codex: --allowedTools
+    const codexPath = path.join(tmpDir, 'codex')
+    fs.writeFileSync(codexPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
+    fs.chmodSync(codexPath, 0o755)
+    const r2 = runReviewer(tmpDir, { command: `${codexPath} exec -`, allowedTools: 'Write(/tmp/notepad.md)' }, 'test')
+    assert.ok(r2.pass && r2.reason.includes('--allowedTools'))
+
+    // Custom: no --allowedTools
+    const customPath = path.join(tmpDir, 'custom_reviewer')
+    fs.writeFileSync(customPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
+    fs.chmodSync(customPath, 0o755)
+    const r3 = runReviewer(tmpDir, { command: customPath, allowedTools: 'Write(/tmp/notepad.md)' }, 'test')
+    assert.ok(!r3.reason.includes('--allowedTools'))
+
+    // Null allowedTools: no --allowedTools
+    const r4 = runReviewer(tmpDir, { command: `${claudePath} -p`, allowedTools: null }, 'test')
+    assert.ok(!r4.reason.includes('--allowedTools'))
+
+    cleanup()
+  })
+
   // ---------- Story: environment isolation ----------
   it('sets LC_ALL=C and clears CLAUDECODE', () => {
     setup()
