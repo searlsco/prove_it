@@ -1,4 +1,4 @@
-# prove_it—Force Claude to actually verify its work
+# prove_it: force Claude's code to actually work
 
 🔥 **Comin' in Hot! Shipping multiple unstable releases per day at the moment. If you want prove_it to actually work, [email Justin](mailto:justin@searls.co) for updates** 🛬🔥
 
