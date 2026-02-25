@@ -283,6 +283,7 @@ describe('askConflict', () => {
       const origQuestion = rl.question.bind(rl)
       rl.question = (prompt, cb) => { promptText = prompt; origQuestion(prompt, cb) }
       await askConflict(rl, { ...baseOpts(), defaultYes: true, _log: () => {} })
+      assert.ok(promptText.includes('Conflict:'), 'prompt should start with Conflict:')
       assert.ok(promptText.includes('[Yndamq?]'))
     })
 
