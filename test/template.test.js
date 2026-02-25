@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test')
 const assert = require('node:assert')
-const { expandTemplate, makeResolvers, KNOWN_VARS, SESSION_VARS, getUnknownVars, getSessionVars } = require('../lib/template')
+const { expandTemplate, makeResolvers, KNOWN_VARS, VAR_DESCRIPTIONS, SESSION_VARS, getUnknownVars, getSessionVars } = require('../lib/template')
 
 describe('template', () => {
   describe('expandTemplate', () => {
@@ -329,6 +329,21 @@ describe('template', () => {
       const resolverKeys = Object.keys(resolvers).sort()
       const knownSorted = [...KNOWN_VARS].sort()
       assert.deepStrictEqual(resolverKeys, knownSorted)
+    })
+  })
+
+  describe('VAR_DESCRIPTIONS', () => {
+    it('has an entry for every KNOWN_VAR', () => {
+      for (const v of KNOWN_VARS) {
+        assert.ok(VAR_DESCRIPTIONS[v], `Missing VAR_DESCRIPTIONS entry for "${v}"`)
+        assert.strictEqual(typeof VAR_DESCRIPTIONS[v], 'string')
+      }
+    })
+
+    it('has no extra keys beyond KNOWN_VARS', () => {
+      for (const k of Object.keys(VAR_DESCRIPTIONS)) {
+        assert.ok(KNOWN_VARS.includes(k), `VAR_DESCRIPTIONS has extra key "${k}" not in KNOWN_VARS`)
+      }
     })
   })
 
