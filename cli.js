@@ -18,7 +18,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const readline = require('readline')
-const { loadJson, writeJson, getProveItDir, buildGlobalConfig, configHash } = require('./lib/shared')
+const { loadJson, writeJson, ensureTrailingNewline, getProveItDir, buildGlobalConfig, configHash } = require('./lib/shared')
 const { askConflict } = require('./lib/conflict')
 const { generateStandaloneSkill } = require('./lib/skills')
 
@@ -237,7 +237,7 @@ async function cmdInstall () {
       }
       if (doWrite) {
         fs.mkdirSync(skillDir, { recursive: true })
-        fs.writeFileSync(skillPath, writeContent)
+        fs.writeFileSync(skillPath, ensureTrailingNewline(writeContent))
       }
     }
   } finally {
@@ -454,7 +454,7 @@ async function cmdInit (options = {}) {
         }
         if (result.answer === 'yes') {
           // Write the accepted content (may be agent-merged, not the original proposed)
-          fs.writeFileSync(teamConfigPath, result.content)
+          fs.writeFileSync(teamConfigPath, ensureTrailingNewline(result.content))
           overwritten = true
           if (sources) sourcesPreserved = true
         }

@@ -202,7 +202,10 @@ describe('askConflict', () => {
         claude: { status: 0, stdout: mergedContent, stderr: '' },
         diff: { status: 1, stdout: '--- a\n+++ b\n-existing\n+merged\n', stderr: '' }
       })
+      const prompts = []
       const rl = mockRl(['a', 'y'])
+      const origQuestion = rl.question.bind(rl)
+      rl.question = (prompt, cb) => { prompts.push(prompt); origQuestion(prompt, cb) }
       const result = await askConflict(rl, {
         ...baseOpts(),
         _log: capture.log,
@@ -213,6 +216,8 @@ describe('askConflict', () => {
         'content should be the agent-merged result, not the original proposed')
       assert.ok(capture.lines.some(l => l.includes('Agent merge result')))
       assert.ok(spawn.calls.some(c => c.cmd === 'claude'))
+      assert.ok(prompts[0].includes('Conflict:'), 'first prompt should say Conflict')
+      assert.ok(prompts[1].includes('Accept merge:'), 'post-merge prompt should say Accept merge')
     })
 
     it('MERGE_FAILED falls through to manual merge and resolves no', async () => {
