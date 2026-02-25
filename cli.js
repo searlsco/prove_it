@@ -212,26 +212,28 @@ async function cmdInstall () {
       const shippedContent = fs.readFileSync(shippedPath, 'utf8')
 
       let doWrite = true
+      let writeContent = shippedContent
       if (fs.existsSync(skillPath)) {
         const existing = fs.readFileSync(skillPath, 'utf8')
         if (existing !== shippedContent && skillRl) {
-          const answer = await askConflict(skillRl, {
+          const result = await askConflict(skillRl, {
             label: `~/.claude/skills/${name}/SKILL.md`,
             existingPath: skillPath,
             existing,
             proposed: shippedContent,
             defaultYes: true
           })
-          if (answer === 'quit') {
+          if (result.answer === 'quit') {
             log('Aborted.')
             process.exit(1)
           }
-          doWrite = answer === 'yes'
+          doWrite = result.answer === 'yes'
+          writeContent = result.content
         }
       }
       if (doWrite) {
         fs.mkdirSync(skillDir, { recursive: true })
-        fs.writeFileSync(skillPath, shippedContent)
+        fs.writeFileSync(skillPath, writeContent)
       }
     }
   } finally {
@@ -435,21 +437,22 @@ async function cmdInit (options = {}) {
         proposedCfg.initSeed = cfgHash(proposedCfg)
         const proposedContent = JSON.stringify(proposedCfg, null, 2) + '\n'
 
-        const answer = await askConflict(rl, {
+        const result = await askConflict(rl, {
           label: '.claude/prove_it/config.json',
           existingPath: teamConfigPath,
           existing: existingContent,
           proposed: proposedContent,
           defaultYes: false
         })
-        if (answer === 'quit') {
+        if (result.answer === 'quit') {
           log('Aborted.')
           process.exit(1)
         }
-        if (answer === 'yes') {
-          const owResult = overwriteTeamConfig(repoRoot, { ...flags, preservedSources })
+        if (result.answer === 'yes') {
+          // Write the accepted content (may be agent-merged, not the original proposed)
+          fs.writeFileSync(teamConfigPath, result.content)
           overwritten = true
-          if (owResult.sourcesPreserved) sourcesPreserved = true
+          if (sources) sourcesPreserved = true
         }
       }
       // flags.overwrite === false or user said no → keep existing

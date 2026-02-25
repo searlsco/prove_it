@@ -65,46 +65,47 @@ describe('askConflict', () => {
   })
 
   describe('basic answers', () => {
-    it('y resolves to yes', async () => {
+    it('y resolves to yes with proposed content', async () => {
       const rl = mockRl(['y'])
       const { log } = captureLog()
       const result = await askConflict(rl, { ...baseOpts(), _log: log })
-      assert.strictEqual(result, 'yes')
+      assert.strictEqual(result.answer, 'yes')
+      assert.strictEqual(result.content, 'proposed content\n')
     })
 
     it('Y resolves to yes', async () => {
       const rl = mockRl(['Y'])
       const { log } = captureLog()
       const result = await askConflict(rl, { ...baseOpts(), _log: log })
-      assert.strictEqual(result, 'yes')
+      assert.strictEqual(result.answer, 'yes')
     })
 
     it('empty input with defaultYes=true resolves to yes', async () => {
       const rl = mockRl([''])
       const { log } = captureLog()
       const result = await askConflict(rl, { ...baseOpts(), defaultYes: true, _log: log })
-      assert.strictEqual(result, 'yes')
+      assert.strictEqual(result.answer, 'yes')
     })
 
     it('empty input with defaultYes=false resolves to no', async () => {
       const rl = mockRl([''])
       const { log } = captureLog()
       const result = await askConflict(rl, { ...baseOpts(), defaultYes: false, _log: log })
-      assert.strictEqual(result, 'no')
+      assert.strictEqual(result.answer, 'no')
     })
 
     it('n resolves to no', async () => {
       const rl = mockRl(['n'])
       const { log } = captureLog()
       const result = await askConflict(rl, { ...baseOpts(), _log: log })
-      assert.strictEqual(result, 'no')
+      assert.strictEqual(result.answer, 'no')
     })
 
     it('q resolves to quit', async () => {
       const rl = mockRl(['q'])
       const { log } = captureLog()
       const result = await askConflict(rl, { ...baseOpts(), _log: log })
-      assert.strictEqual(result, 'quit')
+      assert.strictEqual(result.answer, 'quit')
     })
   })
 
@@ -132,7 +133,7 @@ describe('askConflict', () => {
       const capture = captureLog()
       const rl = mockRl(['?', 'y'])
       const result = await askConflict(rl, { ...baseOpts(), _log: capture.log })
-      assert.strictEqual(result, 'yes')
+      assert.strictEqual(result.answer, 'yes')
       // help shown twice: auto on first call, and again for ?
       const helpCount = capture.lines.filter(l => l.includes('yes, overwrite')).length
       assert.strictEqual(helpCount, 2)
@@ -142,21 +143,21 @@ describe('askConflict', () => {
       const capture = captureLog()
       const rl = mockRl(['h', 'n'])
       const result = await askConflict(rl, { ...baseOpts(), _log: capture.log })
-      assert.strictEqual(result, 'no')
+      assert.strictEqual(result.answer, 'no')
     })
 
     it('/ shows help and re-prompts', async () => {
       const capture = captureLog()
       const rl = mockRl(['/', 'n'])
       const result = await askConflict(rl, { ...baseOpts(), _log: capture.log })
-      assert.strictEqual(result, 'no')
+      assert.strictEqual(result.answer, 'no')
     })
 
     it('unknown key shows help and re-prompts', async () => {
       const capture = captureLog()
       const rl = mockRl(['x', 'y'])
       const result = await askConflict(rl, { ...baseOpts(), _log: capture.log })
-      assert.strictEqual(result, 'yes')
+      assert.strictEqual(result.answer, 'yes')
     })
   })
 
@@ -172,7 +173,7 @@ describe('askConflict', () => {
         _log: capture.log,
         _spawnSync: spawn.fn
       })
-      assert.strictEqual(result, 'yes')
+      assert.strictEqual(result.answer, 'yes')
       assert.strictEqual(spawn.calls.length, 1)
       assert.strictEqual(spawn.calls[0].cmd, 'diff')
       assert.ok(capture.lines.some(l => l.includes('-old')))
@@ -194,7 +195,7 @@ describe('askConflict', () => {
   })
 
   describe('agent merge (a)', () => {
-    it('successful merge shows diff and re-prompts with merged content', async () => {
+    it('successful merge returns merged content when accepted', async () => {
       const capture = captureLog()
       const mergedContent = 'merged content\n'
       const spawn = mockSpawnSync({
@@ -207,9 +208,10 @@ describe('askConflict', () => {
         _log: capture.log,
         _spawnSync: spawn.fn
       })
-      assert.strictEqual(result, 'yes')
+      assert.strictEqual(result.answer, 'yes')
+      assert.strictEqual(result.content, mergedContent.trim(),
+        'content should be the agent-merged result, not the original proposed')
       assert.ok(capture.lines.some(l => l.includes('Agent merge result')))
-      // claude was called
       assert.ok(spawn.calls.some(c => c.cmd === 'claude'))
     })
 
@@ -224,7 +226,7 @@ describe('askConflict', () => {
         _log: capture.log,
         _spawnSync: spawn.fn
       })
-      assert.strictEqual(result, 'no')
+      assert.strictEqual(result.answer, 'no')
       assert.ok(capture.lines.some(l => l.includes('Agent merge failed')))
       assert.ok(capture.lines.some(l => l.includes('Manual merge:')))
     })
@@ -240,8 +242,25 @@ describe('askConflict', () => {
         _log: capture.log,
         _spawnSync: spawn.fn
       })
-      assert.strictEqual(result, 'no')
+      assert.strictEqual(result.answer, 'no')
       assert.ok(capture.lines.some(l => l.includes('Agent merge failed')))
+    })
+
+    it('rejected merge still carries original proposed content', async () => {
+      const capture = captureLog()
+      const spawn = mockSpawnSync({
+        claude: { status: 0, stdout: 'merged stuff', stderr: '' },
+        diff: { status: 1, stdout: 'diff\n', stderr: '' }
+      })
+      const rl = mockRl(['a', 'n'])
+      const result = await askConflict(rl, {
+        ...baseOpts(),
+        _log: capture.log,
+        _spawnSync: spawn.fn
+      })
+      assert.strictEqual(result.answer, 'no')
+      // content reflects the merged version (agent changed currentProposed)
+      assert.strictEqual(result.content, 'merged stuff')
     })
   })
 
@@ -250,7 +269,7 @@ describe('askConflict', () => {
       const capture = captureLog()
       const rl = mockRl(['m'])
       const result = await askConflict(rl, { ...baseOpts(), _log: capture.log })
-      assert.strictEqual(result, 'no')
+      assert.strictEqual(result.answer, 'no')
       assert.ok(capture.lines.some(l => l.includes('Manual merge:')))
       assert.ok(capture.lines.some(l => l.includes('Yours:')))
       assert.ok(capture.lines.some(l => l.includes('Shipped:')))
@@ -279,7 +298,7 @@ describe('askConflict', () => {
   })
 
   describe('multi-step sequences', () => {
-    it('d then a (success) then y resolves yes', async () => {
+    it('d then a (success) then y resolves yes with merged content', async () => {
       const capture = captureLog()
       const spawn = mockSpawnSync({
         diff: { status: 1, stdout: 'diff output\n', stderr: '' },
@@ -291,7 +310,8 @@ describe('askConflict', () => {
         _log: capture.log,
         _spawnSync: spawn.fn
       })
-      assert.strictEqual(result, 'yes')
+      assert.strictEqual(result.answer, 'yes')
+      assert.strictEqual(result.content, 'merged result')
     })
 
     it('d then n resolves no', async () => {
@@ -305,7 +325,7 @@ describe('askConflict', () => {
         _log: capture.log,
         _spawnSync: spawn.fn
       })
-      assert.strictEqual(result, 'no')
+      assert.strictEqual(result.answer, 'no')
     })
 
     it('? then q resolves quit', async () => {
@@ -315,7 +335,7 @@ describe('askConflict', () => {
         ...baseOpts(),
         _log: capture.log
       })
-      assert.strictEqual(result, 'quit')
+      assert.strictEqual(result.answer, 'quit')
     })
   })
 })
