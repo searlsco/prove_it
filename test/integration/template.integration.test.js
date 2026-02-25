@@ -29,7 +29,7 @@ describe('template integration', () => {
       // Empty on clean tree
       assert.strictEqual(r.staged_diff(), '')
       assert.strictEqual(r.working_diff(), '')
-      assert.strictEqual(r.git_status(), '')
+      assert.strictEqual(r.git_status(), '(clean)')
 
       // recent_commits includes init
       assert.ok(r.recent_commits().includes('init'))

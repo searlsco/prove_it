@@ -116,8 +116,9 @@ describe('skills', () => {
       ].join('\n')
       // Old installed = same as internal (raw format)
       const restored = restoreTemplateVars(internal, internal)
-      assert.ok(!restored.includes('{{/signal_message}}') || restored.includes('{{/signal_message}}'),
-        'conditional markers should pass through unchanged')
+      // Conditional markers must survive unchanged
+      assert.ok(restored.includes('{{#signal_message}}'), 'opening marker should pass through')
+      assert.ok(restored.includes('{{/signal_message}}'), 'closing marker should pass through')
       // The bare vars should be correctly positioned
       const vars = extractTemplateVars(restored)
       assert.deepStrictEqual(vars, ['changes_since_last_run', 'signal_message', 'git_status'])
