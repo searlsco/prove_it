@@ -810,7 +810,8 @@ function cmdDoctor () {
     if (fs.existsSync(skillPath)) {
       const installed = fs.readFileSync(skillPath, 'utf8')
       const shipped = fs.readFileSync(shippedSkillPath, 'utf8')
-      if (installed === shipped) {
+      const expected = generateStandaloneSkill(shipped)
+      if (installed === expected) {
         log(`  [x] /${name} skill (current)`)
       } else {
         log(`  [!] /${name} skill (outdated—run prove_it install to update)`)

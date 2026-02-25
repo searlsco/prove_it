@@ -6,6 +6,7 @@ const os = require('node:os')
 const { spawnSync } = require('node:child_process')
 
 const CLI_PATH = path.join(__dirname, '..', '..', 'cli.js')
+const { generateStandaloneSkill } = require('../../lib/skills')
 
 function runDoctor (options = {}) {
   const result = spawnSync('node', [CLI_PATH, 'doctor'], {
@@ -411,10 +412,8 @@ describe('doctor', () => {
     for (const name of ['prove', 'prove-coverage', 'prove-shipworthy']) {
       const skillDir = path.join(tmpHome, '.claude', 'skills', name)
       fs.mkdirSync(skillDir, { recursive: true })
-      fs.copyFileSync(
-        path.join(__dirname, '..', '..', 'lib', 'skills', `${name}.md`),
-        path.join(skillDir, 'SKILL.md')
-      )
+      const raw = fs.readFileSync(path.join(__dirname, '..', '..', 'lib', 'skills', `${name}.md`), 'utf8')
+      fs.writeFileSync(path.join(skillDir, 'SKILL.md'), generateStandaloneSkill(raw))
     }
 
     let result = run()
