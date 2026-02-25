@@ -104,6 +104,25 @@ describe('skills', () => {
       assert.strictEqual(restoreTemplateVars(undefined, 'body'), undefined)
     })
 
+    it('skips conditional markers in old-format installed files', () => {
+      // Old installed files have raw {{#var}} and {{/var}} markers.
+      // restoreTemplateVars must skip them to avoid shifting positions.
+      const internal = [
+        '{{changes_since_last_run}}',
+        '{{#signal_message}}',
+        'Signal: {{signal_message}}',
+        '{{/signal_message}}',
+        '{{git_status}}'
+      ].join('\n')
+      // Old installed = same as internal (raw format)
+      const restored = restoreTemplateVars(internal, internal)
+      assert.ok(!restored.includes('{{/signal_message}}') || restored.includes('{{/signal_message}}'),
+        'conditional markers should pass through unchanged')
+      // The bare vars should be correctly positioned
+      const vars = extractTemplateVars(restored)
+      assert.deepStrictEqual(vars, ['changes_since_last_run', 'signal_message', 'git_status'])
+    })
+
     it('full roundtrip with conditionals', () => {
       const internal = [
         '{{changes_since_last_run}}',
