@@ -166,7 +166,36 @@ describe('Plan mode enforcement via PreToolUse', () => {
       assert.strictEqual(result.exitCode, 0)
       const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
       assert.ok(content.includes(SIGNAL_PLAN_MARKER), 'Plan file should contain signal task')
-      assert.ok(content.includes('## 1. Run `prove_it signal done`'), 'Fallback should use ## level step 1')
+      assert.ok(content.includes('## Run `prove_it signal done`'), 'Fallback should omit step number when plan has no numbered headings')
+    })
+
+    it('numbers signal step when plan has a single numbered heading', () => {
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
+          ]
+        }
+      ]))
+
+      const plansDir = path.join(tmpDir, '.claude', 'plans')
+      fs.mkdirSync(plansDir, { recursive: true })
+      const planText = '## 1. Verify the thing\n\nCheck stuff.'
+      fs.writeFileSync(path.join(plansDir, 'test-plan.md'), planText)
+
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        session_id: 'test-exit-plan-single-heading',
+        tool_name: 'ExitPlanMode',
+        tool_input: { plan: planText }
+      }, { projectDir: tmpDir, env })
+
+      assert.strictEqual(result.exitCode, 0)
+      const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
+      assert.ok(content.includes(SIGNAL_PLAN_MARKER), 'Plan file should contain signal task')
+      assert.ok(content.includes('## 2. Run `prove_it signal done`'), 'Should number as step 2 when plan has one heading')
     })
 
     it('does not double-append signal task', () => {
