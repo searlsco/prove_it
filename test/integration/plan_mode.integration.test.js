@@ -16,7 +16,7 @@ const {
   isolatedEnv
 } = require('./hook-harness')
 
-const { SIGNAL_TASK_PATTERN } = require('../../lib/dispatcher/claude')
+const { SIGNAL_PLAN_MARKER } = require('../../lib/dispatcher/claude')
 
 describe('Plan mode enforcement via PreToolUse', () => {
   let tmpDir, env
@@ -101,7 +101,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
       assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow')
 
       const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
-      assert.ok(SIGNAL_TASK_PATTERN.test(content), `Plan file should contain signal task, got:\n${content}`)
+      assert.ok(content.includes(SIGNAL_PLAN_MARKER), `Plan file should contain signal task, got:\n${content}`)
       assert.ok(content.includes('### 3. Run `prove_it signal done`'), 'Should be numbered as step 3 at ### level')
       assert.ok(content.includes('**IMPORTANT'), 'Should have IMPORTANT callout')
       assert.ok(content.includes('```bash'), 'Should have code fence')
@@ -165,7 +165,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
 
       assert.strictEqual(result.exitCode, 0)
       const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
-      assert.ok(SIGNAL_TASK_PATTERN.test(content), 'Plan file should contain signal task')
+      assert.ok(content.includes(SIGNAL_PLAN_MARKER), 'Plan file should contain signal task')
       assert.ok(content.includes('## 1. Run `prove_it signal done`'), 'Fallback should use ## level step 1')
     })
 
@@ -196,10 +196,10 @@ describe('Plan mode enforcement via PreToolUse', () => {
       assert.strictEqual(result.exitCode, 0)
       assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow')
 
-      // Should still have exactly one signal block
+      // Should still have exactly one signal marker
       const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
-      const matches = content.match(/\bsignal\b.*\bdone\b/gi) || []
-      assert.strictEqual(matches.length, 1, `Should have exactly 1 signal reference, found ${matches.length}`)
+      const markerCount = content.split(SIGNAL_PLAN_MARKER).length - 1
+      assert.strictEqual(markerCount, 1, `Should have exactly 1 signal marker, found ${markerCount}`)
     })
 
     it('skips editing when no signal-gated tasks exist', () => {
@@ -222,7 +222,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
 
       // Plan file should be unchanged
       const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
-      assert.ok(!SIGNAL_TASK_PATTERN.test(content), 'Plan file should not be edited when no signal-gated tasks')
+      assert.ok(!content.includes(SIGNAL_PLAN_MARKER), 'Plan file should not be edited when no signal-gated tasks')
     })
 
     it('allows even when plan file not found', () => {

@@ -7,7 +7,7 @@ const {
   writeConfig, makeConfig, isolatedEnv, createFastTestScript
 } = require('./hook-harness')
 const { setSignal, getSignal } = require('../../lib/session')
-const { SIGNAL_TASK_PATTERN } = require('../../lib/dispatcher/claude')
+const { SIGNAL_PLAN_MARKER } = require('../../lib/dispatcher/claude')
 
 describe('TaskCompleted auto-signaling', () => {
   let tmpDir, projectDir, env, origProveItDir, origHome
@@ -159,7 +159,7 @@ describe('TaskCompleted auto-signaling', () => {
     assert.strictEqual(exitResult.exitCode, 0)
     assert.strictEqual(exitResult.output.hookSpecificOutput.permissionDecision, 'allow')
     const planContent = fs.readFileSync(path.join(plansDir, 'my-plan.md'), 'utf8')
-    assert.ok(SIGNAL_TASK_PATTERN.test(planContent), 'Plan file should have signal task')
+    assert.ok(planContent.includes(SIGNAL_PLAN_MARKER), 'Plan file should have signal task')
     assert.ok(planContent.includes('### 3. Run `prove_it signal done`'), 'Signal should be step 3')
 
     // 4. Invoke TaskCompleted with matching subject → signal should be set
