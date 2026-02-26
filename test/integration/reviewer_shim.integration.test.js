@@ -181,6 +181,21 @@ describe('runReviewer with fixture shims', () => {
     cleanup()
   })
 
+  it('returns error without calling classifier when reviewer output is empty', () => {
+    setup()
+    // Shim that exits 0 but produces no output (simulates transient API blank response)
+    const emptyPath = path.join(tmpDir, 'empty_reviewer.sh')
+    fs.writeFileSync(emptyPath, '#!/usr/bin/env bash\ncat > /dev/null\n')
+    fs.chmodSync(emptyPath, 0o755)
+
+    const result = runReviewer(tmpDir, { command: emptyPath }, 'test')
+    assert.strictEqual(result.available, true)
+    assert.ok(result.error, 'should return an error')
+    assert.ok(result.error.includes('empty'), `error should mention empty output: ${result.error}`)
+    assert.strictEqual(result.responseText, undefined, 'should not set responseText for empty response')
+    cleanup()
+  })
+
   it('basic PASS/FAIL, missing binary, timeout, and codex auto-switch', () => {
     setup()
 
