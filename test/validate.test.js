@@ -117,6 +117,34 @@ describe('validateConfig', () => {
       assert.strictEqual(errors.length, 0)
     })
 
+    it('validates taskAllowedTools field', () => {
+      // valid array passes
+      const valid = validateConfig(validConfig({ taskAllowedTools: ['Read', 'Write', 'Bash'] }))
+      assert.strictEqual(valid.errors.length, 0)
+
+      // not array errors
+      const notArray = validateConfig(validConfig({ taskAllowedTools: 'Read' }))
+      assert.ok(notArray.errors.some(e => e.includes('"taskAllowedTools" must be an array')))
+
+      // non-string element errors
+      const nonString = validateConfig(validConfig({ taskAllowedTools: ['Read', 42] }))
+      assert.ok(nonString.errors.some(e => e.includes('taskAllowedTools[1] must be a string')))
+    })
+
+    it('validates taskBypassPermissions field', () => {
+      // boolean true passes
+      const t = validateConfig(validConfig({ taskBypassPermissions: true }))
+      assert.strictEqual(t.errors.length, 0)
+
+      // boolean false passes
+      const f = validateConfig(validConfig({ taskBypassPermissions: false }))
+      assert.strictEqual(f.errors.length, 0)
+
+      // non-boolean errors
+      const bad = validateConfig(validConfig({ taskBypassPermissions: 'yes' }))
+      assert.ok(bad.errors.some(e => e.includes('"taskBypassPermissions" must be a boolean')))
+    })
+
     it('validates hooks is required and must be array', () => {
       const missing = validConfig()
       delete missing.hooks

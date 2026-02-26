@@ -46,35 +46,65 @@ describe('runReviewer with fixture shims', () => {
     cleanup()
   })
 
-  // ---------- Story: allowedTools support ----------
-  it('appends --allowedTools for claude/codex, omits for custom/null', () => {
+  // ---------- Story: bypassPermissions / allowedTools ----------
+  it('claude: bypassPermissions=true → --dangerously-skip-permissions', () => {
     setup()
-
-    // Claude: --allowedTools
     const claudePath = path.join(tmpDir, 'claude')
     fs.writeFileSync(claudePath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
     fs.chmodSync(claudePath, 0o755)
-    const r1 = runReviewer(tmpDir, { command: `${claudePath} -p`, allowedTools: 'Write(/tmp/notepad.md)' }, 'test')
-    assert.ok(r1.pass && r1.reason.includes('--allowedTools'))
+    const r = runReviewer(tmpDir, { command: `${claudePath} -p`, bypassPermissions: true }, 'test')
+    assert.ok(r.pass && r.reason.includes('--dangerously-skip-permissions'))
+    assert.ok(!r.reason.includes('--allowedTools'))
+    cleanup()
+  })
 
-    // Codex: --allowedTools
+  it('claude: bypassPermissions=false + allowedTools → --allowedTools', () => {
+    setup()
+    const claudePath = path.join(tmpDir, 'claude')
+    fs.writeFileSync(claudePath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
+    fs.chmodSync(claudePath, 0o755)
+    const r = runReviewer(tmpDir, { command: `${claudePath} -p`, bypassPermissions: false, allowedTools: 'Read,Write,Bash' }, 'test')
+    assert.ok(r.pass && r.reason.includes('--allowedTools'))
+    assert.ok(!r.reason.includes('--dangerously-skip-permissions'))
+    cleanup()
+  })
+
+  it('claude: bypassPermissions=null auto-detects from settings', () => {
+    setup()
+    const claudePath = path.join(tmpDir, 'claude')
+    fs.writeFileSync(claudePath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
+    fs.chmodSync(claudePath, 0o755)
+
+    // With no settings file → falls through to allowedTools
+    const r1 = runReviewer(tmpDir, { command: `${claudePath} -p`, bypassPermissions: null, allowedTools: 'Read,Write' }, 'test')
+    assert.ok(r1.pass)
+    assert.ok(r1.reason.includes('--allowedTools'), 'no bypass settings → --allowedTools')
+    assert.ok(!r1.reason.includes('--dangerously-skip-permissions'))
+    cleanup()
+  })
+
+  it('codex: --allowedTools when provided, nothing when not', () => {
+    setup()
     const codexPath = path.join(tmpDir, 'codex')
     fs.writeFileSync(codexPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
     fs.chmodSync(codexPath, 0o755)
-    const r2 = runReviewer(tmpDir, { command: `${codexPath} exec -`, allowedTools: 'Write(/tmp/notepad.md)' }, 'test')
-    assert.ok(r2.pass && r2.reason.includes('--allowedTools'))
+    const r1 = runReviewer(tmpDir, { command: `${codexPath} exec -`, allowedTools: 'Read,Write' }, 'test')
+    assert.ok(r1.pass && r1.reason.includes('--allowedTools'))
 
-    // Custom: no --allowedTools
+    const r2 = runReviewer(tmpDir, { command: `${codexPath} exec -`, allowedTools: null }, 'test')
+    assert.ok(r2.pass && !r2.reason.includes('--allowedTools'))
+    cleanup()
+  })
+
+  it('custom binary: neither --allowedTools nor --dangerously-skip-permissions', () => {
+    setup()
     const customPath = path.join(tmpDir, 'custom_reviewer')
     fs.writeFileSync(customPath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
     fs.chmodSync(customPath, 0o755)
-    const r3 = runReviewer(tmpDir, { command: customPath, allowedTools: 'Write(/tmp/notepad.md)' }, 'test')
-    assert.ok(!r3.reason.includes('--allowedTools'))
-
-    // Null allowedTools: no --allowedTools
-    const r4 = runReviewer(tmpDir, { command: `${claudePath} -p`, allowedTools: null }, 'test')
-    assert.ok(!r4.reason.includes('--allowedTools'))
-
+    const r = runReviewer(tmpDir, { command: customPath, allowedTools: 'Read,Write', bypassPermissions: true }, 'test')
+    assert.ok(r.pass)
+    assert.ok(!r.reason.includes('--allowedTools'))
+    assert.ok(!r.reason.includes('--dangerously-skip-permissions'))
     cleanup()
   })
 

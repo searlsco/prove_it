@@ -39,6 +39,11 @@ Changes since last run:
 Files to review (most recent first):
 {{files_changed_since_last_run}}
 
+{{#session_diff}}
+Full diff of session changes:
+{{session_diff}}
+{{/session_diff}}
+
 {{#signal_message}}
 Signal message from the developer: {{signal_message}}
 {{/signal_message}}

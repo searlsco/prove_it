@@ -5,7 +5,7 @@ const path = require('path')
 const { spawnSync } = require('child_process')
 const { freshRepo } = require('../helpers')
 const { makeResolvers } = require('../../lib/template')
-const { recordFileEdit, saveSessionState } = require('../../lib/session')
+const { saveSessionState } = require('../../lib/session')
 
 describe('template integration', () => {
   // ---------- Story: git resolvers—clean tree ----------
@@ -103,22 +103,24 @@ describe('template integration', () => {
       fs.rmSync(tmpDir, { recursive: true, force: true })
     })
 
-    it('git diff fallback, empty when no edits, checkpoint, empty when no base', () => {
+    it('git diff fallback diffs all sources from baseline, checkpoint, no-base fallback', () => {
       const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
+      const sources = ['src/**']
 
-      // Edits tracked → git diff
+      // Session baseline → git diff all sources (no edit tracking needed)
       const sid1 = 'test-sdgf-fallback'
       saveSessionState(sid1, 'git', { head })
-      recordFileEdit(sid1, 'Edit', 'src/app.js')
       fs.writeFileSync(path.join(tmpDir, 'src', 'app.js'), 'changed content\n')
-      const d1 = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: sid1, toolInput: null }).session_diff()
+      const d1 = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: sid1, toolInput: null, sources }).session_diff()
       assert.ok(d1.includes('Session changes (git diff)'))
       assert.ok(d1.includes('changed content'))
 
-      // No edits → empty
-      const sid2 = 'test-sdgf-no-edits'
+      // No working tree changes → empty
+      const sid2 = 'test-sdgf-no-changes'
+      spawnSync('git', ['checkout', '--', '.'], { cwd: tmpDir })
       saveSessionState(sid2, 'git', { head })
-      assert.strictEqual(makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: sid2, toolInput: null }).session_diff(), '')
+      const d2 = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: sid2, toolInput: null, sources }).session_diff()
+      assert.strictEqual(d2, '')
 
       // Checkpoint: uses last_stop_head
       const sid3 = 'test-sdgf-checkpoint'
@@ -129,16 +131,15 @@ describe('template integration', () => {
       const cpHead = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
       saveSessionState(sid3, 'last_stop_head', cpHead)
       fs.writeFileSync(path.join(tmpDir, 'src', 'app.js'), 'post-checkpoint\n')
-      recordFileEdit(sid3, 'Edit', 'src/app.js')
-      const d3 = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: sid3, toolInput: null }).session_diff()
+      const d3 = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: sid3, toolInput: null, sources }).session_diff()
       assert.ok(d3.includes('post-checkpoint'))
       assert.ok(!d3.includes('original'))
 
-      // No base → empty
+      // No session baseline → falls back to HEAD (still returns diff if working tree differs)
       const sid4 = 'test-sdgf-no-base'
-      recordFileEdit(sid4, 'Edit', 'src/app.js')
       fs.writeFileSync(path.join(tmpDir, 'src', 'app.js'), 'changed\n')
-      assert.strictEqual(makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: sid4, toolInput: null }).session_diff(), '')
+      const d4 = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: sid4, toolInput: null, sources }).session_diff()
+      assert.ok(d4.includes('changed'), 'falls back to HEAD when no session baseline')
     })
   })
 })

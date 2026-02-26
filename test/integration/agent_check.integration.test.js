@@ -324,7 +324,7 @@ describe('agent check', () => {
     }
   })
 
-  it('constructs allowedTools with notepad path when sessionId present', () => {
+  it('passes full allowedTools list from context (or default) through to reviewer', () => {
     // Reviewer that echoes its args so we can verify --allowedTools was passed
     const shimDir = path.join(tmpDir, 'bin')
     fs.mkdirSync(shimDir, { recursive: true })
@@ -336,23 +336,32 @@ describe('agent check', () => {
     process.env.PATH = `${shimDir}:${origPath}`
 
     try {
-      // With sessionId → --allowedTools with Write(notepad) format
+      // Default tools → --allowedTools with full tool list
       const result = runAgentCheck(
         { name: 'test-review', prompt: 'Review {{project_dir}}' },
         ctx(tmpDir, { sessionId: 'test-session-tools' })
       )
       assert.ok(result.pass)
       assert.ok(result.reason.includes('--allowedTools'), 'should pass --allowedTools flag')
-      assert.ok(result.reason.includes('Write('), 'should include Write( in allowedTools value')
-      assert.ok(result.reason.includes('README.md'), 'should include notepad filename')
+      assert.ok(result.reason.includes('Read'), 'should include Read in allowedTools')
+      assert.ok(result.reason.includes('Bash'), 'should include Bash in allowedTools')
 
-      // Without sessionId → no --allowedTools
-      const noSessionResult = runAgentCheck(
+      // Custom taskAllowedTools from context → uses those
+      const custom = runAgentCheck(
         { name: 'test-review', prompt: 'Review {{project_dir}}' },
-        ctx(tmpDir, { sessionId: null })
+        ctx(tmpDir, { sessionId: 'test-session-custom', taskAllowedTools: ['Read', 'Glob'] })
       )
-      assert.ok(noSessionResult.pass)
-      assert.ok(!noSessionResult.reason.includes('--allowedTools'), 'should not pass --allowedTools without session')
+      assert.ok(custom.pass)
+      assert.ok(custom.reason.includes('Read,Glob'), 'should use custom tool list')
+
+      // bypassPermissions forwarded from context
+      const bypass = runAgentCheck(
+        { name: 'test-review', prompt: 'Review {{project_dir}}' },
+        ctx(tmpDir, { sessionId: 'test-session-bypass', taskBypassPermissions: true })
+      )
+      assert.ok(bypass.pass)
+      assert.ok(bypass.reason.includes('--dangerously-skip-permissions'), 'should bypass permissions')
+      assert.ok(!bypass.reason.includes('--allowedTools'), 'bypass excludes --allowedTools')
     } finally {
       process.env.PATH = origPath
     }
