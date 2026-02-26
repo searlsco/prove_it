@@ -3,7 +3,7 @@ const assert = require('node:assert')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { defaultModel, runAgentCheck, backchannelDir, backchannelReadmePath, createBackchannel, notepadDir, notepadFilePath, writeNotepad } = require('../../lib/checks/agent')
+const { defaultModel, runAgentCheck, backchannelDir, backchannelReadmePath, createBackchannel, notepadDir, notepadFilePath, writeNotepad, readNotepad } = require('../../lib/checks/agent')
 const { saveSessionState, loadSessionState } = require('../../lib/session')
 const { freshRepo } = require('../helpers')
 
@@ -742,7 +742,7 @@ describe('notepad', () => {
 
     // With notepad → continuation section injected
     writeNotepad(tmpDir, sessionId, 'test-review', 'Previous findings: missing tests for foo')
-    saveSessionState(sessionId, 'notepad_round_test-review', 1)
+    saveSessionState(sessionId, 'notepadRounds', { 'test-review': 1 })
 
     runAgentCheck(
       { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
@@ -753,6 +753,10 @@ describe('notepad', () => {
     assert.ok(captured.includes('Previous findings: missing tests for foo'), 'should include notepad content')
     assert.ok(captured.includes('round 2'), 'should show round number')
     assert.ok(captured.includes('--- End Reviewer Continuation ---'), 'should have continuation footer')
+    assert.ok(captured.includes('You MUST:'), 'should have rigorous requirements')
+    assert.ok(captured.includes('trace data flow'), 'should require tracing')
+    assert.ok(captured.includes('same rigor'), 'should demand full review')
+    assert.ok(!captured.includes('spot-check'), 'should not contain old weak language')
   })
 
   it('includes FAIL instruction when sessionId present, omits when null', () => {
@@ -777,10 +781,8 @@ describe('notepad', () => {
 
   // ---------- Story: round tracking ----------
   it('increments round on FAIL, resets on PASS and SKIP', () => {
-    const roundKey = 'notepad_round_test-review'
-
-    // Initial state: no round
-    assert.strictEqual(loadSessionState(sessionId, roundKey), null)
+    // Initial state: no notepadRounds key
+    assert.strictEqual(loadSessionState(sessionId, 'notepadRounds'), null)
 
     // FAIL → round 1
     const failPath = writeReviewer(tmpDir, 'fail.sh', 'echo "FAIL: issue"')
@@ -788,14 +790,14 @@ describe('notepad', () => {
       { name: 'test-review', command: failPath, prompt: 'Review this' },
       ctx(tmpDir, { sessionId })
     )
-    assert.strictEqual(loadSessionState(sessionId, roundKey), 1)
+    assert.strictEqual(loadSessionState(sessionId, 'notepadRounds')?.['test-review'], 1)
 
     // Second FAIL → round 2
     runAgentCheck(
       { name: 'test-review', command: failPath, prompt: 'Review this' },
       ctx(tmpDir, { sessionId })
     )
-    assert.strictEqual(loadSessionState(sessionId, roundKey), 2)
+    assert.strictEqual(loadSessionState(sessionId, 'notepadRounds')?.['test-review'], 2)
 
     // PASS → reset to 0
     const passPath = writeReviewer(tmpDir, 'pass.sh', 'echo "PASS: fixed"')
@@ -803,14 +805,14 @@ describe('notepad', () => {
       { name: 'test-review', command: passPath, prompt: 'Review this' },
       ctx(tmpDir, { sessionId })
     )
-    assert.strictEqual(loadSessionState(sessionId, roundKey), 0)
+    assert.strictEqual(loadSessionState(sessionId, 'notepadRounds')?.['test-review'], 0)
 
     // FAIL again → round 1
     runAgentCheck(
       { name: 'test-review', command: failPath, prompt: 'Review this' },
       ctx(tmpDir, { sessionId })
     )
-    assert.strictEqual(loadSessionState(sessionId, roundKey), 1)
+    assert.strictEqual(loadSessionState(sessionId, 'notepadRounds')?.['test-review'], 1)
 
     // SKIP → reset to 0
     const skipPath = writeReviewer(tmpDir, 'skip.sh', 'echo "SKIP: unrelated"')
@@ -818,7 +820,7 @@ describe('notepad', () => {
       { name: 'test-review', command: skipPath, prompt: 'Review this' },
       ctx(tmpDir, { sessionId })
     )
-    assert.strictEqual(loadSessionState(sessionId, roundKey), 0)
+    assert.strictEqual(loadSessionState(sessionId, 'notepadRounds')?.['test-review'], 0)
   })
 
   // ---------- Story: reviewer-written notepad takes precedence ----------
@@ -847,6 +849,48 @@ describe('notepad', () => {
       'should preserve reviewer-written notepad')
     assert.ok(!content.includes('needs work'),
       'should not overwrite with fallback')
+  })
+
+  // ---------- Story: orphaned notepad from crashed reviewer ----------
+  it('increments round counter when reviewer crashes after writing notepad', () => {
+    const npPath = notepadFilePath(tmpDir, sessionId, 'test-review')
+    const npDir = notepadDir(tmpDir, sessionId, 'test-review')
+    const crashPath = path.join(tmpDir, 'crash_with_notepad.sh')
+    fs.writeFileSync(crashPath, [
+      '#!/usr/bin/env bash',
+      'cat > /dev/null',
+      `mkdir -p "${npDir}"`,
+      `echo "Orphaned findings: missing validation" > "${npPath}"`,
+      'exit 1'
+    ].join('\n'))
+    fs.chmodSync(crashPath, 0o755)
+
+    // No notepad before this run
+    assert.strictEqual(readNotepad(tmpDir, sessionId, 'test-review'), null)
+
+    runAgentCheck(
+      { name: 'test-review', command: crashPath, prompt: 'Review this', model: 'opus' },
+      ctx(tmpDir, { sessionId })
+    )
+
+    // Round counter should be incremented to 1
+    assert.strictEqual(loadSessionState(sessionId, 'notepadRounds')?.['test-review'], 1)
+    // Notepad should still exist (crash doesn't clean it)
+    assert.ok(fs.existsSync(npPath), 'orphaned notepad should survive crash')
+  })
+
+  it('does not increment round counter when reviewer crashes without notepad', () => {
+    const crashPath = path.join(tmpDir, 'crash_no_notepad.sh')
+    fs.writeFileSync(crashPath, '#!/usr/bin/env bash\ncat > /dev/null\nexit 1\n')
+    fs.chmodSync(crashPath, 0o755)
+
+    runAgentCheck(
+      { name: 'test-review', command: crashPath, prompt: 'Review this', model: 'opus' },
+      ctx(tmpDir, { sessionId })
+    )
+
+    // Round counter should not be set
+    assert.strictEqual(loadSessionState(sessionId, 'notepadRounds'), null)
   })
 })
 
