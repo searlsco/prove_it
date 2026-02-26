@@ -7,7 +7,7 @@ const {
   writeConfig, makeConfig, isolatedEnv, createFastTestScript
 } = require('./hook-harness')
 const { setSignal, getSignal } = require('../../lib/session')
-const { SIGNAL_TASK_MARKER } = require('../../lib/dispatcher/claude')
+const { SIGNAL_TASK_PATTERN } = require('../../lib/dispatcher/claude')
 
 describe('TaskCompleted auto-signaling', () => {
   let tmpDir, projectDir, env, origProveItDir, origHome
@@ -49,7 +49,7 @@ describe('TaskCompleted auto-signaling', () => {
       hook_event_name: 'TaskCompleted',
       session_id: 'tc-match',
       task_id: '1',
-      task_subject: 'Invoke `prove_it signal done`'
+      task_subject: 'Run `prove_it signal done`'
     }, { projectDir, env })
 
     assert.strictEqual(result.exitCode, 0)
@@ -97,7 +97,7 @@ describe('TaskCompleted auto-signaling', () => {
       hook_event_name: 'TaskCompleted',
       session_id: 'tc-already',
       task_id: '3',
-      task_subject: 'Invoke `prove_it signal done`'
+      task_subject: 'Run `prove_it signal done`'
     }, { projectDir, env })
 
     assert.strictEqual(result.exitCode, 0)
@@ -122,7 +122,7 @@ describe('TaskCompleted auto-signaling', () => {
       hook_event_name: 'TaskCompleted',
       session_id: 'tc-no-gated',
       task_id: '4',
-      task_subject: 'Invoke `prove_it signal done`'
+      task_subject: 'Run `prove_it signal done`'
     }, { projectDir, env })
 
     assert.strictEqual(result.exitCode, 0)
@@ -142,10 +142,10 @@ describe('TaskCompleted auto-signaling', () => {
       }
     ]))
 
-    // 2. Create a plan file
+    // 2. Create a plan file with numbered headings
     const plansDir = path.join(tmpDir, '.claude', 'plans')
     fs.mkdirSync(plansDir, { recursive: true })
-    const planText = '1. Implement feature\n2. Run tests'
+    const planText = '### 1. Implement feature\n\nDo stuff.\n\n### 2. Run tests\n\nTest stuff.'
     fs.writeFileSync(path.join(plansDir, 'my-plan.md'), planText)
 
     // 3. Invoke ExitPlanMode → plan file should be edited
@@ -159,14 +159,15 @@ describe('TaskCompleted auto-signaling', () => {
     assert.strictEqual(exitResult.exitCode, 0)
     assert.strictEqual(exitResult.output.hookSpecificOutput.permissionDecision, 'allow')
     const planContent = fs.readFileSync(path.join(plansDir, 'my-plan.md'), 'utf8')
-    assert.ok(planContent.includes(SIGNAL_TASK_MARKER), 'Plan file should have signal task appended')
+    assert.ok(SIGNAL_TASK_PATTERN.test(planContent), 'Plan file should have signal task')
+    assert.ok(planContent.includes('### 3. Run `prove_it signal done`'), 'Signal should be step 3')
 
     // 4. Invoke TaskCompleted with matching subject → signal should be set
     const tcResult = invokeHook('claude:TaskCompleted', {
       hook_event_name: 'TaskCompleted',
       session_id: 'tc-e2e',
       task_id: '99',
-      task_subject: 'Invoke `prove_it signal done`'
+      task_subject: 'Run `prove_it signal done`'
     }, { projectDir, env })
 
     assert.strictEqual(tcResult.exitCode, 0)

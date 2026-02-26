@@ -16,7 +16,7 @@ const {
   isolatedEnv
 } = require('./hook-harness')
 
-const { SIGNAL_TASK_MARKER } = require('../../lib/dispatcher/claude')
+const { SIGNAL_TASK_PATTERN } = require('../../lib/dispatcher/claude')
 
 describe('Plan mode enforcement via PreToolUse', () => {
   let tmpDir, env
@@ -73,7 +73,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
   })
 
   describe('ExitPlanMode — plan file editing', () => {
-    it('appends signal task to matching plan file', () => {
+    it('inserts signal task as next numbered step with ### headings', () => {
       writeConfig(tmpDir, makeConfig([
         {
           type: 'claude',
@@ -84,10 +84,9 @@ describe('Plan mode enforcement via PreToolUse', () => {
         }
       ]))
 
-      // Create a plan file
       const plansDir = path.join(tmpDir, '.claude', 'plans')
       fs.mkdirSync(plansDir, { recursive: true })
-      const planText = '1. Implement feature\n2. Run tests\n3. Deploy'
+      const planText = '## Changes\n\n### 1. Add the widget\n\nDo stuff.\n\n### 2. Write tests\n\nTest stuff.\n\n## Verification\n\n- Run tests'
       fs.writeFileSync(path.join(plansDir, 'test-plan.md'), planText)
 
       const result = invokeHook('claude:PreToolUse', {
@@ -101,10 +100,73 @@ describe('Plan mode enforcement via PreToolUse', () => {
       assertValidPermissionDecision(result, 'ExitPlanMode')
       assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow')
 
-      // Verify plan file was edited
       const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
-      assert.ok(content.includes(SIGNAL_TASK_MARKER), `Plan file should contain signal task marker, got:\n${content}`)
-      assert.ok(content.includes('Mark this task complete'), 'Plan file should contain task instructions')
+      assert.ok(SIGNAL_TASK_PATTERN.test(content), `Plan file should contain signal task, got:\n${content}`)
+      assert.ok(content.includes('### 3. Run `prove_it signal done`'), 'Should be numbered as step 3 at ### level')
+      assert.ok(content.includes('**IMPORTANT'), 'Should have IMPORTANT callout')
+      assert.ok(content.includes('```bash'), 'Should have code fence')
+
+      // Signal step should appear before Verification
+      const signalIdx = content.indexOf('### 3. Run `prove_it signal done`')
+      const verifyIdx = content.indexOf('## Verification')
+      assert.ok(signalIdx < verifyIdx, 'Signal step should appear before Verification')
+    })
+
+    it('inserts signal task with ## Step N: style headings', () => {
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
+          ]
+        }
+      ]))
+
+      const plansDir = path.join(tmpDir, '.claude', 'plans')
+      fs.mkdirSync(plansDir, { recursive: true })
+      const planText = '## Step 1: Add feature\n\nDo stuff.\n\n## Step 2: Test it\n\nTest stuff.'
+      fs.writeFileSync(path.join(plansDir, 'test-plan.md'), planText)
+
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        session_id: 'test-exit-plan-step-style',
+        tool_name: 'ExitPlanMode',
+        tool_input: { plan: planText }
+      }, { projectDir: tmpDir, env })
+
+      assert.strictEqual(result.exitCode, 0)
+      const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
+      assert.ok(content.includes('## 3. Run `prove_it signal done`'), 'Should be numbered as step 3 at ## level')
+    })
+
+    it('falls back to appending when no numbered headings found', () => {
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
+          ]
+        }
+      ]))
+
+      const plansDir = path.join(tmpDir, '.claude', 'plans')
+      fs.mkdirSync(plansDir, { recursive: true })
+      const planText = '- Do stuff\n- Test stuff'
+      fs.writeFileSync(path.join(plansDir, 'test-plan.md'), planText)
+
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        session_id: 'test-exit-plan-fallback',
+        tool_name: 'ExitPlanMode',
+        tool_input: { plan: planText }
+      }, { projectDir: tmpDir, env })
+
+      assert.strictEqual(result.exitCode, 0)
+      const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
+      assert.ok(SIGNAL_TASK_PATTERN.test(content), 'Plan file should contain signal task')
+      assert.ok(content.includes('## 1. Run `prove_it signal done`'), 'Fallback should use ## level step 1')
     })
 
     it('does not double-append signal task', () => {
@@ -120,9 +182,9 @@ describe('Plan mode enforcement via PreToolUse', () => {
 
       const plansDir = path.join(tmpDir, '.claude', 'plans')
       fs.mkdirSync(plansDir, { recursive: true })
-      const planText = '1. Implement feature\n2. Run tests'
-      // Pre-write with marker already present
-      fs.writeFileSync(path.join(plansDir, 'test-plan.md'), planText + '\n' + SIGNAL_TASK_MARKER + '\n\nAlready here.\n')
+      const planText = '### 1. Implement feature\n\n### 2. Run tests'
+      // Pre-write with signal text already present
+      fs.writeFileSync(path.join(plansDir, 'test-plan.md'), planText + '\n\n### 3. Run `prove_it signal done`\n\nAlready here.\n')
 
       const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
@@ -134,10 +196,10 @@ describe('Plan mode enforcement via PreToolUse', () => {
       assert.strictEqual(result.exitCode, 0)
       assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow')
 
-      // Should still have exactly one marker
+      // Should still have exactly one signal block
       const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
-      const markerCount = content.split(SIGNAL_TASK_MARKER).length - 1
-      assert.strictEqual(markerCount, 1, `Should have exactly 1 marker, found ${markerCount}`)
+      const matches = content.match(/\bsignal\b.*\bdone\b/gi) || []
+      assert.strictEqual(matches.length, 1, `Should have exactly 1 signal reference, found ${matches.length}`)
     })
 
     it('skips editing when no signal-gated tasks exist', () => {
@@ -145,7 +207,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
 
       const plansDir = path.join(tmpDir, '.claude', 'plans')
       fs.mkdirSync(plansDir, { recursive: true })
-      const planText = '1. Do stuff\n2. Done'
+      const planText = '### 1. Do stuff\n\n### 2. Done'
       fs.writeFileSync(path.join(plansDir, 'test-plan.md'), planText)
 
       const result = invokeHook('claude:PreToolUse', {
@@ -160,7 +222,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
 
       // Plan file should be unchanged
       const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
-      assert.ok(!content.includes(SIGNAL_TASK_MARKER), 'Plan file should not be edited when no signal-gated tasks')
+      assert.ok(!SIGNAL_TASK_PATTERN.test(content), 'Plan file should not be edited when no signal-gated tasks')
     })
 
     it('allows even when plan file not found', () => {
