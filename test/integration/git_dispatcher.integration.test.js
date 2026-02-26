@@ -287,6 +287,35 @@ describe('git dispatcher', () => {
         'should skip after resetOnFail—ref should capture working tree, not just HEAD')
     })
 
+    it('logs BOOM and continues when a task throws', () => {
+      const origDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
+      const sid = 'test-git-boom'
+
+      try {
+        // command: null causes runScriptCheck to throw a TypeError
+        const entries = makeEntries([
+          { name: 'crash-task', type: 'script', command: null }
+        ])
+        const ctx = makeContext({ sessionId: sid })
+        const { failure } = runGitTasks(entries, ctx)
+
+        // Crash should not block — treated as a soft skip
+        assert.strictEqual(failure, null, 'crash should not block the hook')
+
+        // BOOM should be logged to the session file
+        const logFile = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sid}.jsonl`)
+        const logEntries = fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+        const boom = logEntries.find(e => e.status === 'BOOM')
+        assert.ok(boom, 'should log a BOOM entry')
+        assert.ok(boom.reason.includes('crash-task crashed'), 'reason should name the task')
+        assert.strictEqual(boom.reviewer, 'crash-task')
+      } finally {
+        if (origDir === undefined) delete process.env.PROVE_IT_DIR
+        else process.env.PROVE_IT_DIR = origDir
+      }
+    })
+
     it('quiet flag suppresses SKIP log entries', () => {
       const origDir = process.env.PROVE_IT_DIR
       process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')

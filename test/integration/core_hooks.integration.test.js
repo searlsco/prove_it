@@ -690,6 +690,45 @@ describe('v2 dispatcher: core hook behaviors', () => {
     })
   })
 
+  describe('task crash handling', () => {
+    it('logs BOOM and approves when a task throws', () => {
+      const env = isolatedEnv(tmpDir)
+
+      // Put the crashing task in the global config (bypasses validation,
+      // which rejects command:null). No project config → validation skipped.
+      fs.mkdirSync(env.PROVE_IT_DIR, { recursive: true })
+      fs.writeFileSync(path.join(env.PROVE_IT_DIR, 'config.json'), JSON.stringify({
+        enabled: true,
+        hooks: [{
+          type: 'claude',
+          event: 'Stop',
+          tasks: [
+            { name: 'crash-task', type: 'script', command: null }
+          ]
+        }]
+      }, null, 2))
+
+      const result = invokeHook('claude:Stop', {
+        hook_event_name: 'Stop',
+        session_id: 'test-crash-boom',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, 'Should produce output despite crash')
+      assert.strictEqual(result.output.decision, 'approve',
+        'Crash should not block — treated as soft skip')
+
+      // Verify BOOM was logged to the session file
+      const logFile = path.join(env.PROVE_IT_DIR, 'sessions', 'test-crash-boom.jsonl')
+      const entries = fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+      const boom = entries.find(e => e.status === 'BOOM')
+      assert.ok(boom, 'Should log a BOOM entry')
+      assert.ok(boom.reason.includes('crash-task crashed'), 'Reason should name the task')
+      assert.strictEqual(boom.reviewer, 'crash-task')
+    })
+  })
+
   describe('non-git directory', () => {
     it('runs hooks in non-git directory when config exists', () => {
       const nonGitDir = createTempDir('prove_it_nongit_')
