@@ -3,7 +3,7 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
-const { matchesHookEntry, evaluateWhen, defaultConfig, settleTaskResult, spawnAsyncTask, harvestAsyncResults, cleanAsyncDir, hasSignalGatedTasks, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
+const { matchesHookEntry, evaluateWhen, defaultConfig, settleTaskResult, spawnAsyncTask, harvestAsyncResults, cleanAsyncDir, hasSignalGatedTasks, forkParallelTask, awaitParallelBatch, killParallelBatch, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
 const { whenHasKey } = require('../lib/git')
 const { recordFileEdit, resetTurnTracking, getAsyncDir } = require('../lib/session')
 
@@ -1040,6 +1040,142 @@ describe('claude dispatcher', () => {
 
     it('does nothing for null sessionId', () => {
       assert.doesNotThrow(() => cleanAsyncDir(null))
+    })
+  })
+
+  describe('forkParallelTask', () => {
+    let tmpDir
+    let origProveItDir
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_parallel_'))
+      origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+    })
+
+    afterEach(() => {
+      if (origProveItDir === undefined) {
+        delete process.env.PROVE_IT_DIR
+      } else {
+        process.env.PROVE_IT_DIR = origProveItDir
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('spawns child and returns handle with child, resultPath, task', () => {
+      const sessionId = 'test-parallel-fork'
+      const task = { name: 'par-task', type: 'script', parallel: true, command: 'echo hi' }
+      const context = {
+        rootDir: tmpDir,
+        projectDir: tmpDir,
+        sessionId,
+        hookEvent: 'Stop',
+        localCfgPath: null,
+        sources: ['**/*.js'],
+        fileEditingTools: ['Edit'],
+        configEnv: null,
+        configModel: null,
+        maxChars: 12000,
+        testOutput: ''
+      }
+
+      const handle = forkParallelTask(task, context)
+      assert.ok(handle, 'Should return a handle')
+      assert.ok(handle.child, 'Should have a child process')
+      assert.ok(handle.resultPath, 'Should have a resultPath')
+      assert.strictEqual(handle.task.name, 'par-task')
+
+      // Clean up: kill the child
+      try { handle.child.kill() } catch {}
+    })
+
+    it('returns null when sessionId is null', () => {
+      const task = { name: 'par-task', type: 'script', command: 'echo hi' }
+      const context = {
+        rootDir: tmpDir,
+        projectDir: tmpDir,
+        sessionId: null,
+        hookEvent: 'Stop',
+        localCfgPath: null,
+        sources: null,
+        fileEditingTools: [],
+        configEnv: null,
+        configModel: null,
+        maxChars: 12000,
+        testOutput: ''
+      }
+      const handle = forkParallelTask(task, context)
+      assert.strictEqual(handle, null)
+    })
+  })
+
+  describe('awaitParallelBatch', () => {
+    let tmpDir
+    let origProveItDir
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_await_'))
+      origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+    })
+
+    afterEach(() => {
+      if (origProveItDir === undefined) {
+        delete process.env.PROVE_IT_DIR
+      } else {
+        process.env.PROVE_IT_DIR = origProveItDir
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('collects results from completed parallel children', async () => {
+      const sessionId = 'test-parallel-await'
+      const task = { name: 'par-echo', type: 'script', parallel: true, command: 'echo hi' }
+      const context = {
+        rootDir: tmpDir,
+        projectDir: tmpDir,
+        sessionId,
+        hookEvent: 'Stop',
+        localCfgPath: null,
+        sources: ['**/*.js'],
+        fileEditingTools: ['Edit'],
+        configEnv: null,
+        configModel: null,
+        maxChars: 12000,
+        testOutput: ''
+      }
+
+      const handle = forkParallelTask(task, context)
+      assert.ok(handle, 'Should fork successfully')
+
+      const results = await awaitParallelBatch([handle])
+      assert.strictEqual(results.length, 1)
+      assert.strictEqual(results[0].task.name, 'par-echo')
+      assert.strictEqual(results[0].result.pass, true)
+    })
+
+    it('returns skip result when child crashes without writing result', async () => {
+      // Create a fake batch entry with a child that exits immediately
+      // and a resultPath that doesn't exist
+      const { fork } = require('child_process')
+      const resultPath = path.join(tmpDir, 'nonexistent.json')
+      const task = { name: 'bad-task', type: 'script', command: 'false' }
+
+      // Fork a process that exits immediately
+      const child = fork(path.join(__dirname, '..', 'lib', 'async_worker.js'), ['/nonexistent/context.json'], {
+        stdio: 'ignore',
+        env: { ...process.env, PROVE_IT_DISABLED: '1' }
+      })
+
+      const results = await awaitParallelBatch([{ child, resultPath, task }])
+      assert.strictEqual(results.length, 1)
+      assert.strictEqual(results[0].result.skipped, true)
+    })
+  })
+
+  describe('killParallelBatch', () => {
+    it('does not throw on empty batch', () => {
+      assert.doesNotThrow(() => killParallelBatch([]))
     })
   })
 })

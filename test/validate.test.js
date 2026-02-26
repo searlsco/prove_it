@@ -317,8 +317,8 @@ describe('validateConfig', () => {
       assert.ok(errors.some(e => e.includes('unknown key "mtime"')))
     })
 
-    it('validates boolean task fields (enabled, resetOnFail, quiet, async)', () => {
-      for (const field of ['enabled', 'resetOnFail', 'quiet', 'async']) {
+    it('validates boolean task fields (enabled, resetOnFail, quiet, async, parallel)', () => {
+      for (const field of ['enabled', 'resetOnFail', 'quiet', 'async', 'parallel']) {
         // accepts true and false
         for (const val of [true, false]) {
           const { errors } = validateConfig(cfgWithTask({
@@ -351,6 +351,44 @@ describe('validateConfig', () => {
         name: 'a', type: 'script', command: 'x', async: true
       }))
       assert.ok(!stopResult.warnings.some(w => w.includes('async')))
+    })
+
+    it('warns when parallel: true is used on SessionStart', () => {
+      const { warnings } = validateConfig(validConfig({
+        hooks: [{
+          type: 'claude',
+          event: 'SessionStart',
+          tasks: [{ name: 'a', type: 'script', command: 'x', parallel: true }]
+        }]
+      }))
+      assert.ok(warnings.some(w => w.includes('parallel') && w.includes('SessionStart')))
+    })
+
+    it('warns when parallel: true is used on PreToolUse', () => {
+      const { warnings } = validateConfig(validConfig({
+        hooks: [{
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Bash',
+          tasks: [{ name: 'a', type: 'script', command: 'x', parallel: true }]
+        }]
+      }))
+      assert.ok(warnings.some(w => w.includes('parallel') && w.includes('PreToolUse')))
+    })
+
+    it('errors when both async and parallel are true', () => {
+      const { errors } = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', async: true, parallel: true
+      }))
+      assert.ok(errors.some(e => e.includes('async') && e.includes('parallel') && e.includes('mutually exclusive')))
+    })
+
+    it('accepts parallel: true on Stop without warnings', () => {
+      const result = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', parallel: true
+      }))
+      assert.strictEqual(result.errors.length, 0)
+      assert.ok(!result.warnings.some(w => w.includes('parallel')))
     })
 
     it('errors on unknown task keys', () => {

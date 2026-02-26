@@ -986,7 +986,10 @@ function cmdHook (hookSpec) {
 
   if (type === 'claude') {
     const { dispatch } = require('./lib/dispatcher/claude')
-    dispatch(event)
+    dispatch(event).catch(e => {
+      console.error(`prove_it: dispatch error: ${e.message}`)
+      process.exit(1)
+    })
   } else if (type === 'git') {
     const { dispatch } = require('./lib/dispatcher/git')
     dispatch(event)

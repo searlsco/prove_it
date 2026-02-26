@@ -493,6 +493,34 @@ This means an async FAIL blocks Claude on the *next* stop, not the current one. 
 
 `async` has no effect on SessionStart (which never blocks). PreToolUse tasks can technically be async, but the usefulness is limited since they run on every tool call.
 
+### Parallel tasks
+
+Set `parallel: true` on a task to fork it immediately and await it at the end of the current hook invocation:
+
+```json
+{
+  "name": "full-tests",
+  "type": "script",
+  "command": "./script/test",
+  "parallel": true,
+  "when": { "signal": "done" }
+}
+```
+
+Parallel tasks run concurrently with each other and with subsequent serial tasks in the same Stop invocation. The dispatcher forks each parallel task as a child process, continues walking the task list, and awaits all parallel children after the loop completes. This cuts wall-clock time roughly in half when you have multiple independent heavyweight tasks (e.g., a full test suite and an AI reviewer).
+
+**Parallel vs async:**
+
+| | `parallel: true` | `async: true` |
+|---|---|---|
+| **When** | Fork now, await this invocation | Fork now, fire-and-forget |
+| **Enforcement** | Blocks this Stop if task fails | Blocks the *next* Stop |
+| **Use case** | Independent heavyweight tasks that must pass before Claude continues | Background reviews that can enforce later |
+
+`parallel` and `async` are mutually exclusive—setting both is a validation error. `parallel` has no effect on SessionStart (which never blocks). On serial task failure mid-loop, all parallel children are killed immediately.
+
+The default config uses `parallel: true` for `full-tests` and `shipworthy-review`.
+
 ### Review backchannel
 
 When an agent reviewer FAILs, prove_it creates a backchannel directory where Claude can appeal the decision:
