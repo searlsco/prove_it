@@ -387,7 +387,7 @@ function guardProjectDir (label) {
 
 async function cmdInit (options = {}) {
   guardProjectDir('init')
-  const { initProject, overwriteTeamConfig } = require('./lib/init')
+  const { initProject, overwriteTeamConfig, isTrackedByGit } = require('./lib/init')
   const repoRoot = process.cwd()
   const { preservedSources } = options
 
@@ -441,12 +441,13 @@ async function cmdInit (options = {}) {
         proposedCfg.initSeed = cfgHash(proposedCfg)
         const proposedContent = JSON.stringify(proposedCfg, null, 2) + '\n'
 
+        const tracked = fs.existsSync(path.join(repoRoot, '.git')) && isTrackedByGit(repoRoot, '.claude/prove_it/config.json')
         const result = await askConflict(rl, {
           label: '.claude/prove_it/config.json',
           existingPath: teamConfigPath,
           existing: existingContent,
           proposed: proposedContent,
-          defaultYes: false
+          defaultYes: tracked
         })
         if (result.answer === 'quit') {
           log('Aborted.')
