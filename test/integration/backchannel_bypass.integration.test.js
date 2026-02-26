@@ -18,13 +18,17 @@ const {
 } = require('./hook-harness')
 
 describe('backchannel bypass on PreToolUse', () => {
-  let tmpDir, projectDir, env
+  let tmpDir, projectDir, resolvedProjectDir, env
 
   beforeEach(() => {
     tmpDir = createTempDir('prove_it_bcbypass_')
     projectDir = path.join(tmpDir, 'project')
     fs.mkdirSync(projectDir, { recursive: true })
     initGitRepo(projectDir)
+    // resolvedProjectDir matches rootDir inside the dispatcher (realpath-resolved).
+    // Arbiter constructs backchannel paths from rootDir, so Claude's tool_input
+    // will contain the resolved form.
+    resolvedProjectDir = fs.realpathSync(projectDir)
     createFile(projectDir, 'src/app.js', 'module.exports = {}')
     spawnSync('git', ['add', '.'], { cwd: projectDir })
     spawnSync('git', ['commit', '-m', 'init'], { cwd: projectDir })
@@ -35,9 +39,8 @@ describe('backchannel bypass on PreToolUse', () => {
     cleanupTempDir(tmpDir)
   })
 
-  it('allows Write to backchannel path even when tasks would deny', () => {
-    createFastTestScript(projectDir, false) // always-failing script
-    writeConfig(projectDir, makeConfig([
+  function failingConfig () {
+    return makeConfig([
       {
         type: 'claude',
         event: 'PreToolUse',
@@ -45,15 +48,22 @@ describe('backchannel bypass on PreToolUse', () => {
           { name: 'always-fail', type: 'script', command: './script/test_fast' }
         ]
       }
-    ]))
+    ])
+  }
+
+  function bcPath (sessionId, taskName, filename) {
+    return path.join(resolvedProjectDir, '.claude', 'prove_it', 'sessions', sessionId, 'backchannel', taskName, filename)
+  }
+
+  it('allows Write to backchannel path even when tasks would deny', () => {
+    createFastTestScript(projectDir, false)
+    writeConfig(projectDir, failingConfig())
 
     const sessionId = 'bc-bypass-test-1'
-    const bcPath = path.join(projectDir, '.claude', 'prove_it', 'sessions', sessionId, 'backchannel', 'always-fail', 'README.md')
-
     const result = invokeHook('claude:PreToolUse', {
       session_id: sessionId,
       tool_name: 'Write',
-      tool_input: { file_path: bcPath, content: 'Appeal text' }
+      tool_input: { file_path: bcPath(sessionId, 'always-fail', 'README.md'), content: 'Appeal text' }
     }, { projectDir, env })
 
     assert.strictEqual(result.exitCode, 0)
@@ -63,23 +73,28 @@ describe('backchannel bypass on PreToolUse', () => {
 
   it('allows Edit to backchannel path', () => {
     createFastTestScript(projectDir, false)
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        tasks: [
-          { name: 'always-fail', type: 'script', command: './script/test_fast' }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, failingConfig())
 
     const sessionId = 'bc-bypass-test-2'
-    const bcPath = path.join(projectDir, '.claude', 'prove_it', 'sessions', sessionId, 'backchannel', 'always-fail', 'README.md')
-
     const result = invokeHook('claude:PreToolUse', {
       session_id: sessionId,
       tool_name: 'Edit',
-      tool_input: { file_path: bcPath, old_string: 'x', new_string: 'y' }
+      tool_input: { file_path: bcPath(sessionId, 'always-fail', 'README.md'), old_string: 'x', new_string: 'y' }
+    }, { projectDir, env })
+
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow')
+  })
+
+  it('allows MultiEdit to backchannel path', () => {
+    createFastTestScript(projectDir, false)
+    writeConfig(projectDir, failingConfig())
+
+    const sessionId = 'bc-bypass-test-me'
+    const result = invokeHook('claude:PreToolUse', {
+      session_id: sessionId,
+      tool_name: 'MultiEdit',
+      tool_input: { file_path: bcPath(sessionId, 'always-fail', 'README.md'), edits: [] }
     }, { projectDir, env })
 
     assert.strictEqual(result.exitCode, 0)
@@ -88,23 +103,13 @@ describe('backchannel bypass on PreToolUse', () => {
 
   it('allows NotebookEdit to backchannel path via notebook_path', () => {
     createFastTestScript(projectDir, false)
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        tasks: [
-          { name: 'always-fail', type: 'script', command: './script/test_fast' }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, failingConfig())
 
     const sessionId = 'bc-bypass-test-nb'
-    const bcPath = path.join(projectDir, '.claude', 'prove_it', 'sessions', sessionId, 'backchannel', 'always-fail', 'appeal.ipynb')
-
     const result = invokeHook('claude:PreToolUse', {
       session_id: sessionId,
       tool_name: 'NotebookEdit',
-      tool_input: { notebook_path: bcPath, new_source: 'appeal' }
+      tool_input: { notebook_path: bcPath(sessionId, 'always-fail', 'appeal.ipynb'), new_source: 'appeal' }
     }, { projectDir, env })
 
     assert.strictEqual(result.exitCode, 0)
@@ -112,19 +117,36 @@ describe('backchannel bypass on PreToolUse', () => {
     assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow')
   })
 
+  it('works when CLAUDE_PROJECT_DIR is a symlink (bypass uses rootDir)', () => {
+    createFastTestScript(projectDir, false)
+    writeConfig(projectDir, failingConfig())
+
+    // Create a symlink to projectDir and pass it as CLAUDE_PROJECT_DIR.
+    // The dispatcher resolves rootDir via realpathSync, so the bypass prefix
+    // uses the resolved form. Claude's file_path (from arbiter) also uses
+    // the resolved form. This test proves both sides match.
+    const symlinkDir = path.join(tmpDir, 'symlinked-project')
+    fs.symlinkSync(projectDir, symlinkDir)
+
+    const symEnv = { ...env, CLAUDE_PROJECT_DIR: symlinkDir }
+    const sessionId = 'bc-bypass-symlink'
+    // bcPath uses resolvedProjectDir — matching what arbiter would give Claude
+    const result = invokeHook('claude:PreToolUse', {
+      session_id: sessionId,
+      tool_name: 'Write',
+      tool_input: { file_path: bcPath(sessionId, 'always-fail', 'README.md'), content: 'Appeal' }
+    }, { projectDir: symlinkDir, env: symEnv })
+
+    assert.strictEqual(result.exitCode, 0)
+    assertValidPermissionDecision(result, 'symlink backchannel Write')
+    assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow')
+  })
+
   it('does not bypass for writes outside backchannel', () => {
     createFastTestScript(projectDir, false)
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        tasks: [
-          { name: 'always-fail', type: 'script', command: './script/test_fast' }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, failingConfig())
 
-    const normalPath = path.join(projectDir, 'src', 'app.js')
+    const normalPath = path.join(resolvedProjectDir, 'src', 'app.js')
 
     const result = invokeHook('claude:PreToolUse', {
       session_id: 'bc-bypass-test-3',
@@ -133,33 +155,20 @@ describe('backchannel bypass on PreToolUse', () => {
     }, { projectDir, env })
 
     assert.strictEqual(result.exitCode, 0)
-    // The failing task should deny this write
     assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
   })
 
   it('does not bypass for other sessions backchannel', () => {
     createFastTestScript(projectDir, false)
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        tasks: [
-          { name: 'always-fail', type: 'script', command: './script/test_fast' }
-        ]
-      }
-    ]))
-
-    // Write targets a different session's backchannel
-    const otherSessionBc = path.join(projectDir, '.claude', 'prove_it', 'sessions', 'other-session', 'backchannel', 'always-fail', 'README.md')
+    writeConfig(projectDir, failingConfig())
 
     const result = invokeHook('claude:PreToolUse', {
       session_id: 'bc-bypass-test-4',
       tool_name: 'Write',
-      tool_input: { file_path: otherSessionBc, content: 'sneaky' }
+      tool_input: { file_path: bcPath('other-session', 'always-fail', 'README.md'), content: 'sneaky' }
     }, { projectDir, env })
 
     assert.strictEqual(result.exitCode, 0)
-    // Should NOT be allowed by the bypass — different session
     assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
   })
 })
