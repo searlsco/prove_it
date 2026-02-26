@@ -205,8 +205,8 @@ describe('v2 dispatcher: test enforcement', () => {
       const output = JSON.parse(result.stdout)
       assert.strictEqual(
         output.hookSpecificOutput.permissionDecision,
-        'deny',
-        'Should deny on invalid input'
+        'allow',
+        'Should allow on invalid input (circuit breaker prevents death spiral)'
       )
       assert.ok(
         output.hookSpecificOutput.permissionDecisionReason.includes('Failed to parse'),
