@@ -576,5 +576,26 @@ describe('briefing', () => {
         '**x**'
       )
     })
+
+    it('appends (parallel) suffix for parallel script tasks', () => {
+      assert.strictEqual(
+        taskLine({ name: 'full-tests', type: 'script', command: './script/test', parallel: true }),
+        '**full-tests**—runs `./script/test` (parallel)'
+      )
+    })
+
+    it('appends (parallel) suffix for parallel agent tasks', () => {
+      assert.strictEqual(
+        taskLine({ name: 'review', type: 'agent', prompt: 'check', parallel: true }),
+        '**review**—AI reviewer (parallel)'
+      )
+    })
+
+    it('does not append (parallel) when parallel is falsy', () => {
+      assert.strictEqual(
+        taskLine({ name: 'x', type: 'script', command: 'y' }),
+        '**x**—runs `y`'
+      )
+    })
   })
 })

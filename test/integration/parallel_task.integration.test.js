@@ -152,6 +152,45 @@ describe('parallel task execution', () => {
     assert.ok(r.stdout.includes('serial-fail'), 'Block message should reference the serial task')
   })
 
+  it('two parallel tasks both fail — first blocks, second result is cleaned up (no orphan)', () => {
+    for (const name of ['fail-a', 'fail-b']) {
+      const scriptPath = path.join(projectDir, 'script', name)
+      createFile(projectDir, `script/${name}`, `#!/usr/bin/env bash\necho "${name} failed" >&2\nexit 1\n`)
+      makeExecutable(scriptPath)
+    }
+
+    writeConfig(projectDir, makeConfig([
+      {
+        type: 'claude',
+        event: 'Stop',
+        tasks: [
+          { name: 'fail-a', type: 'script', parallel: true, command: './script/fail-a' },
+          { name: 'fail-b', type: 'script', parallel: true, command: './script/fail-b' }
+        ]
+      }
+    ]))
+
+    const sessionId = 'test-parallel-both-fail-' + Date.now()
+
+    // First Stop: blocks on first parallel failure
+    const r1 = invokeHook('claude:Stop', {
+      hook_event_name: 'Stop',
+      session_id: sessionId
+    }, { projectDir, env })
+
+    assert.strictEqual(r1.output.decision, 'block', 'Should block on parallel failure')
+    assert.ok(r1.stdout.includes('(parallel)'), 'Should mention parallel')
+
+    // Verify no orphaned result files remain (would be harvested as "async" otherwise)
+    const asyncDir = path.join(env.PROVE_IT_DIR, 'sessions', sessionId, 'async')
+    let remaining = []
+    try {
+      remaining = fs.readdirSync(asyncDir).filter(f => f.endsWith('.json') && !f.endsWith('.context.json'))
+    } catch {}
+    assert.strictEqual(remaining.length, 0,
+      `No orphaned result files should remain, got: ${remaining.join(', ')}`)
+  })
+
   it('parallel: true on SessionStart is ignored (runs synchronously)', () => {
     writeConfig(projectDir, makeConfig([
       {
