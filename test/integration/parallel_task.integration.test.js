@@ -152,6 +152,47 @@ describe('parallel task execution', () => {
     assert.ok(r.stdout.includes('serial-fail'), 'Block message should reference the serial task')
   })
 
+  it('serial failure cleans up result files from already-completed parallel children', () => {
+    // Fast parallel task finishes before slow serial task fails
+    const fastScript = path.join(projectDir, 'script', 'fast-parallel')
+    createFile(projectDir, 'script/fast-parallel', '#!/usr/bin/env bash\nexit 0\n')
+    makeExecutable(fastScript)
+
+    // Serial task that takes a moment then fails
+    const failScript = path.join(projectDir, 'script', 'slow-serial-fail')
+    createFile(projectDir, 'script/slow-serial-fail', '#!/usr/bin/env bash\nsleep 0.5\necho "FAIL" >&2\nexit 1\n')
+    makeExecutable(failScript)
+
+    writeConfig(projectDir, makeConfig([
+      {
+        type: 'claude',
+        event: 'Stop',
+        tasks: [
+          { name: 'fast-parallel', type: 'script', parallel: true, command: './script/fast-parallel' },
+          { name: 'slow-serial-fail', type: 'script', command: './script/slow-serial-fail' }
+        ]
+      }
+    ]))
+
+    const sessionId = 'test-parallel-fast-orphan-' + Date.now()
+    const r = invokeHook('claude:Stop', {
+      hook_event_name: 'Stop',
+      session_id: sessionId
+    }, { projectDir, env })
+
+    assert.strictEqual(r.output.decision, 'block', 'Should block on serial failure')
+
+    // The fast parallel child likely completed and wrote its result file.
+    // Verify no orphaned result files remain that would be misidentified as async.
+    const asyncDir = path.join(env.PROVE_IT_DIR, 'sessions', sessionId, 'async')
+    let remaining = []
+    try {
+      remaining = fs.readdirSync(asyncDir).filter(f => f.endsWith('.json') && !f.endsWith('.context.json'))
+    } catch {}
+    assert.strictEqual(remaining.length, 0,
+      `No orphaned result files should remain, got: ${remaining.join(', ')}`)
+  })
+
   it('two parallel tasks both fail — first blocks, second result is cleaned up (no orphan)', () => {
     for (const name of ['fail-a', 'fail-b']) {
       const scriptPath = path.join(projectDir, 'script', name)
