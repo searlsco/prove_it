@@ -333,7 +333,10 @@ describe('agent check', () => {
     fs.chmodSync(claudeShim, 0o755)
 
     const origPath = process.env.PATH
+    const origHome = process.env.HOME
     process.env.PATH = `${shimDir}:${origPath}`
+    // Isolate HOME so isSettingsBypassMode() doesn't read real settings
+    process.env.HOME = tmpDir
 
     try {
       // Default tools → --allowedTools with full tool list
@@ -364,6 +367,7 @@ describe('agent check', () => {
       assert.ok(!bypass.reason.includes('--allowedTools'), 'bypass excludes --allowedTools')
     } finally {
       process.env.PATH = origPath
+      process.env.HOME = origHome
     }
   })
 

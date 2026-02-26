@@ -75,11 +75,18 @@ describe('runReviewer with fixture shims', () => {
     fs.writeFileSync(claudePath, '#!/usr/bin/env bash\necho "PASS: args=$*"\n')
     fs.chmodSync(claudePath, 0o755)
 
-    // With no settings file → falls through to allowedTools
-    const r1 = runReviewer(tmpDir, { command: `${claudePath} -p`, bypassPermissions: null, allowedTools: 'Read,Write' }, 'test')
-    assert.ok(r1.pass)
-    assert.ok(r1.reason.includes('--allowedTools'), 'no bypass settings → --allowedTools')
-    assert.ok(!r1.reason.includes('--dangerously-skip-permissions'))
+    // Isolate HOME so isSettingsBypassMode() doesn't read real settings
+    const origHome = process.env.HOME
+    process.env.HOME = tmpDir
+    try {
+      // With no settings file → falls through to allowedTools
+      const r1 = runReviewer(tmpDir, { command: `${claudePath} -p`, bypassPermissions: null, allowedTools: 'Read,Write' }, 'test')
+      assert.ok(r1.pass)
+      assert.ok(r1.reason.includes('--allowedTools'), 'no bypass settings → --allowedTools')
+      assert.ok(!r1.reason.includes('--dangerously-skip-permissions'))
+    } finally {
+      process.env.HOME = origHome
+    }
     cleanup()
   })
 
