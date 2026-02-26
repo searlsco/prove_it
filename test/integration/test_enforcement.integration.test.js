@@ -185,8 +185,8 @@ describe('v2 dispatcher: test enforcement', () => {
     })
   })
 
-  describe('fail-closed behavior', () => {
-    it('denies when input JSON is invalid', () => {
+  describe('circuit breaker on malformed input', () => {
+    it('allows when input JSON is invalid (prevents death spiral)', () => {
       writeConfig(tmpDir, makeConfig(commitGateHooks()))
 
       const result = spawnSync('node', [CLI_PATH, 'hook', 'claude:PreToolUse'], {
