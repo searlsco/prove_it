@@ -1,4 +1,4 @@
-const { describe, it, beforeEach, afterEach } = require('node:test')
+const { describe, it, beforeEach, afterEach, mock } = require('node:test')
 const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
@@ -15,6 +15,7 @@ const {
 } = require('../lib/checks/arbiter')
 const { backchannelDir } = require('../lib/checks/agent')
 const { loadSessionState } = require('../lib/session')
+const reviewer = require('../lib/reviewer')
 
 describe('arbiter – script appeal system', () => {
   let tmpDir
@@ -218,6 +219,139 @@ describe('arbiter – script appeal system', () => {
 
       const failures = loadSessionState(SESSION_ID, 'successiveFailures')
       assert.strictEqual(failures['fast-tests'], 0)
+    })
+  })
+
+  describe('arbiter verdict wiring (stubbed reviewer)', () => {
+    const makeTask = (name) => ({
+      name,
+      type: 'script',
+      command: './script/test_fast'
+    })
+
+    const makeResult = () => ({
+      pass: false,
+      reason: './script/test_fast failed (exit 1, 2.0s)\n\ntest output here',
+      output: 'test output here'
+    })
+
+    const makeContext = (rootDir) => ({
+      rootDir,
+      projectDir: rootDir,
+      sessionId: SESSION_ID,
+      hookEvent: 'Stop'
+    })
+
+    function writeAppeal (rootDir, taskName, text) {
+      const bcDir = backchannelDir(rootDir, SESSION_ID, taskName)
+      const readmePath = path.join(bcDir, 'README.md')
+      const content = fs.readFileSync(readmePath, 'utf8')
+      fs.writeFileSync(readmePath, content + '\n' + text, 'utf8')
+    }
+
+    function setupAboveThreshold (rootDir, taskName) {
+      for (let i = 0; i < APPEAL_THRESHOLD; i++) {
+        recordFailure(SESSION_ID, taskName)
+      }
+      createScriptBackchannel(rootDir, SESSION_ID, taskName, 'test failure output', './script/test_fast')
+    }
+
+    it('suspends task when arbiter returns PASS', () => {
+      mock.method(reviewer, 'runReviewer', () => ({
+        available: true,
+        pass: true,
+        reason: 'environment issue confirmed',
+        responseText: 'PASS environment issue confirmed'
+      }))
+
+      const task = makeTask('fast-tests')
+      const context = makeContext(tmpDir)
+      setupAboveThreshold(tmpDir, 'fast-tests')
+      writeAppeal(tmpDir, 'fast-tests', 'PASS — this is a pre-existing flaky test, not caused by my changes')
+
+      const result = makeResult()
+      const out = handleScriptAppeal(task, result, context)
+
+      assert.strictEqual(out.pass, true)
+      assert.strictEqual(out.skipped, true)
+      assert.ok(out.reason.includes('suspended by arbiter'))
+      assert.strictEqual(isTaskSuspended(SESSION_ID, 'fast-tests'), true)
+
+      // Backchannel should be cleaned up
+      const bcDir = backchannelDir(tmpDir, SESSION_ID, 'fast-tests')
+      assert.strictEqual(fs.existsSync(bcDir), false)
+
+      // Failure counter should be reset
+      const failures = loadSessionState(SESSION_ID, 'successiveFailures')
+      assert.strictEqual(failures['fast-tests'], 0)
+
+      mock.restoreAll()
+    })
+
+    it('suspends task when arbiter returns SKIP', () => {
+      mock.method(reviewer, 'runReviewer', () => ({
+        available: true,
+        skip: true,
+        reason: 'unclear situation, benefit of the doubt',
+        responseText: 'SKIP unclear situation'
+      }))
+
+      const task = makeTask('fast-tests')
+      const context = makeContext(tmpDir)
+      setupAboveThreshold(tmpDir, 'fast-tests')
+      writeAppeal(tmpDir, 'fast-tests', 'SKIP — mid-task, will fix later')
+
+      const result = makeResult()
+      const out = handleScriptAppeal(task, result, context)
+
+      assert.strictEqual(out.pass, true)
+      assert.strictEqual(out.skipped, true)
+      assert.strictEqual(isTaskSuspended(SESSION_ID, 'fast-tests'), true)
+
+      mock.restoreAll()
+    })
+
+    it('keeps blocking when arbiter returns FAIL', () => {
+      mock.method(reviewer, 'runReviewer', () => ({
+        available: true,
+        pass: false,
+        reason: 'developer should fix the failing test',
+        responseText: 'FAIL developer should fix the failing test'
+      }))
+
+      const task = makeTask('fast-tests')
+      const context = makeContext(tmpDir)
+      setupAboveThreshold(tmpDir, 'fast-tests')
+      writeAppeal(tmpDir, 'fast-tests', 'PASS — I think this is an env issue')
+
+      const result = makeResult()
+      const out = handleScriptAppeal(task, result, context)
+
+      assert.strictEqual(out.pass, false)
+      assert.ok(out.reason.includes('Appeal denied'))
+      assert.strictEqual(isTaskSuspended(SESSION_ID, 'fast-tests'), false)
+
+      mock.restoreAll()
+    })
+
+    it('falls back to blocking when reviewer is unavailable', () => {
+      mock.method(reviewer, 'runReviewer', () => ({
+        available: false,
+        binary: 'claude'
+      }))
+
+      const task = makeTask('fast-tests')
+      const context = makeContext(tmpDir)
+      setupAboveThreshold(tmpDir, 'fast-tests')
+      writeAppeal(tmpDir, 'fast-tests', 'PASS — env issue')
+
+      const result = makeResult()
+      const out = handleScriptAppeal(task, result, context)
+
+      assert.strictEqual(out.pass, false)
+      assert.strictEqual(isTaskSuspended(SESSION_ID, 'fast-tests'), false)
+
+      mock.restoreAll()
     })
   })
 })
