@@ -42,13 +42,15 @@
           "type": "script",
           "command": "./script/test_fast",
           "when": {
-            "sourcesModifiedSinceLastRun": true
+            "sourcesModifiedSinceLastRun": true,
+            "sourceFilesEditedThisTurn": true
           }
         },
         {
           "name": "full-tests",
           "type": "script",
           "command": "./script/test",
+          "parallel": true,
           "when": {
             "signal": "done",
             "sourceFilesEditedThisTurn": true
@@ -69,6 +71,7 @@
         {
           "name": "shipworthy-review",
           "type": "agent",
+          "parallel": true,
           "promptType": "skill",
           "prompt": "prove-shipworthy",
           "model": "opus",
@@ -94,5 +97,5 @@
       ]
     }
   ],
-  "initSeed": "b43c4bca18a9"
+  "initSeed": "f93c54d503b6"
 }
