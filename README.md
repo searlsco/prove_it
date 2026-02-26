@@ -267,7 +267,7 @@ The env var must be set in both clauses, but either churn threshold firing is en
 | `linesChanged` | number | Passes when at least N source lines have changed (additions + deletions) since the task last ran. Git-based—works in both Claude hooks and git hooks. |
 | `linesWritten` | number | Passes when at least N gross lines have been written by the agent since the task last ran. Catches thrashing. Claude Code sessions only. |
 | `sourcesModifiedSinceLastRun` | boolean | Passes when source file mtimes are newer than the last successful run. Works for any task type (script, agent, env). The dispatcher records run data on pass; failures are never cached so the task re-fires until it passes. Tasks without this condition always run (no implicit caching). |
-| `sourceFilesEdited` | boolean | Passes when source files were edited this turn (session-scoped, tool-agnostic) |
+| `sourceFilesEditedThisTurn` | boolean | Passes when source files were edited this turn (session-scoped, tool-agnostic) |
 | `toolsUsed` | string[] | Passes when any of the listed tools were used this turn |
 
 ### Git-based churn tracking (`linesChanged`)
@@ -291,18 +291,18 @@ Gross churn accumulates on every successful PreToolUse for Write/Edit/NotebookEd
 
 ### Session-scoped conditions
 
-`sourceFilesEdited` and `toolsUsed` are **session-scoped**: they track which tools and files each Claude Code session uses, per-turn. After a successful Stop, the tracking resets so the next Stop only fires if new edits occur.
+`sourceFilesEditedThisTurn` and `toolsUsed` are **session-scoped**: they track which tools and files each Claude Code session uses, per-turn. After a successful Stop, the tracking resets so the next Stop only fires if new edits occur.
 
 These conditions solve cross-session bleed—unlike `sourcesModifiedSinceLastRun` (which uses global file timestamps), session-scoped conditions ensure Session A's edits don't trigger Session B's reviewers.
 
-**`sourceFilesEdited: true`**—gates a task on source file edits in the current turn:
+**`sourceFilesEditedThisTurn: true`**—gates a task on source file edits in the current turn:
 
 ```json
 {
   "name": "my-review",
   "type": "agent",
   "prompt": "Review the changes...",
-  "when": { "sourceFilesEdited": true }
+  "when": { "sourceFilesEditedThisTurnThisTurn": true }
 }
 ```
 
@@ -674,7 +674,7 @@ By default, prove_it tracks Claude's built-in editing tools (`Edit`, `Write`, `N
 }
 ```
 
-Tools listed in `fileEditingTools` are tracked alongside the builtins—they participate in `sourceFilesEdited`, `toolsUsed`, gross churn (`linesWritten`), and the `session_diff` git fallback. For gross churn, line counts are estimated from the longest string value in the tool input.
+Tools listed in `fileEditingTools` are tracked alongside the builtins—they participate in `sourceFilesEditedThisTurn`, `toolsUsed`, gross churn (`linesWritten`), and the `session_diff` git fallback. For gross churn, line counts are estimated from the longest string value in the tool input.
 
 ## Session management
 

@@ -417,11 +417,11 @@ describe('validateConfig', () => {
         'Should NOT warn about linesChanged on git hooks anymore')
     })
 
-    it('validates boolean when-conditions (sourcesModifiedSinceLastRun, sourceFilesEdited)', () => {
+    it('validates boolean when-conditions (sourcesModifiedSinceLastRun, sourceFilesEditedThisTurn)', () => {
       // valid booleans pass
       for (const [field, taskBase] of [
         ['sourcesModifiedSinceLastRun', { type: 'agent', prompt: 'review this' }],
-        ['sourceFilesEdited', { type: 'script', command: 'x' }]
+        ['sourceFilesEditedThisTurn', { type: 'script', command: 'x' }]
       ]) {
         const { errors } = validateConfig(cfgWithTask({
           name: 'a', ...taskBase, when: { [field]: true }
@@ -430,7 +430,7 @@ describe('validateConfig', () => {
       }
 
       // non-booleans error
-      for (const field of ['sourcesModifiedSinceLastRun', 'sourceFilesEdited']) {
+      for (const field of ['sourcesModifiedSinceLastRun', 'sourceFilesEditedThisTurn']) {
         const { errors } = validateConfig(cfgWithTask({
           name: 'a',
           type: 'script',
@@ -442,16 +442,16 @@ describe('validateConfig', () => {
       }
     })
 
-    it('warns when sourceFilesEdited is used on a git hook', () => {
+    it('warns when sourceFilesEditedThisTurn is used on a git hook', () => {
       const { errors, warnings } = validateConfig(validConfig({
         hooks: [{
           type: 'git',
           event: 'pre-commit',
-          tasks: [{ name: 'a', type: 'script', command: 'x', when: { sourceFilesEdited: true } }]
+          tasks: [{ name: 'a', type: 'script', command: 'x', when: { sourceFilesEditedThisTurn: true } }]
         }]
       }))
       assert.strictEqual(errors.length, 0)
-      assert.ok(warnings.some(w => w.includes('sourceFilesEdited') && w.includes('git')))
+      assert.ok(warnings.some(w => w.includes('sourceFilesEditedThisTurn') && w.includes('git')))
     })
 
     it('validates promptType field', () => {

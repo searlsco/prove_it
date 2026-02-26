@@ -130,7 +130,7 @@ describe('briefing', () => {
             when: {
               linesWritten: 500,
               linesChanged: 200,
-              sourceFilesEdited: true,
+              sourceFilesEditedThisTurn: true,
               fileExists: 'script/test'
             }
           }]
@@ -139,7 +139,7 @@ describe('briefing', () => {
       const text = renderBriefing(cfg)
       assert.ok(text.includes('500+ lines written'), 'should describe linesWritten')
       assert.ok(text.includes('200+ net lines changed'), 'should describe linesChanged')
-      assert.ok(text.includes('when source files are edited'), 'should describe sourceFilesEdited')
+      assert.ok(text.includes('when source files are edited'), 'should describe sourceFilesEditedThisTurn')
       assert.ok(text.includes('requires script/test'), 'should describe fileExists')
     })
 
@@ -421,8 +421,8 @@ describe('briefing', () => {
       assert.strictEqual(whenDescription({ linesChanged: 200 }), 'after 200+ net lines changed')
     })
 
-    it('describes sourceFilesEdited', () => {
-      assert.strictEqual(whenDescription({ sourceFilesEdited: true }), 'when source files are edited')
+    it('describes sourceFilesEditedThisTurn', () => {
+      assert.strictEqual(whenDescription({ sourceFilesEditedThisTurn: true }), 'when source files are edited')
     })
 
     it('describes sourcesModifiedSinceLastRun', () => {

@@ -51,7 +51,7 @@
           "command": "./script/test",
           "when": {
             "signal": "done",
-            "sourceFilesEdited": true
+            "sourceFilesEditedThisTurn": true
           }
         },
         {
