@@ -86,6 +86,32 @@ describe('backchannel bypass on PreToolUse', () => {
     assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow')
   })
 
+  it('allows NotebookEdit to backchannel path via notebook_path', () => {
+    createFastTestScript(projectDir, false)
+    writeConfig(projectDir, makeConfig([
+      {
+        type: 'claude',
+        event: 'PreToolUse',
+        tasks: [
+          { name: 'always-fail', type: 'script', command: './script/test_fast' }
+        ]
+      }
+    ]))
+
+    const sessionId = 'bc-bypass-test-nb'
+    const bcPath = path.join(projectDir, '.claude', 'prove_it', 'sessions', sessionId, 'backchannel', 'always-fail', 'appeal.ipynb')
+
+    const result = invokeHook('claude:PreToolUse', {
+      session_id: sessionId,
+      tool_name: 'NotebookEdit',
+      tool_input: { notebook_path: bcPath, new_source: 'appeal' }
+    }, { projectDir, env })
+
+    assert.strictEqual(result.exitCode, 0)
+    assertValidPermissionDecision(result, 'backchannel NotebookEdit')
+    assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow')
+  })
+
   it('does not bypass for writes outside backchannel', () => {
     createFastTestScript(projectDir, false)
     writeConfig(projectDir, makeConfig([
