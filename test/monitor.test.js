@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 
-const { findLatestSession, listSessions, findProjectLogFiles, projectHash, formatEntry, formatVerbose, formatTime, formatDuration, useColor, stripAnsi, visualWidth, normalizeHookTag, middleTruncatePath, truncateReason, progressiveTruncate, watchFile, shouldDisplay, displayStatusOf, findProveItProject } = require('../lib/monitor')
+const { findLatestSession, listSessions, findProjectLogFiles, projectHash, formatEntry, formatVerbose, formatTime, formatDuration, useColor, stripAnsi, visualWidth, normalizeHookTag, middleTruncatePath, truncateReason, progressiveTruncate, watchFile, shouldDisplay, displayStatusOf, findProveItProject, extractAppealText } = require('../lib/monitor')
 
 describe('monitor', () => {
   let tmpDir
@@ -239,6 +239,38 @@ describe('monitor', () => {
       const line = formatEntry(entry)
       assert.ok(line.includes('PLEA'), `Expected PLEA in: ${line}`)
       assert.ok(line.includes('appealed via backchannel'), `Expected reason in: ${line}`)
+    })
+
+    it('previews developer appeal text on PLEA main line', () => {
+      const entry = {
+        at: Date.now(),
+        reviewer: 'commit-review',
+        status: 'PLEA',
+        reason: 'appealed via backchannel',
+        hookEvent: 'Stop',
+        verbose: {
+          backchannelContent: 'Header\n---\nInstructions\n---\nThese are planning-only changes.\nRecommend: SKIP'
+        }
+      }
+      const line = formatEntry(entry)
+      assert.ok(line.includes('PLEA'), `Expected PLEA in: ${line}`)
+      assert.ok(line.includes('These are planning-only changes.'), `Expected appeal preview in: ${line}`)
+      assert.ok(!line.includes('appealed via backchannel'), `Should not show generic reason: ${line}`)
+    })
+
+    it('falls back to original reason when backchannel has no developer text', () => {
+      const entry = {
+        at: Date.now(),
+        reviewer: 'commit-review',
+        status: 'PLEA',
+        reason: 'appealed via backchannel',
+        hookEvent: 'Stop',
+        verbose: {
+          backchannelContent: 'Header\n---\nInstructions\n---\n'
+        }
+      }
+      const line = formatEntry(entry)
+      assert.ok(line.includes('appealed via backchannel'), `Expected fallback reason in: ${line}`)
     })
 
     it('does not display triggerProgress', () => {
@@ -561,7 +593,7 @@ describe('monitor', () => {
       assert.ok(!joined.includes('response'), 'Should not have response box when null')
     })
 
-    it('renders appeal text on verdict entry when backchannel content present', () => {
+    it('omits appeal box on verdict entry even when backchannel content present', () => {
       const entry = {
         at: Date.now(),
         verbose: {
@@ -574,9 +606,10 @@ describe('monitor', () => {
       }
       const lines = formatVerbose(entry)
       const joined = lines.join('\n')
-      assert.ok(joined.includes('appeal'), 'Should have appeal box')
-      assert.ok(joined.includes('unrelated to my changes'), 'Should include appeal text')
-      assert.ok(joined.includes('Recommend: PASS'), 'Should include full appeal content')
+      assert.ok(!joined.includes('appeal'), 'Should not have appeal box on verdict entries')
+      assert.ok(joined.includes('backchannel'), 'Should still show backchannel indicator')
+      assert.ok(joined.includes('prompt'), 'Should still show prompt box')
+      assert.ok(joined.includes('response'), 'Should still show response box')
     })
 
     it('renders continuation notes with round number on verdict entry', () => {
@@ -599,20 +632,37 @@ describe('monitor', () => {
       assert.ok(joined.includes('Only 1 was addressed'), 'Should include full notepad text')
     })
 
-    it('renders appeal text on PLEA entry without prompt/response', () => {
+    it('renders only developer text on PLEA entry, not full template', () => {
       const entry = {
         at: Date.now(),
         reviewer: 'commit-review',
         status: 'PLEA',
         reason: 'appealed via backchannel',
         verbose: {
-          backchannelContent: 'These changes are planning-only.\nRecommend: SKIP'
+          backchannelContent: '# Reviewer Backchannel\nSome failure reason\n---\nInstructions here\n---\nThese changes are planning-only.\nRecommend: SKIP'
         }
       }
       const lines = formatVerbose(entry)
       const joined = lines.join('\n')
       assert.ok(joined.includes('appeal'), 'Should have appeal box')
-      assert.ok(joined.includes('planning-only'), 'Should include appeal text')
+      assert.ok(joined.includes('planning-only'), 'Should include developer text')
+      assert.ok(!joined.includes('Instructions here'), 'Should not include template instructions')
+      assert.ok(!joined.includes('Reviewer Backchannel'), 'Should not include template header')
+    })
+
+    it('shows placeholder on PLEA when developer wrote nothing', () => {
+      const entry = {
+        at: Date.now(),
+        reviewer: 'commit-review',
+        status: 'PLEA',
+        reason: 'appealed via backchannel',
+        verbose: {
+          backchannelContent: '# Reviewer Backchannel\nFailure\n---\nInstructions\n---\n'
+        }
+      }
+      const lines = formatVerbose(entry)
+      const joined = lines.join('\n')
+      assert.ok(joined.includes('template only'), 'Should show placeholder when no developer text')
     })
 
     it('omits appeal box when backchannelContent is null', () => {
@@ -646,6 +696,41 @@ describe('monitor', () => {
       const lines = formatVerbose(entry)
       const joined = lines.join('\n')
       assert.ok(!joined.includes('continuation'), 'Should not have continuation notes when null')
+    })
+  })
+
+  describe('extractAppealText', () => {
+    it('extracts developer text after the last --- separator', () => {
+      const content = '# Header\nFailure reason\n---\nInstructions\n---\nMy actual appeal.\nRecommend: PASS'
+      const result = extractAppealText(content)
+      assert.strictEqual(result, 'My actual appeal.\nRecommend: PASS')
+    })
+
+    it('returns null for null input', () => {
+      assert.strictEqual(extractAppealText(null), null)
+    })
+
+    it('returns null for empty string', () => {
+      assert.strictEqual(extractAppealText(''), null)
+    })
+
+    it('returns null when no separator exists', () => {
+      assert.strictEqual(extractAppealText('just some text'), null)
+    })
+
+    it('returns null when developer section is empty', () => {
+      const content = 'Header\n---\nInstructions\n---\n'
+      assert.strictEqual(extractAppealText(content), null)
+    })
+
+    it('returns null when developer section is whitespace only', () => {
+      const content = 'Header\n---\nInstructions\n---\n   \n  \n'
+      assert.strictEqual(extractAppealText(content), null)
+    })
+
+    it('trims whitespace from developer text', () => {
+      const content = 'Header\n---\n  My response  \n'
+      assert.strictEqual(extractAppealText(content), 'My response')
     })
   })
 
