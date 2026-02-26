@@ -302,7 +302,7 @@ These conditions solve cross-session bleed—unlike `sourcesModifiedSinceLastRun
   "name": "my-review",
   "type": "agent",
   "prompt": "Review the changes...",
-  "when": { "sourceFilesEditedThisTurnThisTurn": true }
+  "when": { "sourceFilesEditedThisTurn": true }
 }
 ```
 
