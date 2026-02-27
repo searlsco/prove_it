@@ -12,7 +12,7 @@
         {
           "name": "session-briefing",
           "type": "script",
-          "command": "prove_it run_builtin session:briefing"
+          "command": "$(prove_it prefix)/libexec/briefing"
         }
       ]
     },
@@ -24,7 +24,7 @@
         {
           "name": "lock-config",
           "type": "script",
-          "command": "prove_it run_builtin config:lock",
+          "command": "$(prove_it prefix)/libexec/guard-config",
           "quiet": true
         }
       ]

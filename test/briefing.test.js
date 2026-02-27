@@ -71,7 +71,7 @@ describe('briefing', () => {
           type: 'claude',
           event: 'PreToolUse',
           matcher: 'Edit|Write',
-          tasks: [{ name: 'lock-config', type: 'script', command: 'prove_it run_builtin config:lock' }]
+          tasks: [{ name: 'lock-config', type: 'script', command: '$(prove_it prefix)/libexec/guard-config' }]
         }]
       }
       const text = renderBriefing(cfg)
@@ -149,7 +149,7 @@ describe('briefing', () => {
           type: 'claude',
           event: 'SessionStart',
           tasks: [
-            { name: 'session-briefing', type: 'script', command: 'prove_it run_builtin session:briefing' },
+            { name: 'session-briefing', type: 'script', command: '$(prove_it prefix)/libexec/briefing' },
             { name: 'other-task', type: 'script', command: 'echo hello' }
           ]
         }]
@@ -166,7 +166,7 @@ describe('briefing', () => {
             type: 'claude',
             event: 'SessionStart',
             tasks: [
-              { name: 'session-briefing', type: 'script', command: 'prove_it run_builtin session:briefing' }
+              { name: 'session-briefing', type: 'script', command: '$(prove_it prefix)/libexec/briefing' }
             ]
           },
           {

@@ -211,8 +211,8 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'SessionStart should emit JSON')
-      assert.ok(result.output.additionalContext.includes('hello_check.sh passed'),
-        'Should include check result in additionalContext')
+      assert.ok(result.output.additionalContext.includes('hello from session start'),
+        'Should include script output in additionalContext')
     })
 
     it('does not block on failing check—collects output instead', () => {
@@ -245,8 +245,8 @@ describe('v2 dispatcher: core hook behaviors', () => {
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'SessionStart should emit JSON')
       // Should include the passing check's output in additionalContext
-      assert.ok(result.output.additionalContext.includes('pass_check.sh passed'),
-        'Should include passing checks in additionalContext')
+      assert.ok(result.output.additionalContext.includes('session started ok'),
+        'Should include passing script output in additionalContext')
       // Should include failing check's reason in both channels
       assert.ok(result.output.additionalContext.includes('failed'),
         `additionalContext should include failure, got: ${result.output.additionalContext}`)
@@ -539,7 +539,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
           event: 'PreToolUse',
           matcher: 'Edit|Write',
           tasks: [
-            { name: 'lock-config', type: 'script', command: 'prove_it run_builtin config:lock', quiet: true }
+            { name: 'lock-config', type: 'script', command: '$(prove_it prefix)/libexec/guard-config', quiet: true }
           ]
         }
       ]))
@@ -650,7 +650,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
           event: 'PreToolUse',
           matcher: 'Edit|Write',
           tasks: [
-            { name: 'lock-config', type: 'script', command: 'prove_it run_builtin config:lock', quiet: true }
+            { name: 'lock-config', type: 'script', command: '$(prove_it prefix)/libexec/guard-config', quiet: true }
           ]
         },
         {

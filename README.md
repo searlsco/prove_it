@@ -188,7 +188,7 @@ Disabled tasks are logged as SKIP with reason "Disabled".
 Set `quiet: true` on a task to suppress all log output except failures:
 
 ```json
-{ "name": "lock-config", "type": "script", "command": "prove_it run_builtin config:lock", "quiet": true }
+{ "name": "lock-config", "type": "script", "command": "$(prove_it prefix)/libexec/guard-config", "quiet": true }
 ```
 
 Quiet tasks don't emit SKIP or PASS entries to the session log. FAIL and BOOM entries are always logged. This is useful for high-frequency guards (like `config:lock` on every PreToolUse) that would otherwise flood the monitor.
@@ -565,20 +565,20 @@ export DEBUG="true"
 
 Multiple env tasks merge in order—later tasks override earlier ones for the same key. If the command fails or output can't be parsed, the error is reported and execution continues.
 
-## Builtins
+## Libexec scripts
 
-prove_it ships with built-in runnable tasks:
+prove_it ships standalone scripts in `libexec/` for common infrastructure tasks:
 
-| Builtin | Type | What it does |
-|---------|------|-------------|
-| `config:lock` | script | Blocks direct edits to prove_it config files. Invoke via `prove_it run_builtin config:lock`. |
-| `session:briefing` | script | Renders a session orientation on SessionStart: active tasks, signal instructions, review process overview. Invoke via `prove_it run_builtin session:briefing`. |
+| Script | What it does |
+|--------|-------------|
+| `libexec/guard-config` | Blocks direct edits to prove_it config files. Reads hook input from stdin. |
+| `libexec/briefing` | Renders a session orientation on SessionStart: active tasks, signal instructions, review process overview. |
 
-Script builtins are configured as `type: "script"` tasks with `command: "prove_it run_builtin <name>"`. Reviewer prompts are distributed as skills (see [Skill-based prompts](#skill-based-prompts)).
+Configure them as `type: "script"` tasks with `command: "$(prove_it prefix)/libexec/<name>"`. The `$(prove_it prefix)` subshell resolves to prove_it's install directory, so the scripts work regardless of where prove_it is installed. Reviewer prompts are distributed as skills (see [Skill-based prompts](#skill-based-prompts)).
 
 ## Session briefing
 
-On every SessionStart, the `session:briefing` builtin renders an orientation that's injected into Claude's context. It shows:
+On every SessionStart, the `libexec/briefing` script renders an orientation that's injected into Claude's context. It shows:
 
 - **Active tasks by event**—what runs on Stop, PreToolUse, git commit, etc.
 - **Signal instructions**—if any tasks are gated on signals, Claude gets explicit instructions to run `prove_it signal done` when a unit of work is complete
@@ -732,7 +732,7 @@ prove_it doctor         Check installation and show effective config
 prove_it monitor        Tail hook results in real time
 prove_it signal <type>  Declare a lifecycle signal (done, stuck, idle, clear)
 prove_it hook <spec>    Run a dispatcher directly (claude:Stop, git:pre-commit)
-prove_it run_builtin <name> Run a builtin check directly
+prove_it prefix         Print install directory (for resolving libexec scripts)
 prove_it record         Record a test run result (--name <task> --pass|--fail|--result <N>)
 prove_it help           Show help
 prove_it --version      Show version

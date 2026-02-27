@@ -1,0 +1,46 @@
+#!/usr/bin/env node
+/**
+ * guard-config — Block writes to prove_it config files.
+ *
+ * Reads hook input JSON from stdin (tool_name, tool_input).
+ * Exits 1 with deny reason on stdout for config writes, exits 0 otherwise.
+ */
+const { isLocalConfigWrite, isConfigFileEdit } = require('../lib/globs')
+
+const DENY_REASON = 'prove_it: Cannot modify prove_it config files\n\n' +
+  'These files are for user configuration. ' +
+  'To modify them, run the command directly in your terminal (not through Claude).'
+
+function guardConfig (input) {
+  const toolName = input.tool_name || ''
+  const toolInput = input.tool_input || {}
+
+  if (isConfigFileEdit(toolName, toolInput)) {
+    return { pass: false, reason: DENY_REASON }
+  }
+
+  if (toolName === 'Bash' && isLocalConfigWrite(toolInput.command)) {
+    return { pass: false, reason: DENY_REASON }
+  }
+
+  return { pass: true, reason: '' }
+}
+
+if (require.main === module) {
+  let raw = ''
+  process.stdin.setEncoding('utf8')
+  process.stdin.on('data', chunk => { raw += chunk })
+  process.stdin.on('end', () => {
+    let input = {}
+    try { input = JSON.parse(raw) } catch {}
+    const result = guardConfig(input)
+    if (!result.pass) {
+      process.stdout.write(result.reason)
+      process.exit(1)
+    }
+    process.exit(0)
+  })
+  process.stdin.resume()
+} else {
+  module.exports = { guardConfig }
+}

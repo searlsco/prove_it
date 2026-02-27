@@ -27,7 +27,7 @@ describe('CLI', () => {
       assert.match(r.stdout, /prove_it.*Config-driven/s)
     }
     assert.match(runCli([]).stdout, /install/)
-    assert.match(runCli([]).stdout, /run_builtin/)
+    assert.match(runCli([]).stdout, /prefix/)
   })
 
   it('exits with error for unknown command', () => {
@@ -36,18 +36,14 @@ describe('CLI', () => {
     assert.match(r.stderr, /Unknown command: foobar/)
   })
 
-  // ---------- Story: run_builtin ----------
-  it('run_builtin: usage, unknown, and config:lock invocation', () => {
-    const r1 = runCli(['run_builtin'])
-    assert.strictEqual(r1.exitCode, 1)
-    assert.match(r1.stderr, /Usage/)
-
-    const r2 = runCli(['run_builtin', 'nonexistent'])
-    assert.strictEqual(r2.exitCode, 1)
-    assert.match(r2.stderr, /Unknown builtin/)
-
-    const r3 = runCli(['run_builtin', 'config:lock'])
-    assert.strictEqual(r3.exitCode, 0)
+  // ---------- Story: prefix ----------
+  it('prefix prints a directory containing cli.js, exits 0', () => {
+    const r = runCli(['prefix'])
+    assert.strictEqual(r.exitCode, 0)
+    const dir = r.stdout.trim()
+    assert.ok(dir.length > 0, 'prefix should print a directory')
+    assert.ok(require('fs').existsSync(require('path').join(dir, 'cli.js')),
+      'prefix directory should contain cli.js')
   })
 
   // ---------- Story: signal ----------

@@ -2,40 +2,10 @@ const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
-const { isBuiltin, getBuiltinName, runScriptCheck } = require('../../lib/checks/script')
+const { runScriptCheck } = require('../../lib/checks/script')
 const { freshRepo } = require('../helpers')
 
 describe('script check', () => {
-  // 1. isBuiltin—parameterized (5 → 1)
-  describe('isBuiltin', () => {
-    it('returns expected results for various inputs', () => {
-      const cases = [
-        ['prove_it run_builtin config:lock', true],
-        ['prove_it run_builtin some:check', true],
-        ['./script/test', false],
-        [null, false],
-        [undefined, false]
-      ]
-      for (const [input, expected] of cases) {
-        assert.strictEqual(!!isBuiltin(input), expected,
-          `isBuiltin(${JSON.stringify(input)}) should be ${expected}`)
-      }
-    })
-  })
-
-  // 2. getBuiltinName—parameterized (2 → 1)
-  describe('getBuiltinName', () => {
-    it('extracts the name from run_builtin commands', () => {
-      const cases = [
-        ['prove_it run_builtin config:lock', 'config:lock'],
-        ['prove_it run_builtin some:check', 'some:check']
-      ]
-      for (const [input, expected] of cases) {
-        assert.strictEqual(getBuiltinName(input), expected)
-      }
-    })
-  })
-
   describe('runScriptCheck', () => {
     let tmpDir
     let origProveItDir
@@ -69,8 +39,8 @@ describe('script check', () => {
       return scriptPath
     }
 
-    // 3. basic execution story (4 → 1)
-    it('basic execution: pass, fail, script not found, unknown builtin', () => {
+    // 3. basic execution story (3 → 1)
+    it('basic execution: pass, fail, script not found', () => {
       // pass—exit 0
       makeScript('pass', 'exit 0')
       const pass = runScriptCheck(
@@ -96,14 +66,6 @@ describe('script check', () => {
       )
       assert.strictEqual(notFound.pass, false)
       assert.ok(notFound.reason.includes('Script not found'))
-
-      // unknown builtin
-      const badBuiltin = runScriptCheck(
-        { name: 'bad', command: 'prove_it run_builtin nonexistent' },
-        { rootDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000 }
-      )
-      assert.strictEqual(badBuiltin.pass, false)
-      assert.ok(badBuiltin.reason.includes('Unknown builtin'))
     })
 
     // 4. stdin piping story
@@ -196,8 +158,8 @@ describe('script check', () => {
       assert.strictEqual(nullEnv.pass, true, `Expected forced vars even with null configEnv, got: ${nullEnv.reason}`)
     })
 
-    // 7. logReview normal story (5+1 → 1)
-    it('logReview normal: PASS, FAIL, FAIL not found, SKIP cached, FAIL unknown builtin, no log without session', () => {
+    // 7. logReview normal story (4+1 → 1)
+    it('logReview normal: PASS, FAIL, FAIL not found, no log without session', () => {
       const SID = 'test-session-log-normal'
 
       // PASS
@@ -246,16 +208,6 @@ describe('script check', () => {
       assert.strictEqual(missingEntries[0].status, 'FAIL')
       assert.ok(missingEntries[0].reason.includes('Script not found'))
 
-      // FAIL—unknown builtin
-      runScriptCheck(
-        { name: 'log-bad-builtin', command: 'prove_it run_builtin nonexistent' },
-        { rootDir: tmpDir, projectDir: tmpDir, sessionId: SID, localCfgPath: null, sources: null, maxChars: 12000 }
-      )
-      const builtinEntries = readLogEntries(SID).filter(e => e.reviewer === 'log-bad-builtin')
-      assert.strictEqual(builtinEntries.length, 1)
-      assert.strictEqual(builtinEntries[0].status, 'FAIL')
-      assert.ok(builtinEntries[0].reason.includes('Unknown builtin'))
-
       // no log without session—no sessionId or projectDir
       const noLogSid = 'test-session-no-log'
       makeScript('nolog', 'exit 0')
@@ -292,14 +244,15 @@ describe('script check', () => {
         'Quiet task fail should produce exactly one log entry')
       assert.strictEqual(failEntries[0].status, 'FAIL')
 
-      // quiet builtin PASS—suppressed
-      const sidBuiltin = 'test-quiet-builtin'
+      // quiet script PASS—suppressed
+      const sidQuiet = 'test-quiet-script'
+      makeScript('qpass', 'exit 0')
       runScriptCheck(
-        { name: 'quiet-lock', command: 'prove_it run_builtin config:lock', quiet: true },
-        { rootDir: tmpDir, projectDir: tmpDir, sessionId: sidBuiltin, localCfgPath: null, sources: null, maxChars: 12000 }
+        { name: 'quiet-pass', command: './script/qpass', quiet: true },
+        { rootDir: tmpDir, projectDir: tmpDir, sessionId: sidQuiet, localCfgPath: null, sources: null, maxChars: 12000 }
       )
-      assert.strictEqual(readLogEntries(sidBuiltin).length, 0,
-        'Quiet builtin pass should produce no log entries')
+      assert.strictEqual(readLogEntries(sidQuiet).length, 0,
+        'Quiet script pass should produce no log entries')
     })
   })
 })

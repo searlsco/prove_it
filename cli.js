@@ -10,7 +10,7 @@
  *   doctor    - Check installation status and report issues
  *   monitor   - Tail hook results in real time
  *   hook      - Run a hook dispatcher (claude:<Event> or git:<event>)
- *   run_builtin - Run a builtin check directly
+ *   prefix    - Print install directory (for resolving libexec scripts)
  *   signal    - Declare a lifecycle signal (done, stuck, idle)
  *   record    - Record a test run result for run caching
  */
@@ -1050,46 +1050,6 @@ function cmdRecord () {
 }
 
 // ============================================================================
-// Run check command - run a builtin check directly
-// ============================================================================
-
-function cmdRunCheck () {
-  const builtinName = process.argv[3]
-  if (!builtinName) {
-    console.error('Usage: prove_it run_builtin <namespace>:<name>')
-    console.error('Example: prove_it run_builtin config:lock')
-    process.exit(1)
-  }
-
-  const builtins = require('./lib/checks/builtins')
-  const fn = builtins[builtinName]
-  if (typeof fn !== 'function') {
-    console.error(`Unknown builtin: ${builtinName}`)
-    console.error(`Available: ${Object.keys(builtins).filter(k => typeof builtins[k] === 'function').join(', ')}`)
-    process.exit(1)
-  }
-
-  const { resolveTestRoot } = require('./lib/testing')
-  const projectDir = process.cwd()
-  const rootDir = resolveTestRoot(projectDir)
-
-  const context = {
-    rootDir,
-    projectDir,
-    sessionId: null,
-    toolName: null,
-    toolInput: null,
-    sources: null,
-    maxChars: 12000
-  }
-
-  const check = { name: builtinName, type: 'script', command: `prove_it run_builtin ${builtinName}` }
-  const result = fn(check, context)
-  if (result.output) console.log(result.output)
-  process.exit(result.pass ? 0 : 1)
-}
-
-// ============================================================================
 // Signal command
 // ============================================================================
 
@@ -1167,7 +1127,7 @@ Commands:
   signal      Declare a lifecycle signal (done, stuck, idle, clear)
   monitor     Tail hook results in real time (run in a separate terminal)
   hook        Run a hook dispatcher (claude:<Event> or git:<event>)
-  run_builtin   Run a builtin check directly (e.g. prove_it run_builtin config:lock)
+  prefix      Print install directory (for resolving libexec scripts)
   record      Record a test run result for run caching
   help        Show this help message
   -v, --version  Show version number
@@ -1277,8 +1237,8 @@ function main () {
     case 'record':
       cmdRecord()
       break
-    case 'run_builtin':
-      cmdRunCheck()
+    case 'prefix':
+      console.log(__dirname)
       break
     case 'signal':
       cmdSignal()

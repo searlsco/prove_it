@@ -1,0 +1,33 @@
+#!/usr/bin/env node
+/**
+ * briefing — Render a human-readable orientation for SessionStart.
+ *
+ * Loads effective config and renders active tasks + review process overview.
+ * Always exits 0 — briefing failure should never block a session.
+ */
+const path = require('path')
+
+function runBriefing (projectDir) {
+  const { loadEffectiveConfig } = require('../lib/config')
+  const { loadRunData } = require('../lib/testing')
+  const { renderBriefing } = require('../lib/briefing')
+
+  const defaultFn = () => ({ enabled: false, sources: null, hooks: [] })
+  const { cfg } = loadEffectiveConfig(projectDir, defaultFn)
+  const localCfgPath = path.join(projectDir, '.claude', 'prove_it', 'config.local.json')
+  const runs = loadRunData(localCfgPath)
+  return renderBriefing(cfg, runs)
+}
+
+if (require.main === module) {
+  try {
+    const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd()
+    const text = runBriefing(projectDir)
+    process.stdout.write(text)
+  } catch (e) {
+    process.stdout.write(`prove_it: briefing unavailable (${e.message})`)
+  }
+  process.exit(0)
+} else {
+  module.exports = { runBriefing }
+}

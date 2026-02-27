@@ -2,11 +2,11 @@
 
 ## The problem
 
-prove_it's hooks reference `prove_it` by name (e.g., `prove_it run_builtin config:lock`). When Claude Code fires hooks, the `prove_it` on PATH determines which version runs. During development, that's usually the Homebrew install—not your working tree.
+prove_it's hooks reference `prove_it` by name (e.g., `$(prove_it prefix)/libexec/guard-config`). When Claude Code fires hooks, the `prove_it` on PATH determines which version runs. During development, that's usually the Homebrew install—not your working tree.
 
 ## The solution
 
-`script/agent` launches Claude Code with `test/bin/prove_it` prepended to PATH. This shim resolves to the repo's `cli.js`, so every `prove_it` invocation—hooks, builtins, transitive calls—uses your local source.
+`script/agent` launches Claude Code with `test/bin/prove_it` prepended to PATH. This shim resolves to the repo's `cli.js`, so every `prove_it` invocation—hooks, libexec scripts, transitive calls—uses your local source.
 
 ```bash
 ./script/agent                    # interactive
@@ -25,7 +25,7 @@ script/agent
                       └─ records session baseline (lazy, internal)
 ```
 
-All child processes inherit the modified PATH: hook dispatchers, builtin tasks, test scripts, agent reviewers.
+All child processes inherit the modified PATH: hook dispatchers, libexec scripts, test scripts, agent reviewers.
 
 ## Verification
 

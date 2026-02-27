@@ -56,8 +56,8 @@ describe('SessionStart task types', () => {
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'Should produce JSON output')
       assert.ok(result.output.additionalContext, 'Should have additionalContext')
-      assert.ok(result.output.additionalContext.includes('hello.sh passed'),
-        `additionalContext should include pass message, got: ${result.output.additionalContext}`)
+      assert.ok(result.output.additionalContext.includes('hello from session'),
+        `additionalContext should include script output, got: ${result.output.additionalContext}`)
       assert.strictEqual(result.output.systemMessage, undefined,
         'No systemMessage on success')
     })
@@ -116,7 +116,7 @@ describe('SessionStart task types', () => {
       }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
-      assert.ok(result.output.additionalContext.includes('pass.sh passed'),
+      assert.ok(result.output.additionalContext.includes('pass output'),
         'Should include passing task output')
     })
   })

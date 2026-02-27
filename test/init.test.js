@@ -36,7 +36,7 @@ describe('init', () => {
       assert.strictEqual(cfg.hooks[0].event, 'SessionStart',
         'SessionStart should be the first hook entry')
       assert.strictEqual(cfg.hooks[0].tasks[0].name, 'session-briefing')
-      assert.strictEqual(cfg.hooks[0].tasks[0].command, 'prove_it run_builtin session:briefing')
+      assert.strictEqual(cfg.hooks[0].tasks[0].command, '$(prove_it prefix)/libexec/briefing')
     })
 
     it('omits git hooks when gitHooks is false', () => {

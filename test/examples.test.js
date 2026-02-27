@@ -62,7 +62,7 @@ describe('example projects', () => {
         const cfgPath = path.join(dir, '.claude', 'prove_it', 'config.json')
         const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
         const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
-        const scriptChecks = allChecks.filter(c => c.type === 'script' && !c.command.startsWith('prove_it '))
+        const scriptChecks = allChecks.filter(c => c.type === 'script' && !c.command.includes('prove_it prefix'))
 
         for (const check of scriptChecks) {
           const scriptPath = path.join(dir, check.command)

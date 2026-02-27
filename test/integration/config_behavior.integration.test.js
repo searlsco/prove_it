@@ -337,7 +337,7 @@ describe('Config-driven hook behavior (v2)', () => {
             {
               name: 'conditional-check',
               type: 'script',
-              command: 'prove_it run_builtin config:lock',
+              command: '$(prove_it prefix)/libexec/guard-config',
               when: { fileExists: '.missing' }
             }
           ]
@@ -443,7 +443,7 @@ describe('Config-driven hook behavior (v2)', () => {
             {
               name: 'guarded-check',
               type: 'script',
-              command: 'prove_it run_builtin config:lock',
+              command: '$(prove_it prefix)/libexec/guard-config',
               when: { fileExists: '.nonexistent' }
             }
           ]
@@ -477,7 +477,7 @@ describe('Config-driven hook behavior (v2)', () => {
             {
               name: 'needs-diff',
               type: 'script',
-              command: 'prove_it run_builtin config:lock',
+              command: '$(prove_it prefix)/libexec/guard-config',
               when: { variablesPresent: ['staged_diff'] }
             }
           ]
