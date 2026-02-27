@@ -191,8 +191,9 @@ function setupSessionWithDiffs (tmpDir, sessionId, projectDir) {
  * Standard env overrides to isolate tests from real user config.
  */
 function isolatedEnv (tmpDir) {
+  const testBin = path.join(__dirname, '..', 'bin')
   return {
-    PATH: process.env.PATH,
+    PATH: `${testBin}${path.delimiter}${process.env.PATH}`,
     HOME: tmpDir,
     PROVE_IT_DIR: path.join(tmpDir, '.prove_it_test')
   }
