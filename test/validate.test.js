@@ -570,6 +570,46 @@ describe('validateConfig', () => {
       assert.ok(warnings.some(w => w.includes('model only applies to agent tasks')))
     })
 
+    it('validates params field', () => {
+      // valid object on script task passes
+      const valid = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', params: { paths: ['.env'] }
+      }))
+      assert.strictEqual(valid.errors.length, 0)
+      assert.strictEqual(valid.warnings.length, 0)
+
+      // empty object passes
+      const empty = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', params: {}
+      }))
+      assert.strictEqual(empty.errors.length, 0)
+
+      // non-object values error
+      for (const [label, value] of [['string', 'bad'], ['array', ['bad']], ['null', null], ['number', 42]]) {
+        const { errors } = validateConfig(cfgWithTask({
+          name: 'a', type: 'script', command: 'x', params: value
+        }))
+        assert.ok(errors.some(e => e.includes('params must be a plain object')),
+          `Expected plain object error for params: ${label}`)
+      }
+
+      // warns on agent task
+      const agentWarn = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'Review this', params: { foo: 'bar' }
+      }))
+      assert.ok(agentWarn.warnings.some(w => w.includes('params') && w.includes('script tasks')))
+
+      // warns on env task
+      const envWarn = validateConfig(validConfig({
+        hooks: [{
+          type: 'claude',
+          event: 'SessionStart',
+          tasks: [{ name: 'a', type: 'env', command: './script/env.sh', params: { foo: 'bar' } }]
+        }]
+      }))
+      assert.ok(envWarn.warnings.some(w => w.includes('params') && w.includes('script tasks')))
+    })
+
     it('validates task-level ruleFile field', () => {
       // valid ruleFile on agent passes with no warnings
       const valid = validateConfig(cfgWithTask({

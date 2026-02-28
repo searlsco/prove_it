@@ -211,8 +211,8 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'SessionStart should emit JSON')
-      assert.ok(result.output.additionalContext.includes('hello from session start'),
-        'Should include script output in additionalContext')
+      assert.ok(result.output.hookSpecificOutput?.additionalContext?.includes('hello from session start'),
+        'Should include script output in hookSpecificOutput.additionalContext')
     })
 
     it('does not block on failing check—collects output instead', () => {
@@ -244,12 +244,13 @@ describe('v2 dispatcher: core hook behaviors', () => {
       // SessionStart never blocks—exit 0
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'SessionStart should emit JSON')
-      // Should include the passing check's output in additionalContext
-      assert.ok(result.output.additionalContext.includes('session started ok'),
-        'Should include passing script output in additionalContext')
+      // Should include the passing check's output in hookSpecificOutput.additionalContext
+      const ctx = result.output.hookSpecificOutput?.additionalContext
+      assert.ok(ctx?.includes('session started ok'),
+        'Should include passing script output in hookSpecificOutput.additionalContext')
       // Should include failing check's reason in both channels
-      assert.ok(result.output.additionalContext.includes('failed'),
-        `additionalContext should include failure, got: ${result.output.additionalContext}`)
+      assert.ok(ctx?.includes('failed'),
+        `additionalContext should include failure, got: ${ctx}`)
       assert.ok(result.output.systemMessage.includes('failed'),
         `systemMessage should include failure, got: ${result.output.systemMessage}`)
     })

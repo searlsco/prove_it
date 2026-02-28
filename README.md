@@ -172,6 +172,40 @@ Config files merge (later overrides earlier):
 - **`agent`**—sends a prompt to an AI reviewer, expects PASS/FAIL response (see [Agent tasks](#agent-tasks))
 - **`env`**—runs a command that outputs environment variables, injected into Claude's session (SessionStart only, see [Env tasks](#env-tasks))
 
+### Task parameters (`params`)
+
+Script tasks accept a `params` object that is passed to the script as `input.params` in the stdin JSON payload:
+
+```json
+{
+  "name": "lock-config",
+  "type": "script",
+  "command": "$(prove_it prefix)/libexec/guard-config",
+  "quiet": true,
+  "params": {
+    "paths": [".claude/prove_it/**"]
+  }
+}
+```
+
+Scripts read `params` from the parsed stdin JSON alongside `tool_name`, `tool_input`, etc. This is a generic mechanism—any script can use `params` to accept structured configuration without inventing CLI arg parsing.
+
+**guard-config with custom paths:** The built-in `guard-config` script uses `params.paths` to decide which file paths to block. Add your own paths to guard additional files:
+
+```json
+{
+  "name": "lock-config",
+  "type": "script",
+  "command": "$(prove_it prefix)/libexec/guard-config",
+  "quiet": true,
+  "params": {
+    "paths": [".claude/prove_it/**", ".env", "credentials/**"]
+  }
+}
+```
+
+When `params.paths` is omitted, guard-config falls back to blocking prove_it config files by default (backward compatible).
+
 ### Disabling individual tasks
 
 Set `enabled: false` on a task to skip it without removing it from config:
@@ -571,7 +605,7 @@ prove_it ships standalone scripts in `libexec/` for common infrastructure tasks:
 
 | Script | What it does |
 |--------|-------------|
-| `libexec/guard-config` | Blocks direct edits to prove_it config files. Reads hook input from stdin. |
+| `libexec/guard-config` | Blocks writes to guarded file paths. Uses `params.paths` (glob patterns) from stdin to determine which paths to block. Falls back to hardcoded prove_it config patterns when `params.paths` is absent. |
 | `libexec/briefing` | Renders a session orientation on SessionStart: active tasks, signal instructions, review process overview. |
 
 Configure them as `type: "script"` tasks with `command: "$(prove_it prefix)/libexec/<name>"`. The `$(prove_it prefix)` subshell resolves to prove_it's install directory, so the scripts work regardless of where prove_it is installed. Reviewer prompts are distributed as skills (see [Skill-based prompts](#skill-based-prompts)).

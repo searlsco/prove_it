@@ -1,6 +1,6 @@
 const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
-const { passDecision, failDecision, emitPreToolUse, emitStop } = require('../lib/dispatcher/protocol')
+const { passDecision, failDecision, emitPreToolUse, emitStop, emitSessionStart } = require('../lib/dispatcher/protocol')
 
 describe('protocol', () => {
   describe('passDecision', () => {
@@ -75,6 +75,47 @@ describe('protocol', () => {
       const output = JSON.parse(captured)
       assert.strictEqual(output.hookSpecificOutput.additionalContext, undefined)
       assert.strictEqual(output.systemMessage, undefined)
+    })
+  })
+
+  describe('emitSessionStart', () => {
+    let captured
+    const origWrite = process.stdout.write
+
+    beforeEach(() => {
+      captured = ''
+      process.stdout.write = (chunk) => { captured += chunk }
+    })
+
+    afterEach(() => {
+      process.stdout.write = origWrite
+    })
+
+    it('wraps additionalContext in hookSpecificOutput', () => {
+      emitSessionStart({ additionalContext: 'briefing text' })
+      const output = JSON.parse(captured)
+      assert.strictEqual(output.hookSpecificOutput.hookEventName, 'SessionStart')
+      assert.strictEqual(output.hookSpecificOutput.additionalContext, 'briefing text')
+      assert.strictEqual(output.additionalContext, undefined,
+        'additionalContext must not appear at top level')
+    })
+
+    it('includes systemMessage at top level', () => {
+      emitSessionStart({ systemMessage: 'warning msg' })
+      const output = JSON.parse(captured)
+      assert.strictEqual(output.systemMessage, 'warning msg')
+    })
+
+    it('supports both additionalContext and systemMessage', () => {
+      emitSessionStart({ additionalContext: 'ctx', systemMessage: 'msg' })
+      const output = JSON.parse(captured)
+      assert.strictEqual(output.hookSpecificOutput.additionalContext, 'ctx')
+      assert.strictEqual(output.systemMessage, 'msg')
+    })
+
+    it('emits nothing when both fields are empty', () => {
+      emitSessionStart({})
+      assert.strictEqual(captured, '')
     })
   })
 

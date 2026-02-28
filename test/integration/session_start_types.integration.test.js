@@ -55,9 +55,13 @@ describe('SessionStart task types', () => {
 
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'Should produce JSON output')
-      assert.ok(result.output.additionalContext, 'Should have additionalContext')
-      assert.ok(result.output.additionalContext.includes('hello from session'),
-        `additionalContext should include script output, got: ${result.output.additionalContext}`)
+      const ctx = result.output.hookSpecificOutput?.additionalContext
+      assert.ok(ctx, 'Should have hookSpecificOutput.additionalContext')
+      assert.strictEqual(result.output.hookSpecificOutput.hookEventName, 'SessionStart')
+      assert.ok(ctx.includes('hello from session'),
+        `additionalContext should include script output, got: ${ctx}`)
+      assert.strictEqual(result.output.additionalContext, undefined,
+        'additionalContext must not appear at top level')
       assert.strictEqual(result.output.systemMessage, undefined,
         'No systemMessage on success')
     })
@@ -85,7 +89,7 @@ describe('SessionStart task types', () => {
 
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'Should produce JSON output')
-      assert.ok(result.output.additionalContext, 'Should have additionalContext')
+      assert.ok(result.output.hookSpecificOutput?.additionalContext, 'Should have hookSpecificOutput.additionalContext')
       assert.ok(result.output.systemMessage, 'Should have systemMessage on failure')
       assert.ok(result.output.systemMessage.includes('failed'),
         `systemMessage should mention failure, got: ${result.output.systemMessage}`)
@@ -116,7 +120,7 @@ describe('SessionStart task types', () => {
       }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
 
       assert.strictEqual(result.exitCode, 0)
-      assert.ok(result.output.additionalContext.includes('pass output'),
+      assert.ok(result.output.hookSpecificOutput?.additionalContext?.includes('pass output'),
         'Should include passing task output')
     })
   })
@@ -175,8 +179,9 @@ describe('SessionStart task types', () => {
 
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'Should produce JSON output')
-      assert.ok(result.output.additionalContext.includes('MY_VAR'),
-        `additionalContext should mention env var names, got: ${result.output.additionalContext}`)
+      const ctx = result.output.hookSpecificOutput?.additionalContext
+      assert.ok(ctx?.includes('MY_VAR'),
+        `additionalContext should mention env var names, got: ${ctx}`)
     })
 
     it('reports errors in both channels when env script fails', () => {
@@ -203,7 +208,7 @@ describe('SessionStart task types', () => {
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'Should produce JSON output')
       assert.ok(result.output.systemMessage, 'Should have systemMessage on env failure')
-      assert.ok(result.output.additionalContext, 'Should have additionalContext on env failure')
+      assert.ok(result.output.hookSpecificOutput?.additionalContext, 'Should have additionalContext on env failure')
       assert.ok(result.output.systemMessage.includes('failed'),
         `systemMessage should mention failure, got: ${result.output.systemMessage}`)
     })

@@ -92,6 +92,27 @@ describe('script check', () => {
       assert.deepStrictEqual(parsed.tool_input, { url: 'https://github.com/foo/bar' })
     })
 
+    it('stdin: script receives params in hook input when check has params', () => {
+      makeScript('read_params', 'cat')
+      const result = runScriptCheck(
+        { name: 'params-test', command: './script/read_params', params: { paths: ['.env', 'secrets/**'] } },
+        {
+          rootDir: tmpDir,
+          localCfgPath: null,
+          sources: null,
+          maxChars: 12000,
+          hookEvent: 'PreToolUse',
+          sessionId: 'sess-456',
+          toolName: 'Write',
+          toolInput: { file_path: '.env' }
+        }
+      )
+      assert.strictEqual(result.pass, true)
+      const parsed = JSON.parse(result.output)
+      assert.deepStrictEqual(parsed.params, { paths: ['.env', 'secrets/**'] })
+      assert.strictEqual(parsed.tool_name, 'Write')
+    })
+
     it('stdin: script receives no stdin when context has no tool info', () => {
       // Script that outputs "empty" if stdin is empty, or the stdin content if present
       makeScript('check_stdin', [

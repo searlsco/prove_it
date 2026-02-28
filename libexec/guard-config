@@ -1,26 +1,77 @@
 #!/usr/bin/env node
 /**
- * guard-config — Block writes to prove_it config files.
+ * guard-config — Block writes to guarded file paths.
  *
- * Reads hook input JSON from stdin (tool_name, tool_input).
- * Exits 1 with deny reason on stdout for config writes, exits 0 otherwise.
+ * Reads hook input JSON from stdin (tool_name, tool_input, params).
+ * When params.paths is set, blocks Write/Edit/Bash to any matching path.
+ * Without params.paths, falls back to hardcoded prove_it config protection.
+ * Exits 1 with deny reason on stdout for blocked writes, exits 0 otherwise.
  */
-const { isLocalConfigWrite, isConfigFileEdit } = require('../lib/globs')
+const { isLocalConfigWrite, isConfigFileEdit, globToRegex } = require('../lib/globs')
 
-const DENY_REASON = 'prove_it: Cannot modify prove_it config files\n\n' +
+const DEFAULT_DENY_REASON = 'prove_it: Cannot modify prove_it config files\n\n' +
   'These files are for user configuration. ' +
   'To modify them, run the command directly in your terminal (not through Claude).'
+
+function buildDenyReason (paths) {
+  return 'prove_it: Cannot modify guarded paths\n\n' +
+    'Protected patterns: ' + paths.join(', ') + '\n' +
+    'To modify them, run the command directly in your terminal (not through Claude).'
+}
+
+/**
+ * Check if a file path matches any of the given glob patterns.
+ * Handles absolute paths by trying progressively shorter suffixes.
+ */
+function matchesAnyPattern (filePath, patterns) {
+  if (!filePath) return false
+  for (const pattern of patterns) {
+    const regex = globToRegex(pattern)
+    if (regex.test(filePath)) return true
+    // For absolute paths, try suffix matching
+    const parts = filePath.split('/')
+    for (let i = 1; i < parts.length; i++) {
+      if (regex.test(parts.slice(i).join('/'))) return true
+    }
+  }
+  return false
+}
 
 function guardConfig (input) {
   const toolName = input.tool_name || ''
   const toolInput = input.tool_input || {}
+  const paths = input.params?.paths
 
+  if (Array.isArray(paths) && paths.length > 0) {
+    // Custom path guarding via params
+    const filePath = toolInput.file_path || toolInput.notebook_path || ''
+    if ((toolName === 'Write' || toolName === 'Edit' || toolName === 'NotebookEdit') &&
+        matchesAnyPattern(filePath, paths)) {
+      return { pass: false, reason: buildDenyReason(paths) }
+    }
+
+    if (toolName === 'Bash' && toolInput.command) {
+      // Check for redirect/tee to guarded paths
+      const cmd = toolInput.command
+      for (const pattern of paths) {
+        // Extract a literal prefix from the glob for Bash redirect detection
+        const literal = pattern.replace(/[*?[\]{}]/g, '').replace(/\/$/, '')
+        if (literal && new RegExp(`>\\s*\\S*${literal.replace(/[.+^$()|\\/]/g, '\\$&')}|tee\\s+.*${literal.replace(/[.+^$()|\\/]/g, '\\$&')}`).test(cmd)) {
+          return { pass: false, reason: buildDenyReason(paths) }
+        }
+      }
+    }
+
+    return { pass: true, reason: '' }
+  }
+
+  // Fallback: hardcoded prove_it config patterns
   if (isConfigFileEdit(toolName, toolInput)) {
-    return { pass: false, reason: DENY_REASON }
+    return { pass: false, reason: DEFAULT_DENY_REASON }
   }
 
   if (toolName === 'Bash' && isLocalConfigWrite(toolInput.command)) {
-    return { pass: false, reason: DENY_REASON }
+    return { pass: false, reason: DEFAULT_DENY_REASON }
   }
 
   return { pass: true, reason: '' }
@@ -42,5 +93,5 @@ if (require.main === module) {
   })
   process.stdin.resume()
 } else {
-  module.exports = { guardConfig }
+  module.exports = { guardConfig, matchesAnyPattern }
 }

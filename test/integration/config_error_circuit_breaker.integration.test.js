@@ -158,9 +158,9 @@ describe('Config error circuit breaker', () => {
 
       assert.strictEqual(result1.exitCode, 0)
       assert.ok(result1.output, 'SessionStart should produce output')
-      assert.ok(result1.output.additionalContext,
-        'SessionStart should include additionalContext')
-      assert.ok(result1.output.additionalContext.includes('invalid'),
+      assert.ok(result1.output.hookSpecificOutput?.additionalContext,
+        'SessionStart should include hookSpecificOutput.additionalContext')
+      assert.ok(result1.output.hookSpecificOutput.additionalContext.includes('invalid'),
         'additionalContext should mention config is invalid')
       assert.ok(result1.output.systemMessage,
         'SessionStart should include systemMessage')
@@ -175,8 +175,8 @@ describe('Config error circuit breaker', () => {
 
       assert.strictEqual(result2.exitCode, 0)
       assert.ok(result2.output, 'SessionStart should produce output on repeat')
-      assert.ok(result2.output.additionalContext,
-        'Repeat SessionStart should include additionalContext')
+      assert.ok(result2.output.hookSpecificOutput?.additionalContext,
+        'Repeat SessionStart should include hookSpecificOutput.additionalContext')
     })
   })
 
