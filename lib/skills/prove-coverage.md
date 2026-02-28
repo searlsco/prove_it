@@ -1,6 +1,7 @@
 ---
 name: prove-coverage
 description: Review code changes for test coverage adequacy
+argument-hint: "[everything | path/glob]"
 context: fork
 allowed-tools:
   - Bash
@@ -14,6 +15,16 @@ allowed-tools:
   - Task
   - NotebookEdit
 disable-model-invocation: true
+---
+
+## Scope
+
+`$ARGUMENTS`
+
+If the scope line above indicates a holistic review (e.g., "everything", "all", or similar): review ALL source files in the project for test coverage gaps, not just the changed files. Use Glob and Grep to discover all relevant files instead of relying on the diff-scoped lists below.
+
+If the scope line is empty, review only the changed files listed below (default behavior).
+
 ---
 
 Review the code changes below for test coverage adequacy.

@@ -565,6 +565,7 @@ describe('skill source', () => {
       assert.match(fm, new RegExp(`^name: ${name}$`, 'm'))
       assert.match(fm, /disable-model-invocation: true/)
       assert.match(fm, /allowed-tools:/)
+      assert.match(fm, /argument-hint:/)
     })
   }
 })

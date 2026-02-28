@@ -1,6 +1,7 @@
 ---
 name: prove-test-validity
 description: Review test quality — catches tests that give false confidence by validating nothing
+argument-hint: "[everything | path/glob]"
 context: fork
 model: inherit
 allowed-tools:
@@ -15,6 +16,16 @@ allowed-tools:
   - Task
   - NotebookEdit
 disable-model-invocation: true
+---
+
+## Scope
+
+`$ARGUMENTS`
+
+If the scope line above indicates a holistic review (e.g., "everything", "all", or similar): review ALL test files in the project for validity, not just tests related to the diff. Use Glob and Grep to discover all relevant files instead of relying on the diff-scoped lists below.
+
+If the scope line is empty, review only the changed files listed below (default behavior).
+
 ---
 
 You are a test-validity reviewer. Your job is to find tests that give false confidence — tests that pass today but would still pass if you introduced a bug that changes observable behavior. You are not checking whether tests exist (that's prove-coverage's job). You are checking whether the tests that DO exist actually prove anything.

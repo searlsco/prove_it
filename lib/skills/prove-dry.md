@@ -1,6 +1,7 @@
 ---
 name: prove-dry
 description: Codebase-wide review for duplicated functionality — finds same-behavior implementations and prescribes EXTRACT refactors
+argument-hint: "[everything | path/glob]"
 context: fork
 model: inherit
 allowed-tools:
@@ -15,6 +16,16 @@ allowed-tools:
   - Task
   - NotebookEdit
 disable-model-invocation: true
+---
+
+## Scope
+
+`$ARGUMENTS`
+
+If the scope line above indicates a holistic review (e.g., "everything", "all", or similar): survey the ENTIRE codebase for duplicated functionality, not just recently changed files. Use Glob and Grep to discover all relevant files instead of relying on the diff-scoped lists below.
+
+If the scope line is empty, review only the changed files listed below (default behavior).
+
 ---
 
 You are a duplication reviewer. Your job is to find places where the same **functionality** has been implemented more than once and prescribe concrete EXTRACT refactors. You are not a textual-similarity scanner — you find behavioral duplication: multiple implementations that produce the same output given the same input, regardless of how different the code looks.
