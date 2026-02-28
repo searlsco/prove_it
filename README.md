@@ -431,6 +431,7 @@ prove_it ships curated reviewer prompts as Claude Code [skills](https://code.cla
 |-------|----------------|
 | `prove-coverage` | Session diffs for test coverage adequacy |
 | `prove-shipworthy` | Thorough pre-ship review: correctness, integration, security, tests, omissions. Uses `{{changes_since_last_run}}` for scope. Designed for Opus. |
+| `prove-test-validity` | Test quality review: catches tests that give false confidence (tautological assertions, closed-loop validation, excessive mocking, etc.). Designed for Opus. |
 
 Skills are installed to `~/.claude/skills/<name>/SKILL.md` by `prove_it install`. The prompt body is the skill file with its YAML frontmatter stripped.
 
@@ -697,10 +698,11 @@ prove_it ships review prompts that can be run manually or automatically:
 |-------|----------------|--------------|
 | `/prove-coverage` | Test coverage adequacy for changed code | Haiku (fast, cheap) |
 | `/prove-shipworthy` | Pre-ship review: correctness, integration, security, tests, omissions | Opus (thorough) |
+| `/prove-test-validity` | Test quality: catches tests that give false confidence (tautological assertions, closed-loop validation, excessive mocking) | Opus (thorough) |
 
-**Run manually** — invoke `/prove-shipworthy` or `/prove-coverage` as a slash command whenever you want a review. Both run as subagents (`context: fork`), so they don't consume your conversation context.
+**Run manually** — invoke any skill as a slash command whenever you want a review. All run as subagents (`context: fork`), so they don't consume your conversation context.
 
-**Run automatically** — configure the same prompts as prove_it agent tasks and they'll fire on lifecycle events. The default config does this: `prove-coverage` runs async after churn thresholds are hit, and `prove-shipworthy` runs on `prove_it signal done`. See [Skill-based prompts](#skill-based-prompts) for config details.
+**Run automatically** — configure the same prompts as prove_it agent tasks and they'll fire on lifecycle events. The default config does this: `prove-coverage` runs async after churn thresholds are hit, and `prove-shipworthy` runs on `prove_it signal done`. `prove-test-validity` is not in the default config — add it when you want test quality gating. See [Skill-based prompts](#skill-based-prompts) for config details.
 
 The manual and automatic paths use the same prompt — the difference is who triggers it (you vs. prove_it) and where it runs (Claude Code subagent vs. `claude -p` subprocess). Both produce an independent review outside the working agent's context.
 
