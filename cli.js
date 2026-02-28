@@ -131,7 +131,8 @@ function isInstallCurrent (settings) {
 const SKILLS = [
   { name: 'prove', src: 'prove.md' },
   { name: 'prove-coverage', src: 'prove-coverage.md' },
-  { name: 'prove-shipworthy', src: 'prove-shipworthy.md' }
+  { name: 'prove-shipworthy', src: 'prove-shipworthy.md' },
+  { name: 'prove-test-validity', src: 'prove-test-validity.md' }
 ]
 
 function areSkillsCurrent (claudeDir) {

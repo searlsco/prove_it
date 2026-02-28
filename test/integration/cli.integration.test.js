@@ -289,7 +289,7 @@ describe('install/uninstall', () => {
     assert.strictEqual(cfg.taskEnv.TURBOCOMMIT_DISABLED, '1')
 
     // Skill files (all 3)
-    for (const name of ['prove', 'prove-coverage', 'prove-shipworthy']) {
+    for (const name of ['prove', 'prove-coverage', 'prove-shipworthy', 'prove-test-validity']) {
       const skillPath = path.join(tmpDir, '.claude', 'skills', name, 'SKILL.md')
       assert.ok(fs.existsSync(skillPath), `Skill ${name} should exist`)
       const skillContent = fs.readFileSync(skillPath, 'utf8')
@@ -334,7 +334,7 @@ describe('install/uninstall', () => {
     assert.strictEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).taskEnv.TURBOCOMMIT_DISABLED, '1')
 
     // Outdated skill files (all 3)
-    for (const name of ['prove', 'prove-coverage', 'prove-shipworthy']) {
+    for (const name of ['prove', 'prove-coverage', 'prove-shipworthy', 'prove-test-validity']) {
       const sp = path.join(tmpDir, '.claude', 'skills', name, 'SKILL.md')
       fs.writeFileSync(sp, 'outdated content')
       runCli(['install'], { env })
@@ -413,7 +413,7 @@ describe('install/uninstall', () => {
     const proveItDir = path.join(tmpDir, '.claude', 'prove_it')
     assert.ok(fs.existsSync(proveItDir), 'prove_it directory should still exist')
     assert.strictEqual(fs.readdirSync(proveItDir).length, 0, 'prove_it directory should be empty')
-    for (const name of ['prove', 'prove-coverage', 'prove-shipworthy']) {
+    for (const name of ['prove', 'prove-coverage', 'prove-shipworthy', 'prove-test-validity']) {
       assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'skills', name)), `Skill ${name} should be removed`)
     }
   })
@@ -527,7 +527,7 @@ describe('skill source', () => {
     assert.match(fm, /argument-hint:/)
   })
 
-  for (const name of ['prove-coverage', 'prove-shipworthy']) {
+  for (const name of ['prove-coverage', 'prove-shipworthy', 'prove-test-validity']) {
     it(`${name}.md has valid frontmatter`, () => {
       const content = fs.readFileSync(path.join(skillsDir, `${name}.md`), 'utf8')
       assert.ok(content.startsWith('---\n') && !content.startsWith('---\n---'))
