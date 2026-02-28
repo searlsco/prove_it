@@ -134,6 +134,7 @@ const SKILLS = [
   { name: 'prove-approach', src: 'prove-approach.md' },
   { name: 'prove-coverage', src: 'prove-coverage.md' },
   { name: 'prove-done', src: 'prove-done.md' },
+  { name: 'prove-dry', src: 'prove-dry.md' },
   { name: 'prove-test-validity', src: 'prove-test-validity.md' }
 ]
 

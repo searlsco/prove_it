@@ -409,7 +409,7 @@ describe('doctor', () => {
     const proveItGitignore = path.join(tmpRepo, '.claude', 'prove_it', '.gitignore')
     fs.mkdirSync(path.dirname(proveItGitignore), { recursive: true })
     fs.writeFileSync(proveItGitignore, 'sessions/\nconfig.local.json\n')
-    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-done', 'prove-test-validity']) {
+    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-done', 'prove-dry', 'prove-test-validity']) {
       const skillDir = path.join(tmpHome, '.claude', 'skills', name)
       fs.mkdirSync(skillDir, { recursive: true })
       const raw = fs.readFileSync(path.join(__dirname, '..', '..', 'lib', 'skills', `${name}.md`), 'utf8')
