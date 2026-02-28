@@ -4,7 +4,8 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 
-const { findLatestSession, listSessions, findProjectLogFiles, projectHash, formatEntry, formatVerbose, formatTime, formatDuration, useColor, stripAnsi, visualWidth, normalizeHookTag, middleTruncatePath, truncateReason, progressiveTruncate, watchFile, shouldDisplay, displayStatusOf, findProveItProject, extractAppealText } = require('../lib/monitor')
+const { EventEmitter } = require('events')
+const { findLatestSession, listSessions, findProjectLogFiles, projectHash, formatEntry, formatVerbose, formatTime, formatDuration, useColor, stripAnsi, visualWidth, normalizeHookTag, middleTruncatePath, truncateReason, progressiveTruncate, watchFile, shouldDisplay, displayStatusOf, findProveItProject, extractAppealText, setupQuitKey } = require('../lib/monitor')
 
 describe('monitor', () => {
   let tmpDir
@@ -1314,6 +1315,73 @@ describe('monitor', () => {
       fs.mkdirSync(noProjectDir, { recursive: true })
 
       assert.strictEqual(findProveItProject(noProjectDir), null)
+    })
+  })
+
+  describe('setupQuitKey', () => {
+    it('calls onQuit when q is pressed', () => {
+      const stream = new EventEmitter()
+      let called = false
+      setupQuitKey(() => { called = true }, stream)
+      stream.emit('data', Buffer.from('q'))
+      assert.strictEqual(called, true)
+    })
+
+    it('calls onQuit when Q is pressed', () => {
+      const stream = new EventEmitter()
+      let called = false
+      setupQuitKey(() => { called = true }, stream)
+      stream.emit('data', Buffer.from('Q'))
+      assert.strictEqual(called, true)
+    })
+
+    it('calls onQuit on ctrl-c (0x03)', () => {
+      const stream = new EventEmitter()
+      let called = false
+      setupQuitKey(() => { called = true }, stream)
+      stream.emit('data', Buffer.from('\x03'))
+      assert.strictEqual(called, true)
+    })
+
+    it('ignores other keys', () => {
+      const stream = new EventEmitter()
+      let called = false
+      setupQuitKey(() => { called = true }, stream)
+      stream.emit('data', Buffer.from('x'))
+      stream.emit('data', Buffer.from('a'))
+      stream.emit('data', Buffer.from('\n'))
+      assert.strictEqual(called, false)
+    })
+
+    it('returns cleanup function that removes listener', () => {
+      const stream = new EventEmitter()
+      let called = false
+      const cleanup = setupQuitKey(() => { called = true }, stream)
+      cleanup()
+      stream.emit('data', Buffer.from('q'))
+      assert.strictEqual(called, false)
+    })
+
+    it('enables raw mode when stream supports it', () => {
+      const stream = new EventEmitter()
+      let rawMode = null
+      stream.setRawMode = (mode) => { rawMode = mode }
+      setupQuitKey(() => {}, stream)
+      assert.strictEqual(rawMode, true)
+    })
+
+    it('restores raw mode on quit', () => {
+      const stream = new EventEmitter()
+      let rawMode = null
+      stream.setRawMode = (mode) => { rawMode = mode }
+      setupQuitKey(() => {}, stream)
+      stream.emit('data', Buffer.from('q'))
+      assert.strictEqual(rawMode, false)
+    })
+
+    it('returns null when stream is not provided and stdin is not a TTY', () => {
+      const result = setupQuitKey(() => {})
+      assert.strictEqual(result, null)
     })
   })
 })
