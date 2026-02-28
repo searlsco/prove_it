@@ -13,6 +13,7 @@
  *   prefix    - Print install directory (for resolving libexec scripts)
  *   signal    - Declare a lifecycle signal (done, stuck, idle)
  *   record    - Record a test run result for run caching
+ *   upgrade   - Update via Homebrew, reinstall hooks, reinit project
  */
 const fs = require('fs')
 const os = require('os')
@@ -1164,6 +1165,51 @@ function cmdMonitor () {
 }
 
 // ============================================================================
+// Upgrade command
+// ============================================================================
+
+function cmdUpgrade () {
+  const { spawnSync } = require('child_process')
+  const { findProveItProject } = require('./lib/config')
+
+  const run = (cmd, args, opts) => {
+    const r = spawnSync(cmd, args, { stdio: 'inherit', ...opts })
+    return r.status === 0
+  }
+
+  log('Updating tap...')
+  if (!run('brew', ['update', 'searlsco/tap'])) {
+    console.error('brew update failed')
+    process.exit(1)
+  }
+
+  log('Upgrading prove_it...')
+  if (!run('brew', ['upgrade', 'searlsco/tap/prove_it'])) {
+    console.error('brew upgrade failed')
+    process.exit(1)
+  }
+
+  log('Reinstalling hooks and skills...')
+  if (!run('prove_it', ['install'])) {
+    console.error('prove_it install failed')
+    process.exit(1)
+  }
+
+  const homeDir = os.homedir()
+  const projectDir = findProveItProject(process.cwd())
+  if (projectDir && projectDir !== homeDir) {
+    log(`Reinitializing project (${projectDir})...`)
+    if (!run('prove_it', ['init'], { cwd: projectDir })) {
+      console.error('prove_it init failed')
+      process.exit(1)
+    }
+  }
+
+  log('')
+  log('Upgrade complete. Restart Claude Code for changes to take effect.')
+}
+
+// ============================================================================
 // Main CLI
 // ============================================================================
 
@@ -1176,6 +1222,7 @@ Commands:
   install     Install prove_it globally (~/.claude/) and /prove skill
   uninstall   Remove prove_it from global config
   reinstall   Uninstall and reinstall global hooks
+  upgrade     Update via Homebrew, reinstall hooks, reinit project
   init        Initialize prove_it in current repository
   deinit      Remove prove_it files from current repository
   reinit      Deinit and re-init current repository
@@ -1270,6 +1317,9 @@ function main () {
       break
     case 'deinit':
       cmdDeinit()
+      break
+    case 'upgrade':
+      cmdUpgrade()
       break
     case 'reinit': {
       const { hasCustomSources } = require('./lib/config')

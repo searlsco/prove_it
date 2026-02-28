@@ -252,3 +252,33 @@ describe('isIgnoredPath', () => {
     assert.strictEqual(isIgnoredPath(path.join(home, 'code'), ['~/dotfiles', '~/bin']), false)
   })
 })
+
+describe('findProveItProject', () => {
+  const { findProveItProject } = require('../lib/config')
+  const tmpDir = path.join(os.tmpdir(), 'prove_it_findproject_' + Date.now())
+
+  it('finds project when .claude/prove_it/config.json exists', () => {
+    const projectDir = path.join(tmpDir, 'myproject')
+    fs.mkdirSync(path.join(projectDir, '.claude', 'prove_it'), { recursive: true })
+    fs.writeFileSync(path.join(projectDir, '.claude', 'prove_it', 'config.json'), '{}')
+
+    assert.strictEqual(findProveItProject(projectDir), projectDir)
+  })
+
+  it('finds project in ancestor directory', () => {
+    const projectDir = path.join(tmpDir, 'ancestor')
+    const subDir = path.join(projectDir, 'src', 'lib')
+    fs.mkdirSync(subDir, { recursive: true })
+    fs.mkdirSync(path.join(projectDir, '.claude', 'prove_it'), { recursive: true })
+    fs.writeFileSync(path.join(projectDir, '.claude', 'prove_it', 'config.json'), '{}')
+
+    assert.strictEqual(findProveItProject(subDir), projectDir)
+  })
+
+  it('returns null when no config exists', () => {
+    const noProjectDir = path.join(tmpDir, 'empty')
+    fs.mkdirSync(noProjectDir, { recursive: true })
+
+    assert.strictEqual(findProveItProject(noProjectDir), null)
+  })
+})
