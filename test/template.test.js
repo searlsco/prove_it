@@ -311,14 +311,98 @@ describe('template', () => {
     })
   })
 
+  describe('claude_rules_done variable', () => {
+    const fs = require('fs')
+    const path = require('path')
+    const os = require('os')
+
+    it('reads from project dir', () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_done_'))
+      try {
+        const rulesDir = path.join(tmpDir, '.claude', 'rules')
+        fs.mkdirSync(rulesDir, { recursive: true })
+        fs.writeFileSync(path.join(rulesDir, 'done.md'), '# My Done Rules\n')
+        const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null }
+        const result = expandTemplate('{{claude_rules_done}}', context)
+        assert.strictEqual(result, '# My Done Rules')
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    it('falls back to home dir', () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_done_'))
+      const origHome = process.env.HOME
+      try {
+        const fakeHome = path.join(tmpDir, 'fakehome')
+        const rulesDir = path.join(fakeHome, '.claude', 'rules')
+        fs.mkdirSync(rulesDir, { recursive: true })
+        fs.writeFileSync(path.join(rulesDir, 'done.md'), '# Home Done\n')
+        process.env.HOME = fakeHome
+        // projectDir has no done.md
+        const projDir = path.join(tmpDir, 'project')
+        fs.mkdirSync(projDir, { recursive: true })
+        const context = { rootDir: projDir, projectDir: projDir, sessionId: null, toolInput: null }
+        const result = expandTemplate('{{claude_rules_done}}', context)
+        assert.strictEqual(result, '# Home Done')
+      } finally {
+        process.env.HOME = origHome
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    it('returns empty when no file exists', () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_done_'))
+      const origHome = process.env.HOME
+      try {
+        process.env.HOME = path.join(tmpDir, 'nohome')
+        const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null }
+        const result = expandTemplate('{{claude_rules_done}}', context)
+        assert.strictEqual(result, '')
+      } finally {
+        process.env.HOME = origHome
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    it('works in conditional blocks', () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_done_'))
+      try {
+        const rulesDir = path.join(tmpDir, '.claude', 'rules')
+        fs.mkdirSync(rulesDir, { recursive: true })
+        fs.writeFileSync(path.join(rulesDir, 'done.md'), '# Rules\n')
+        const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null }
+        const result = expandTemplate('{{#claude_rules_done}}FOUND: {{claude_rules_done}}{{/claude_rules_done}}', context)
+        assert.strictEqual(result, 'FOUND: # Rules')
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    it('strips conditional block when empty', () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_done_'))
+      const origHome = process.env.HOME
+      try {
+        process.env.HOME = path.join(tmpDir, 'nohome')
+        const context = { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null }
+        const result = expandTemplate('a{{#claude_rules_done}}FOUND{{/claude_rules_done}}b', context)
+        assert.strictEqual(result, 'ab')
+      } finally {
+        process.env.HOME = origHome
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+  })
+
   describe('KNOWN_VARS', () => {
-    it('has all 18 expected keys', () => {
+    it('has all 19 expected keys', () => {
       const expected = [
         'staged_diff', 'staged_files', 'working_diff', 'changed_files',
         'session_diff', 'test_output', 'tool_command', 'file_path',
         'project_dir', 'root_dir', 'session_id', 'git_head',
         'git_status', 'recent_commits', 'files_changed_since_last_run', 'sources',
-        'signal_message', 'changes_since_last_run'
+        'signal_message', 'changes_since_last_run',
+        'claude_rules_done'
       ]
       assert.deepStrictEqual(KNOWN_VARS, expected)
     })

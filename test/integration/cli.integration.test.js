@@ -226,17 +226,21 @@ describe('init/deinit', () => {
     assert.ok(!fs.existsSync(path.join(tmpDir, 'script', 'test')))
     assert.ok(!fs.existsSync(path.join(tmpDir, 'script', 'test_fast')))
 
-    // Default rule file removed
+    // Default rule files removed
     runCli(['init'], { cwd: tmpDir })
     assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'testing.md')))
+    assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'done.md')))
     runCli(['deinit'], { cwd: tmpDir })
     assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'testing.md')))
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'done.md')))
 
-    // Customized rule file preserved
+    // Customized rule files preserved
     runCli(['init'], { cwd: tmpDir })
     fs.writeFileSync(path.join(tmpDir, '.claude', 'rules', 'testing.md'), '# Custom\n')
+    fs.writeFileSync(path.join(tmpDir, '.claude', 'rules', 'done.md'), '# Custom done\n')
     const r2 = runCli(['deinit'], { cwd: tmpDir })
     assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'testing.md')))
+    assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'done.md')))
     assert.match(r2.stdout, /customized/)
 
     // .claude/prove_it/ directory removed (including runtime state)
@@ -289,7 +293,7 @@ describe('install/uninstall', () => {
     assert.strictEqual(cfg.taskEnv.TURBOCOMMIT_DISABLED, '1')
 
     // Skill files (all 5)
-    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-shipworthy', 'prove-test-validity']) {
+    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-done', 'prove-test-validity']) {
       const skillPath = path.join(tmpDir, '.claude', 'skills', name, 'SKILL.md')
       assert.ok(fs.existsSync(skillPath), `Skill ${name} should exist`)
       const skillContent = fs.readFileSync(skillPath, 'utf8')
@@ -334,7 +338,7 @@ describe('install/uninstall', () => {
     assert.strictEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).taskEnv.TURBOCOMMIT_DISABLED, '1')
 
     // Outdated skill files (all 5)
-    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-shipworthy', 'prove-test-validity']) {
+    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-done', 'prove-test-validity']) {
       const sp = path.join(tmpDir, '.claude', 'skills', name, 'SKILL.md')
       fs.writeFileSync(sp, 'outdated content')
       runCli(['install'], { env })
@@ -399,6 +403,30 @@ describe('install/uninstall', () => {
     assert.strictEqual(fixed.taskEnv.TURBOCOMMIT_DISABLED, '1')
   })
 
+  // ---------- Story: retired skills cleanup ----------
+  it('removes retired skills on install (non-TTY auto-removes)', () => {
+    const env = { ...process.env, HOME: tmpDir }
+    // Install to create all current skills
+    runCli(['install'], { env })
+
+    // Simulate a retired skill still present
+    const retiredDir = path.join(tmpDir, '.claude', 'skills', 'prove-shipworthy')
+    fs.mkdirSync(retiredDir, { recursive: true })
+    fs.writeFileSync(path.join(retiredDir, 'SKILL.md'), '---\nname: prove-shipworthy\n---\nold content\n')
+    assert.ok(fs.existsSync(path.join(retiredDir, 'SKILL.md')))
+
+    // Re-install triggers cleanup (non-TTY)
+    // First, make install detect something outdated so it doesn't short-circuit
+    const settingsPath = path.join(tmpDir, '.claude', 'settings.json')
+    const s = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+    s.hooks.Stop[0].matcher = 'FAKE'
+    fs.writeFileSync(settingsPath, JSON.stringify(s, null, 2) + '\n')
+
+    const r = runCli(['install'], { env })
+    assert.ok(!fs.existsSync(path.join(retiredDir, 'SKILL.md')), 'Retired skill should be removed')
+    assert.match(r.stdout, /Removed retired skill/)
+  })
+
   // ---------- Story: uninstall ----------
   it('removes hooks, config, and skill directory', () => {
     const env = { ...process.env, HOME: tmpDir }
@@ -413,7 +441,7 @@ describe('install/uninstall', () => {
     const proveItDir = path.join(tmpDir, '.claude', 'prove_it')
     assert.ok(fs.existsSync(proveItDir), 'prove_it directory should still exist')
     assert.strictEqual(fs.readdirSync(proveItDir).length, 0, 'prove_it directory should be empty')
-    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-shipworthy', 'prove-test-validity']) {
+    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-done', 'prove-test-validity']) {
       assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'skills', name)), `Skill ${name} should be removed`)
     }
   })
@@ -527,7 +555,7 @@ describe('skill source', () => {
     assert.match(fm, /argument-hint:/)
   })
 
-  for (const name of ['prove-approach', 'prove-coverage', 'prove-shipworthy', 'prove-test-validity']) {
+  for (const name of ['prove-approach', 'prove-coverage', 'prove-done', 'prove-test-validity']) {
     it(`${name}.md has valid frontmatter`, () => {
       const content = fs.readFileSync(path.join(skillsDir, `${name}.md`), 'utf8')
       assert.ok(content.startsWith('---\n') && !content.startsWith('---\n---'))

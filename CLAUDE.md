@@ -80,4 +80,4 @@ tasks are configured.
 - Linter: `npx standard --fix` (run automatically by `./script/test_fast`)
 - Config format: `hooks` array containing `tasks`
 - Infrastructure scripts live in `libexec/` and are referenced via `$(prove_it prefix)/libexec/<name>`
-- Agent reviewer prompts are distributed as Claude Code skills (`lib/skills/prove-coverage.md`, `lib/skills/prove-shipworthy.md`), resolved via `promptType: 'skill'`
+- Agent reviewer prompts are distributed as Claude Code skills (`lib/skills/prove-coverage.md`, `lib/skills/prove-done.md`), resolved via `promptType: 'skill'`

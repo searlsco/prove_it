@@ -132,9 +132,11 @@ const SKILLS = [
   { name: 'prove', src: 'prove.md' },
   { name: 'prove-approach', src: 'prove-approach.md' },
   { name: 'prove-coverage', src: 'prove-coverage.md' },
-  { name: 'prove-shipworthy', src: 'prove-shipworthy.md' },
+  { name: 'prove-done', src: 'prove-done.md' },
   { name: 'prove-test-validity', src: 'prove-test-validity.md' }
 ]
+
+const RETIRED_SKILLS = ['prove-shipworthy']
 
 function areSkillsCurrent (claudeDir) {
   for (const { name, src } of SKILLS) {
@@ -240,6 +242,25 @@ async function cmdInstall () {
       if (doWrite) {
         fs.mkdirSync(skillDir, { recursive: true })
         fs.writeFileSync(skillPath, ensureTrailingNewline(writeContent))
+      }
+    }
+    // Clean up retired skills
+    for (const name of RETIRED_SKILLS) {
+      const retiredDir = path.join(claudeDir, 'skills', name)
+      const retiredPath = path.join(retiredDir, 'SKILL.md')
+      if (fs.existsSync(retiredPath)) {
+        if (isTTY && skillRl) {
+          const answer = await askYesNo(skillRl,
+            `Skill /${name} has been retired. Remove ~/.claude/skills/${name}/?`,
+            true)
+          if (answer) {
+            rmIfExists(retiredDir)
+            log(`  Removed: ~/.claude/skills/${name}/`)
+          }
+        } else {
+          rmIfExists(retiredDir)
+          log(`  Removed retired skill: ~/.claude/skills/${name}/`)
+        }
       }
     }
   } finally {
@@ -497,6 +518,12 @@ async function cmdInit (options = {}) {
       log(`  Exists:  ${results.ruleFile.path}`)
     }
 
+    if (results.doneRuleFile.created) {
+      log(`  Created: ${results.doneRuleFile.path}`)
+    } else if (results.doneRuleFile.existed) {
+      log(`  Exists:  ${results.doneRuleFile.path}`)
+    }
+
     if (results.scriptTest.created) {
       log(`  Created: ${results.scriptTest.path} (stub)`)
     } else if (results.scriptTest.isStub) {
@@ -564,6 +591,13 @@ async function cmdInit (options = {}) {
       })
     }
 
+    if (results.doneRuleFile.created) {
+      todos.push({
+        done: false,
+        text: "Customize .claude/rules/done.md with your project's definition of done"
+      })
+    }
+
     // Sources glob TODO—check the team config for placeholder globs
     const teamCfg = loadJson(path.join(repoRoot, '.claude', 'prove_it', 'config.json'))
     const teamSources = teamCfg?.sources
@@ -622,7 +656,7 @@ async function cmdInit (options = {}) {
 
 function cmdDeinit () {
   guardProjectDir('deinit')
-  const { isScriptTestStub, isDefaultRuleFile, removeGitHookShim } = require('./lib/init')
+  const { isScriptTestStub, isDefaultRuleFile, isDefaultDoneFile, removeGitHookShim } = require('./lib/init')
   const repoRoot = process.cwd()
   const removed = []
   const skipped = []
@@ -670,24 +704,35 @@ function cmdDeinit () {
     }
   }
 
-  // Clean up default rule file (only if unmodified)
+  // Clean up default rule files (only if unmodified)
   const ruleFilePath = path.join(repoRoot, '.claude', 'rules', 'testing.md')
   if (fs.existsSync(ruleFilePath)) {
     if (isDefaultRuleFile(ruleFilePath)) {
       rmIfExists(ruleFilePath)
       removed.push('.claude/rules/testing.md')
-      // Remove rules/ directory if empty
-      const rulesDir = path.join(repoRoot, '.claude', 'rules')
-      try {
-        if (fs.existsSync(rulesDir) && fs.readdirSync(rulesDir).length === 0) {
-          fs.rmdirSync(rulesDir)
-          removed.push('.claude/rules/')
-        }
-      } catch {}
     } else {
       skipped.push('.claude/rules/testing.md (customized)')
     }
   }
+
+  const doneRuleFilePath = path.join(repoRoot, '.claude', 'rules', 'done.md')
+  if (fs.existsSync(doneRuleFilePath)) {
+    if (isDefaultDoneFile(doneRuleFilePath)) {
+      rmIfExists(doneRuleFilePath)
+      removed.push('.claude/rules/done.md')
+    } else {
+      skipped.push('.claude/rules/done.md (customized)')
+    }
+  }
+
+  // Remove rules/ directory if empty
+  const rulesDir = path.join(repoRoot, '.claude', 'rules')
+  try {
+    if (fs.existsSync(rulesDir) && fs.readdirSync(rulesDir).length === 0) {
+      fs.rmdirSync(rulesDir)
+      removed.push('.claude/rules/')
+    }
+  } catch {}
 
   // Clean up .claude/prove_it/ runtime directory (sessions, backchannel, .gitignore)
   const proveItDir = path.join(repoRoot, '.claude', 'prove_it')
@@ -823,6 +868,15 @@ function cmdDoctor () {
     } else {
       log(`  [ ] /${name} skill not installed`)
       issues.push(`/${name} skill not installed—run 'prove_it install'`)
+    }
+  }
+
+  // Check for retired skills
+  for (const name of RETIRED_SKILLS) {
+    const retiredPath = path.join(claudeDir, 'skills', name, 'SKILL.md')
+    if (fs.existsSync(retiredPath)) {
+      log(`  [!] /${name} skill is retired (run prove_it install to remove)`)
+      issues.push(`/${name} skill is retired—run 'prove_it install' to remove`)
     }
   }
 

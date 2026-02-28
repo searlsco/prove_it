@@ -43,7 +43,7 @@ Out of the box, `prove_it init` generates the Searls-stack of configured tasks:
 - **Fast tests on every stop** — runs `./script/test_fast` and blocks until it passes
 - **Full tests on signal** — runs `./script/test` when Claude signals done (and source files were edited)
 - **Async coverage review** — a Haiku-powered `prove-coverage` subagent fires in the background after 541+ net lines of churn, enforced on the next stop
-- **Shipworthy review on signal** — an Opus-powered `prove-shipworthy` subagent runs a thorough pre-ship review when Claude signals done
+- **Done review on signal** — an Opus-powered `prove-done` subagent runs a thorough pre-ship review when Claude signals done
 - **Full tests on git commit** — pre-commit hook runs `./script/test` (Claude commits only — human commits pass through)
 
 Every one of these is a config entry you can change, disable, or replace. The framework supports any combination of lifecycle events, conditions, and task types — the default config is just a starting point.
@@ -431,7 +431,7 @@ prove_it ships curated reviewer prompts as Claude Code [skills](https://code.cla
 |-------|----------------|
 | `prove-approach` | Approach viability: detects cognitive fixation, performs root-cause analysis, and surfaces structurally different alternatives. Designed for Sonnet. |
 | `prove-coverage` | Session diffs for test coverage adequacy |
-| `prove-shipworthy` | Thorough pre-ship review: correctness, integration, security, tests, omissions. Uses `{{changes_since_last_run}}` for scope. Designed for Opus. |
+| `prove-done` | Thorough pre-ship review: correctness, integration, security, tests, omissions. Uses `{{changes_since_last_run}}` for scope. Designed for Opus. |
 | `prove-test-validity` | Test quality review: catches tests that give false confidence (tautological assertions, closed-loop validation, excessive mocking, etc.). Designed for Opus. |
 
 Skills are installed to `~/.claude/skills/<name>/SKILL.md` by `prove_it install`. The prompt body is the skill file with its YAML frontmatter stripped.
@@ -452,7 +452,7 @@ Agent tasks accept a `ruleFile` field that injects the contents of a project-spe
 
 The path is resolved relative to the project directory. If the file is missing, the task fails with a clear error—this is intentional so you don't silently run reviews without your rules.
 
-`prove_it init` generates a default `.claude/rules/testing.md` with starter rules and a TODO for you to customize. The default agent tasks (`coverage-review`, `shipworthy-review`) both point to this file.
+`prove_it init` generates a default `.claude/rules/testing.md` with starter rules and a TODO for you to customize. The default agent tasks (`coverage-review`, `done-review`) both point to this file.
 
 ### Model selection
 
@@ -555,7 +555,7 @@ Parallel tasks run concurrently with each other and with subsequent serial tasks
 
 `parallel` and `async` are mutually exclusive—setting both is a validation error. `parallel` has no effect on SessionStart (which never blocks). On serial task failure mid-loop, all parallel children are killed immediately.
 
-The default config uses `parallel: true` for `full-tests` and `shipworthy-review`.
+The default config uses `parallel: true` for `full-tests` and `done-review`.
 
 ### Review backchannel
 
@@ -699,12 +699,12 @@ prove_it ships review prompts that can be run manually or automatically:
 |-------|----------------|--------------|
 | `/prove-approach` | Approach viability: detects cognitive fixation, surfaces structurally different alternatives | Sonnet (balanced) |
 | `/prove-coverage` | Test coverage adequacy for changed code | Haiku (fast, cheap) |
-| `/prove-shipworthy` | Pre-ship review: correctness, integration, security, tests, omissions | Opus (thorough) |
+| `/prove-done` | Pre-ship review: correctness, integration, security, tests, omissions | Opus (thorough) |
 | `/prove-test-validity` | Test quality: catches tests that give false confidence (tautological assertions, closed-loop validation, excessive mocking) | Opus (thorough) |
 
 **Run manually** — invoke any skill as a slash command whenever you want a review. All run as subagents (`context: fork`), so they don't consume your conversation context.
 
-**Run automatically** — configure the same prompts as prove_it agent tasks and they'll fire on lifecycle events. The default config does this: `prove-coverage` runs async after churn thresholds are hit, `prove-shipworthy` runs on `prove_it signal done`, and `prove-approach` runs on `prove_it signal stuck`. `prove-test-validity` is not in the default config — add it when you want test quality gating. See [Skill-based prompts](#skill-based-prompts) for config details.
+**Run automatically** — configure the same prompts as prove_it agent tasks and they'll fire on lifecycle events. The default config does this: `prove-coverage` runs async after churn thresholds are hit, `prove-done` runs on `prove_it signal done`, and `prove-approach` runs on `prove_it signal stuck`. `prove-test-validity` is not in the default config — add it when you want test quality gating. See [Skill-based prompts](#skill-based-prompts) for config details.
 
 The manual and automatic paths use the same prompt — the difference is who triggers it (you vs. prove_it) and where it runs (Claude Code subagent vs. `claude -p` subprocess). Both produce an independent review outside the working agent's context.
 

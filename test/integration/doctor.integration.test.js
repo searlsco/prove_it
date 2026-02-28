@@ -409,7 +409,7 @@ describe('doctor', () => {
     const proveItGitignore = path.join(tmpRepo, '.claude', 'prove_it', '.gitignore')
     fs.mkdirSync(path.dirname(proveItGitignore), { recursive: true })
     fs.writeFileSync(proveItGitignore, 'sessions/\nconfig.local.json\n')
-    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-shipworthy', 'prove-test-validity']) {
+    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-done', 'prove-test-validity']) {
       const skillDir = path.join(tmpHome, '.claude', 'skills', name)
       fs.mkdirSync(skillDir, { recursive: true })
       const raw = fs.readFileSync(path.join(__dirname, '..', '..', 'lib', 'skills', `${name}.md`), 'utf8')
@@ -427,5 +427,20 @@ describe('doctor', () => {
 
     result = run()
     assert.match(result.stdout, /Issues found:/)
+  })
+
+  it('warns about retired skills still present', () => {
+    // Set up a minimal valid installation
+    const settingsPath = path.join(tmpHome, '.claude', 'settings.json')
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true })
+    fs.writeFileSync(settingsPath, '{}')
+
+    // Create a retired skill
+    const retiredDir = path.join(tmpHome, '.claude', 'skills', 'prove-shipworthy')
+    fs.mkdirSync(retiredDir, { recursive: true })
+    fs.writeFileSync(path.join(retiredDir, 'SKILL.md'), '---\nname: prove-shipworthy\n---\nold\n')
+
+    const r = run()
+    assert.match(r.stdout, /prove-shipworthy skill is retired/)
   })
 })

@@ -25,7 +25,7 @@ describe('init', () => {
       assert.ok(allChecks.some(c => c.name === 'session-briefing'),
         'Should have session-briefing task')
       assert.ok(allChecks.some(c => c.name === 'coverage-review'))
-      assert.ok(allChecks.some(c => c.name === 'shipworthy-review'))
+      assert.ok(allChecks.some(c => c.name === 'done-review'))
       // commit-review and ensure-tests should NOT be in defaults
       assert.ok(!allChecks.some(c => c.name === 'commit-review'))
       assert.ok(!allChecks.some(c => c.name === 'ensure-tests'))
@@ -50,7 +50,7 @@ describe('init', () => {
       assert.ok(cfg.enabled)
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
       assert.ok(!allChecks.some(c => c.name === 'coverage-review'))
-      assert.ok(!allChecks.some(c => c.name === 'shipworthy-review'))
+      assert.ok(!allChecks.some(c => c.name === 'done-review'))
     })
 
     it('returns base-only config with both features off', () => {
@@ -59,7 +59,7 @@ describe('init', () => {
       assert.ok(!cfg.hooks.some(h => h.type === 'git'))
       const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
       assert.ok(!allChecks.some(c => c.name === 'coverage-review'))
-      assert.ok(!allChecks.some(c => c.name === 'shipworthy-review'))
+      assert.ok(!allChecks.some(c => c.name === 'done-review'))
       // Should still have base checks
       assert.ok(allChecks.some(c => c.name === 'lock-config'))
       assert.ok(allChecks.some(c => c.name === 'fast-tests'))
@@ -83,22 +83,22 @@ describe('init', () => {
       assert.ok(stopEntry, 'Should have Stop entry')
       assert.ok(stopEntry.tasks.some(t => t.name === 'coverage-review'),
         'coverage-review should be in Stop entry')
-      assert.ok(stopEntry.tasks.some(t => t.name === 'shipworthy-review'),
-        'shipworthy-review should be in Stop entry')
+      assert.ok(stopEntry.tasks.some(t => t.name === 'done-review'),
+        'done-review should be in Stop entry')
     })
 
-    it('shipworthy-review uses signal when condition, opus model, and is synchronous', () => {
+    it('done-review uses signal when condition, opus model, and is synchronous', () => {
       const cfg = buildConfig()
       const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
-      const signalReview = allTasks.find(t => t.name === 'shipworthy-review')
-      assert.ok(signalReview, 'Should have shipworthy-review task')
+      const signalReview = allTasks.find(t => t.name === 'done-review')
+      assert.ok(signalReview, 'Should have done-review task')
       assert.strictEqual(signalReview.type, 'agent')
       assert.strictEqual(signalReview.promptType, 'skill')
-      assert.strictEqual(signalReview.prompt, 'prove-shipworthy')
+      assert.strictEqual(signalReview.prompt, 'prove-done')
       assert.strictEqual(signalReview.model, 'opus')
       assert.deepStrictEqual(signalReview.when, { signal: 'done' })
       assert.strictEqual(signalReview.async, undefined,
-        'shipworthy-review should be synchronous (no async property)')
+        'done-review should be synchronous (no async property)')
     })
 
     it('all default agent tasks include ruleFile', () => {

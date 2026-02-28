@@ -69,11 +69,11 @@
           }
         },
         {
-          "name": "shipworthy-review",
+          "name": "done-review",
           "type": "agent",
           "parallel": true,
           "promptType": "skill",
-          "prompt": "prove-shipworthy",
+          "prompt": "prove-done",
           "model": "opus",
           "ruleFile": ".claude/rules/testing.md",
           "when": {
@@ -97,5 +97,5 @@
       ]
     }
   ],
-  "initSeed": "f4ad794376fc"
+  "initSeed": "1fbe76cad04c"
 }

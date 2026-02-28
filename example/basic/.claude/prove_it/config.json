@@ -51,10 +51,10 @@
           "ruleFile": ".claude/rules/testing.md"
         },
         {
-          "name": "shipworthy-review",
+          "name": "done-review",
           "type": "agent",
           "promptType": "skill",
-          "prompt": "prove-shipworthy",
+          "prompt": "prove-done",
           "model": "opus",
           "ruleFile": ".claude/rules/testing.md",
           "when": {

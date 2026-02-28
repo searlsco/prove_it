@@ -1,5 +1,5 @@
 ---
-name: prove-shipworthy
+name: prove-done
 description: Senior staff-level pre-ship review for correctness, integration, security, and test quality
 context: fork
 model: inherit
@@ -73,6 +73,14 @@ Before writing a single review comment, you must understand the change:
    - If a function signature changed, did all callers get updated?
    - If a new field was added to a data structure, is it handled everywhere?
    - If behavior changed, were the tests updated to match?
+
+{{#claude_rules_done}}
+## Definition of Done (project rules)
+
+The following rules define what "done" means for this project. Apply them alongside the antipattern taxonomy below.
+
+{{claude_rules_done}}
+{{/claude_rules_done}}
 
 ## Phase 4: Systematic Review
 
