@@ -76,23 +76,6 @@ describe('signal integration', () => {
     assert.strictEqual(signal.message, 'Cannot test async')
   })
 
-  it('PreToolUse intercepts prove_it signal clear', () => {
-    setSignal('sig-int-clear', 'done', null)
-    writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] }
-    ]))
-
-    const result = invokeHook('claude:PreToolUse', {
-      session_id: 'sig-int-clear',
-      tool_name: 'Bash',
-      tool_input: { command: 'prove_it signal clear' }
-    }, { projectDir, env })
-
-    assert.strictEqual(result.exitCode, 0)
-    assert.ok(result.stdout.includes('signal cleared'))
-    assert.strictEqual(getSignal('sig-int-clear'), null)
-  })
-
   it('Stop with when: { signal: "done" } fires when signal is active', () => {
     setSignal('sig-stop-fire', 'done', null)
     createFastTestScript(projectDir, true)

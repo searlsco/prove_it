@@ -232,7 +232,7 @@ describe('briefing', () => {
       const text = renderBriefing(cfg)
       assert.ok(text.includes('### Signal-gated tasks'), 'should include signal section')
       assert.ok(text.includes('prove_it signal done'), 'should include signal command in obligations')
-      assert.ok(text.includes('prove_it signal clear'), 'should mention clear')
+      assert.ok(!text.includes('prove_it signal clear'), 'should not mention clear')
     })
 
     it('shows "last ran" timing for signal-gated tasks when run data provided', () => {

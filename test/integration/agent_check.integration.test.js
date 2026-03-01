@@ -97,7 +97,7 @@ describe('agent check', () => {
     )
     assert.strictEqual(result.pass, false, 'Should hard-fail when model is set and reviewer crashes')
     assert.ok(result.reason.includes('model "opus"'), 'Should mention the model')
-    assert.ok(result.reason.includes('prove_it signal clear'), 'Should tell agent how to unblock')
+    assert.ok(result.reason.includes('re-signal'), 'Should tell agent how to unblock')
     assert.strictEqual(result.skipped, undefined, 'Should not be marked as skipped')
   })
 

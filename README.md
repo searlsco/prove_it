@@ -375,7 +375,6 @@ prove_it signal done                         Declare coherent work complete
 prove_it signal stuck                        Declare stuck / cycling
 prove_it signal idle                         Declare idle / between tasks
 prove_it signal done -m "Ready for review"   Include a message
-prove_it signal clear                        Clear the active signal
 ```
 
 ## Agent tasks
@@ -672,7 +671,7 @@ prove_it monitor <id>        # tail a specific session (prefix match OK)
 | `ENFORCED:SKIP` | Async result was harvested and settled as skip |
 | `PLEA` | Developer wrote a backchannel appeal before this review cycle |
 | `SET` | Signal was set (`prove_it signal done/stuck/idle`) |
-| `CLEAR` | Signal was cleared (`prove_it signal clear` or auto-clear after successful Stop) |
+| `CLEAR` | Signal was auto-cleared after successful Stop |
 
 ## Skills (`/prove`)
 
@@ -770,7 +769,7 @@ prove_it deinit         Remove prove_it from current project
 prove_it reinit         Deinit and re-init current repository
 prove_it doctor         Check installation and show effective config
 prove_it monitor        Tail hook results in real time
-prove_it signal <type>  Declare a lifecycle signal (done, stuck, idle, clear)
+prove_it signal <type>  Declare a lifecycle signal (done, stuck, idle)
 prove_it hook <spec>    Run a dispatcher directly (claude:Stop, git:pre-commit)
 prove_it prefix         Print install directory (for resolving libexec scripts)
 prove_it record         Record a test run result (--name <task> --pass|--fail|--result <N>)

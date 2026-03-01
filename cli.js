@@ -1123,7 +1123,7 @@ function cmdSignal () {
     process.exit(0)
   }
   console.error('prove_it signal must be run by Claude, not directly.')
-  console.error('Ask Claude to run: prove_it signal <done|stuck|idle|clear>')
+  console.error('Ask Claude to run: prove_it signal <done|stuck|idle>')
   process.exit(1)
 }
 
@@ -1228,7 +1228,7 @@ Commands:
   deinit      Remove prove_it files from current repository
   reinit      Deinit and re-init current repository
   doctor      Check installation status and report issues
-  signal      Declare a lifecycle signal (done, stuck, idle, clear)
+  signal      Declare a lifecycle signal (done, stuck, idle)
   monitor     Tail hook results in real time (run in a separate terminal)
   hook        Run a hook dispatcher (claude:<Event> or git:<event>)
   prefix      Print install directory (for resolving libexec scripts)
@@ -1255,7 +1255,6 @@ Signal options:
   prove_it signal stuck                  Declare stuck / cycling
   prove_it signal idle                   Declare idle / between tasks
   prove_it signal done -m "Ready for review"  Include a message
-  prove_it signal clear                  Clear the active signal
 
 Record options:
   --name <name>    Check name to record (must match hook config)
