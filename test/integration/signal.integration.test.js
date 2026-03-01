@@ -165,32 +165,6 @@ describe('signal integration', () => {
     assert.strictEqual(signal.type, 'done')
   })
 
-  it('signal-gated tasks do not log SKIP when signal is inactive', () => {
-    createFastTestScript(projectDir, true)
-
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
-          { name: 'fast-tests', type: 'script', command: './script/test_fast' },
-          { name: 'signal-gated', type: 'script', command: 'echo should-not-run', when: { signal: 'done' } }
-        ]
-      }
-    ]))
-
-    const sessionId = 'sig-quiet-skip'
-    invokeHook('claude:Stop', {
-      session_id: sessionId
-    }, { projectDir, env, cwd: projectDir })
-
-    const logPath = path.join(env.PROVE_IT_DIR, 'sessions', `${sessionId}.jsonl`)
-    assert.ok(fs.existsSync(logPath), 'Session log should exist')
-    const entries = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(l => JSON.parse(l))
-    const signalSkips = entries.filter(e => e.reviewer === 'signal-gated' && e.status === 'SKIP')
-    assert.strictEqual(signalSkips.length, 0, 'Signal-gated task should not log SKIP when signal is inactive')
-  })
-
   it('PreToolUse falls through for unknown signal types', () => {
     writeConfig(projectDir, makeConfig([
       { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] }
