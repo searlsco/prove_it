@@ -107,8 +107,25 @@ describe('init', () => {
       const agentTasks = allTasks.filter(t => t.type === 'agent')
       assert.ok(agentTasks.length >= 2, 'Should have at least 2 agent tasks')
       for (const task of agentTasks) {
+        assert.ok(typeof task.ruleFile === 'string' && task.ruleFile.length > 0,
+          `Agent task "${task.name}" should have a non-empty ruleFile`)
+      }
+    })
+
+    it('done-review uses done.md ruleFile', () => {
+      const cfg = buildConfig()
+      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
+      const doneReview = allTasks.find(t => t.name === 'done-review')
+      assert.strictEqual(doneReview.ruleFile, '.claude/rules/done.md')
+    })
+
+    it('coverage-review and approach-review use testing.md ruleFile', () => {
+      const cfg = buildConfig()
+      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
+      for (const name of ['coverage-review', 'approach-review']) {
+        const task = allTasks.find(t => t.name === name)
         assert.strictEqual(task.ruleFile, '.claude/rules/testing.md',
-          `Agent task "${task.name}" should have ruleFile set`)
+          `${name} should use testing.md ruleFile`)
       }
     })
 

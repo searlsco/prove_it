@@ -85,14 +85,6 @@ Before writing a single review comment, you must understand the change:
    - If a new field was added to a data structure, is it handled everywhere?
    - If behavior changed, were the tests updated to match?
 
-{{#claude_rules_done}}
-## Definition of Done (project rules)
-
-The following rules define what "done" means for this project. Apply them alongside the antipattern taxonomy below.
-
-{{claude_rules_done}}
-{{/claude_rules_done}}
-
 ## Phase 4: Systematic Review
 
 Work through each area below. For each, actively try to construct a failing scenario.
