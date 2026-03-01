@@ -183,7 +183,7 @@ Script tasks accept a `params` object that is passed to the script as `input.par
   "command": "$(prove_it prefix)/libexec/guard-config",
   "quiet": true,
   "params": {
-    "paths": [".claude/prove_it/**"]
+    "paths": [".claude/prove_it/config.json", ".claude/prove_it/config.local.json"]
   }
 }
 ```
@@ -199,7 +199,7 @@ Scripts read `params` from the parsed stdin JSON alongside `tool_name`, `tool_in
   "command": "$(prove_it prefix)/libexec/guard-config",
   "quiet": true,
   "params": {
-    "paths": [".claude/prove_it/**", ".env", "credentials/**"]
+    "paths": [".claude/prove_it/config.json", ".claude/prove_it/config.local.json", ".env", "credentials/**"]
   }
 }
 ```

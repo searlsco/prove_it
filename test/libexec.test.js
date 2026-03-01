@@ -112,13 +112,30 @@ describe('libexec/guard-config', () => {
       assert.strictEqual(result.pass, false)
     })
 
-    it('blocks Write to absolute path matching a glob pattern', () => {
+    it('blocks Write to absolute path matching config file pattern', () => {
       const result = guardConfig({
         tool_name: 'Write',
         tool_input: { file_path: '/Users/foo/project/.claude/prove_it/config.json' },
-        params: { paths: ['.claude/prove_it/**'] }
+        params: { paths: ['.claude/prove_it/config.json', '.claude/prove_it/config.local.json'] }
       })
       assert.strictEqual(result.pass, false)
+    })
+
+    it('allows Write to session storage paths under .claude/prove_it/', () => {
+      const paths = ['.claude/prove_it/config.json', '.claude/prove_it/config.local.json']
+      const sessionPaths = [
+        '.claude/prove_it/sessions/abc123/backchannel/coverage-review/README.md',
+        '.claude/prove_it/sessions/abc123/notepad/done-review/README.md',
+        '/Users/foo/project/.claude/prove_it/sessions/abc123/backchannel/done-review/README.md'
+      ]
+      for (const filePath of sessionPaths) {
+        const result = guardConfig({
+          tool_name: 'Write',
+          tool_input: { file_path: filePath },
+          params: { paths }
+        })
+        assert.strictEqual(result.pass, true, `should allow Write to ${filePath}`)
+      }
     })
 
     it('allows Write to non-matching path', () => {
