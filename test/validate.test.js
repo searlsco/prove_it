@@ -105,6 +105,30 @@ describe('validateConfig', () => {
       assert.ok(warnings.some(w => w.includes('model') && w.includes('no agent tasks')))
     })
 
+    it('validates top-level maxAgentTurns field', () => {
+      // valid integer with agent tasks passes
+      const valid = validateConfig(validConfig({
+        maxAgentTurns: 10,
+        hooks: [{
+          type: 'claude',
+          event: 'Stop',
+          tasks: [{ name: 'a', type: 'agent', prompt: 'Review this' }]
+        }]
+      }))
+      assert.strictEqual(valid.errors.length, 0)
+
+      // invalid values: not a number, float, zero, negative
+      for (const [label, value] of [['string', '10'], ['float', 3.5], ['zero', 0], ['negative', -1]]) {
+        const { errors } = validateConfig(validConfig({ maxAgentTurns: value }))
+        assert.ok(errors.some(e => e.includes('"maxAgentTurns" must be a positive integer')),
+          `Expected error for maxAgentTurns: ${label}`)
+      }
+
+      // warns when no agent tasks exist
+      const { warnings } = validateConfig(validConfig({ maxAgentTurns: 10 }))
+      assert.ok(warnings.some(w => w.includes('maxAgentTurns') && w.includes('no agent tasks')))
+    })
+
     it('errors on unknown top-level keys', () => {
       const cfg = validConfig()
       cfg.customThing = true
@@ -608,6 +632,30 @@ describe('validateConfig', () => {
         }]
       }))
       assert.ok(envWarn.warnings.some(w => w.includes('params') && w.includes('script tasks')))
+    })
+
+    it('validates task-level maxAgentTurns field', () => {
+      // valid maxAgentTurns on agent passes with no warnings
+      const valid = validateConfig(cfgWithTask({
+        name: 'a', type: 'agent', prompt: 'Review this', maxAgentTurns: 5
+      }))
+      assert.strictEqual(valid.errors.length, 0)
+      assert.strictEqual(valid.warnings.length, 0)
+
+      // invalid values: non-integer, zero, negative, non-number
+      for (const [label, value] of [['float', 3.5], ['zero', 0], ['negative', -1], ['string', '10']]) {
+        const { errors } = validateConfig(cfgWithTask({
+          name: 'a', type: 'agent', prompt: 'Review this', maxAgentTurns: value
+        }))
+        assert.ok(errors.some(e => e.includes('maxAgentTurns must be a positive integer')),
+          `Expected error for maxAgentTurns: ${label}`)
+      }
+
+      // warns on non-agent task
+      const { warnings } = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', maxAgentTurns: 5
+      }))
+      assert.ok(warnings.some(w => w.includes('maxAgentTurns only applies to agent tasks')))
     })
 
     it('validates task-level ruleFile field', () => {

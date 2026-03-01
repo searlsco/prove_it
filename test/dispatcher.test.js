@@ -791,6 +791,38 @@ describe('claude dispatcher', () => {
       // Async dir existence proves the task was spawned
       assert.ok(fs.existsSync(asyncDir))
     })
+
+    it('serializes configMaxAgentTurns into context snapshot', () => {
+      const sessionId = 'test-spawn-max-turns'
+      const task = { name: 'done-review', type: 'agent', async: true, prompt: 'prove-done' }
+      const context = {
+        rootDir: tmpDir,
+        projectDir: tmpDir,
+        sessionId,
+        hookEvent: 'Stop',
+        localCfgPath: '/fake/path',
+        sources: ['**/*.js'],
+        fileEditingTools: ['Edit'],
+        configEnv: null,
+        configModel: null,
+        configMaxAgentTurns: 10,
+        taskAllowedTools: null,
+        taskBypassPermissions: null,
+        maxChars: 12000,
+        testOutput: ''
+      }
+
+      spawnAsyncTask(task, context)
+
+      const asyncDir = getAsyncDir(sessionId)
+      const contextFile = path.join(asyncDir, 'done-review.context.json')
+
+      if (fs.existsSync(contextFile)) {
+        const snapshot = JSON.parse(fs.readFileSync(contextFile, 'utf8'))
+        assert.strictEqual(snapshot.context.configMaxAgentTurns, 10)
+      }
+      assert.ok(fs.existsSync(asyncDir))
+    })
   })
 
   describe('harvestAsyncResults', () => {

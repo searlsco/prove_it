@@ -1,7 +1,7 @@
 const { describe, it } = require('node:test')
 const assert = require('node:assert')
 
-const { isCodexModel, parseVerdict } = require('../lib/shared')
+const { isCodexModel, parseVerdict, parseJsonOutput, extractReviewText, NUDGE_PROMPT } = require('../lib/shared')
 
 describe('parseVerdict', () => {
   describe('PASS responses', () => {
@@ -271,5 +271,78 @@ describe('isCodexModel', () => {
     it(`returns false for ${label}`, () => {
       assert.strictEqual(isCodexModel(value), false)
     })
+  })
+})
+
+describe('parseJsonOutput', () => {
+  it('parses valid JSON with result and session_id', () => {
+    const json = JSON.stringify({ result: 'PASS: looks good', session_id: 'abc-123', subtype: 'success' })
+    const parsed = parseJsonOutput(json)
+    assert.strictEqual(parsed.result, 'PASS: looks good')
+    assert.strictEqual(parsed.sessionId, 'abc-123')
+    assert.strictEqual(parsed.subtype, 'success')
+  })
+
+  it('parses error_max_turns JSON', () => {
+    const json = JSON.stringify({ result: '', session_id: 'sess-456', subtype: 'error_max_turns' })
+    const parsed = parseJsonOutput(json)
+    assert.strictEqual(parsed.subtype, 'error_max_turns')
+    assert.strictEqual(parsed.sessionId, 'sess-456')
+  })
+
+  it('returns null for malformed JSON', () => {
+    assert.strictEqual(parseJsonOutput('not json at all'), null)
+    assert.strictEqual(parseJsonOutput('{truncated'), null)
+  })
+
+  it('handles missing fields gracefully', () => {
+    const json = JSON.stringify({})
+    const parsed = parseJsonOutput(json)
+    assert.strictEqual(parsed.result, '')
+    assert.strictEqual(parsed.sessionId, null)
+    assert.strictEqual(parsed.subtype, null)
+  })
+})
+
+describe('extractReviewText', () => {
+  it('returns raw text when jsonMode is false', () => {
+    const result = { stdout: '  PASS: looks good  ', stderr: '' }
+    assert.strictEqual(extractReviewText(result, false), 'PASS: looks good')
+  })
+
+  it('falls back to stderr when stdout is empty in non-json mode', () => {
+    const result = { stdout: '', stderr: 'FAIL: bad code' }
+    assert.strictEqual(extractReviewText(result, false), 'FAIL: bad code')
+  })
+
+  it('extracts result from success JSON', () => {
+    const json = JSON.stringify({ result: 'PASS: all tests pass', subtype: 'success' })
+    const result = { stdout: json, stderr: '' }
+    assert.strictEqual(extractReviewText(result, true), 'PASS: all tests pass')
+  })
+
+  it('falls back to raw text on malformed JSON', () => {
+    const result = { stdout: 'PASS: raw fallback', stderr: '' }
+    assert.strictEqual(extractReviewText(result, true), 'PASS: raw fallback')
+  })
+
+  it('falls back to raw text when JSON has no result and no subtype', () => {
+    const json = JSON.stringify({ something_else: 'data' })
+    const result = { stdout: json, stderr: '' }
+    // Falls through to raw text since result is empty and subtype is null
+    assert.strictEqual(extractReviewText(result, true), json)
+  })
+})
+
+describe('NUDGE_PROMPT', () => {
+  it('is a non-empty string', () => {
+    assert.ok(typeof NUDGE_PROMPT === 'string')
+    assert.ok(NUDGE_PROMPT.length > 0)
+  })
+
+  it('mentions PASS, FAIL, and SKIP', () => {
+    assert.ok(NUDGE_PROMPT.includes('PASS'))
+    assert.ok(NUDGE_PROMPT.includes('FAIL'))
+    assert.ok(NUDGE_PROMPT.includes('SKIP'))
   })
 })
