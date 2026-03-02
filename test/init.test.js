@@ -101,17 +101,6 @@ describe('init', () => {
         'done-review should be synchronous (no async property)')
     })
 
-    it('all default agent tasks include ruleFile', () => {
-      const cfg = buildConfig()
-      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
-      const agentTasks = allTasks.filter(t => t.type === 'agent')
-      assert.ok(agentTasks.length >= 2, 'Should have at least 2 agent tasks')
-      for (const task of agentTasks) {
-        assert.ok(typeof task.ruleFile === 'string' && task.ruleFile.length > 0,
-          `Agent task "${task.name}" should have a non-empty ruleFile`)
-      }
-    })
-
     it('done-review uses done.md ruleFile', () => {
       const cfg = buildConfig()
       const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
@@ -119,14 +108,18 @@ describe('init', () => {
       assert.strictEqual(doneReview.ruleFile, '.claude/rules/done.md')
     })
 
-    it('coverage-review and approach-review use testing.md ruleFile', () => {
+    it('coverage-review uses testing.md ruleFile', () => {
       const cfg = buildConfig()
       const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
-      for (const name of ['coverage-review', 'approach-review']) {
-        const task = allTasks.find(t => t.name === name)
-        assert.strictEqual(task.ruleFile, '.claude/rules/testing.md',
-          `${name} should use testing.md ruleFile`)
-      }
+      const task = allTasks.find(t => t.name === 'coverage-review')
+      assert.strictEqual(task.ruleFile, '.claude/rules/testing.md')
+    })
+
+    it('approach-review has no ruleFile', () => {
+      const cfg = buildConfig()
+      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
+      const task = allTasks.find(t => t.name === 'approach-review')
+      assert.strictEqual(task.ruleFile, undefined)
     })
 
     it('lock-config task has quiet: true', () => {
