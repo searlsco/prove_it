@@ -729,6 +729,34 @@ These variables are merged into the environment of both script tasks and agent r
 2. `taskEnv`—your config values
 3. prove_it forced vars—recursion prevention, always win
 
+## Managing subagent permissions
+
+Agent reviewer tasks run `claude -p` in non-interactive mode. In this mode, Claude Code requires explicit permission to use tools—there's nobody at the terminal to approve prompts. By default, prove_it passes `--allowedTools` with a list of common built-in tools ([`DEFAULT_ALLOWED_TOOLS`](https://github.com/searlsco/prove_it/search?q=DEFAULT_ALLOWED_TOOLS)). This covers most use cases.
+
+If your custom agent tasks need tools outside the default list (e.g., MCP tools), you have two options:
+
+**Expand the allowed list** with `taskAllowedTools` in your config:
+
+```json
+{
+  "taskAllowedTools": ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "WebFetch", "WebSearch", "Task", "NotebookEdit", "mcp__xcode__XcodeBuild"],
+  "hooks": [...]
+}
+```
+
+**Skip permissions entirely** with `taskBypassPermissions`:
+
+```json
+{
+  "taskBypassPermissions": true,
+  "hooks": [...]
+}
+```
+
+This passes `--dangerously-skip-permissions` to reviewer subprocesses, giving them access to all tools with no restrictions. prove_it already isolates reviewer subprocesses (`PROVE_IT_DISABLED=1`, no recursion), but the subprocess has full tool access.
+
+When neither field is set, prove_it auto-detects: if your Claude Code settings use `bypassPermissions` mode, reviewers inherit that; otherwise they use the default allowed list.
+
 ## Tracking MCP editing tools (`fileEditingTools`)
 
 By default, prove_it tracks Claude's built-in editing tools (`Edit`, `Write`, `NotebookEdit`). If Claude edits files through MCP tools (e.g. Xcode MCP's `XcodeEdit`), add them to `fileEditingTools` so prove_it can track them:
