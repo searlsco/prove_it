@@ -838,7 +838,25 @@ function cmdDoctor () {
   const issues = []
 
   log('prove_it doctor\n')
-  log('Global installation:')
+
+  // Effective merged config (shown first for quick reference)
+  log('Effective combined config:')
+  let effectiveCfg = null
+  try {
+    const defaultFn = () => ({
+      enabled: false,
+      sources: null,
+      hooks: []
+    })
+    const { cfg } = loadEffectiveConfig(repoRoot, defaultFn)
+    effectiveCfg = cfg
+    log(JSON.stringify(cfg, null, 2).split('\n').map(l => '  ' + l).join('\n'))
+  } catch (e) {
+    log(e.message.split('\n').map(l => '  ' + l).join('\n'))
+    issues.push('Config validation failed (see above)')
+  }
+
+  log('\nGlobal installation:')
 
   // Check settings.json for hook registration—per-dispatcher structured validation
   const settingsPath = path.join(claudeDir, 'settings.json')
@@ -951,23 +969,6 @@ function cmdDoctor () {
   } else if (fs.existsSync(path.join(repoRoot, '.claude', 'prove_it'))) {
     log('  [ ] .claude/prove_it/.gitignore missing')
     issues.push("Run 'prove_it init' to create .claude/prove_it/.gitignore")
-  }
-
-  // Effective merged config
-  log('\nEffective config:')
-  let effectiveCfg = null
-  try {
-    const defaultFn = () => ({
-      enabled: false,
-      sources: null,
-      hooks: []
-    })
-    const { cfg } = loadEffectiveConfig(repoRoot, defaultFn)
-    effectiveCfg = cfg
-    log(JSON.stringify(cfg, null, 2).split('\n').map(l => '  ' + l).join('\n'))
-  } catch (e) {
-    log(e.message.split('\n').map(l => '  ' + l).join('\n'))
-    issues.push('Config validation failed (see above)')
   }
 
   // Config-aware checks (derived from effective config)
