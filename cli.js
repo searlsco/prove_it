@@ -1178,12 +1178,6 @@ function cmdUpgrade () {
     return r.status === 0
   }
 
-  log('Updating tap...')
-  if (!run('brew', ['update', 'searlsco/tap'])) {
-    console.error('brew update failed')
-    process.exit(1)
-  }
-
   log('Upgrading prove_it...')
   if (!run('brew', ['upgrade', 'searlsco/tap/prove_it'])) {
     console.error('brew upgrade failed')

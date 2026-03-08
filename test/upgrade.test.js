@@ -50,7 +50,7 @@ describe('cmdUpgrade', () => {
     }
   }
 
-  it('calls brew update, brew upgrade, prove_it install in order (no project)', () => {
+  it('calls brew upgrade, prove_it install in order (no project)', () => {
     writeMock('brew', 0)
     writeMock('prove_it', 0)
 
@@ -61,10 +61,9 @@ describe('cmdUpgrade', () => {
     assert.strictEqual(r.status, 0, `stderr: ${r.stderr}`)
 
     const calls = getCalls()
-    assert.strictEqual(calls.length, 3)
-    assert.match(calls[0], /^brew update searlsco\/tap$/)
-    assert.match(calls[1], /^brew upgrade searlsco\/tap\/prove_it$/)
-    assert.match(calls[2], /^prove_it install$/)
+    assert.strictEqual(calls.length, 2)
+    assert.match(calls[0], /^brew upgrade searlsco\/tap\/prove_it$/)
+    assert.match(calls[1], /^prove_it install$/)
     assert.match(r.stdout, /Upgrade complete/)
   })
 
@@ -80,8 +79,8 @@ describe('cmdUpgrade', () => {
     assert.strictEqual(r.status, 0, `stderr: ${r.stderr}`)
 
     const calls = getCalls()
-    assert.strictEqual(calls.length, 4)
-    assert.match(calls[3], /^prove_it init$/)
+    assert.strictEqual(calls.length, 3)
+    assert.match(calls[2], /^prove_it init$/)
     assert.match(r.stdout, /Reinitializing project/)
   })
 
@@ -99,34 +98,12 @@ describe('cmdUpgrade', () => {
     assert.strictEqual(r.status, 0, `stderr: ${r.stderr}`)
 
     const calls = getCalls()
-    assert.strictEqual(calls.length, 4)
-    assert.match(calls[3], /^prove_it init$/)
-  })
-
-  it('stops and exits 1 on brew update failure', () => {
-    writeMock('brew', 1)
-    writeMock('prove_it', 0)
-
-    const workDir = path.join(tmpDir, 'fail-update')
-    fs.mkdirSync(workDir)
-
-    const r = runUpgrade(workDir)
-    assert.strictEqual(r.status, 1)
-    assert.match(r.stderr, /brew update failed/)
-
-    const calls = getCalls()
-    assert.strictEqual(calls.length, 1, 'should only call brew update')
+    assert.strictEqual(calls.length, 3)
+    assert.match(calls[2], /^prove_it init$/)
   })
 
   it('stops and exits 1 on brew upgrade failure', () => {
-    // Need brew to succeed for update but fail for upgrade
-    const scriptPath = path.join(binDir, 'brew')
-    fs.writeFileSync(scriptPath, `#!/bin/sh
-echo "brew $*" >> "${logFile}"
-if [ "$1" = "update" ]; then exit 0; fi
-exit 1
-`)
-    fs.chmodSync(scriptPath, 0o755)
+    writeMock('brew', 1)
     writeMock('prove_it', 0)
 
     const workDir = path.join(tmpDir, 'fail-upgrade')
@@ -137,7 +114,7 @@ exit 1
     assert.match(r.stderr, /brew upgrade failed/)
 
     const calls = getCalls()
-    assert.strictEqual(calls.length, 2, 'should call brew update and brew upgrade only')
+    assert.strictEqual(calls.length, 1, 'should only call brew upgrade')
   })
 
   it('stops and exits 1 on prove_it install failure', () => {
@@ -158,7 +135,7 @@ exit 1
     assert.match(r.stderr, /prove_it install failed/)
 
     const calls = getCalls()
-    assert.strictEqual(calls.length, 3, 'should call brew update, upgrade, and prove_it install')
+    assert.strictEqual(calls.length, 2, 'should call brew upgrade and prove_it install')
   })
 
   it('skips prove_it init when no project config exists', () => {
@@ -172,7 +149,7 @@ exit 1
     assert.strictEqual(r.status, 0)
 
     const calls = getCalls()
-    assert.strictEqual(calls.length, 3, 'should not call prove_it init')
+    assert.strictEqual(calls.length, 2, 'should not call prove_it init')
     assert.doesNotMatch(r.stdout, /Reinitializing/)
   })
 })
