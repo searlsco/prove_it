@@ -242,6 +242,19 @@ describe('monitor', () => {
       assert.ok(line.includes('appealed via backchannel'), `Expected reason in: ${line}`)
     })
 
+    it('formats TICK status', () => {
+      const entry = {
+        at: Date.now(),
+        reviewer: 'done-review',
+        status: 'TICK',
+        reason: 'Told done-review agent to wrap it up (used 5/5 turns)',
+        hookEvent: 'Stop'
+      }
+      const line = formatEntry(entry)
+      assert.ok(line.includes('TICK'), `Expected TICK in: ${line}`)
+      assert.ok(line.includes('wrap it up'), `Expected reason in: ${line}`)
+    })
+
     it('previews developer appeal text on PLEA main line', () => {
       const entry = {
         at: Date.now(),
@@ -1214,6 +1227,7 @@ describe('monitor', () => {
       assert.strictEqual(displayStatusOf('FAIL'), 'FAIL')
       assert.strictEqual(displayStatusOf('SKIP'), 'SKIP')
       assert.strictEqual(displayStatusOf('BOOM'), 'BOOM')
+      assert.strictEqual(displayStatusOf('TICK'), 'TICK')
     })
 
     it('returns ??? for null/undefined', () => {

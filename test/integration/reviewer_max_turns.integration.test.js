@@ -108,7 +108,8 @@ describe('runReviewer with maxAgentTurns (shim-based)', () => {
     const maxTurnsJson = JSON.stringify({
       result: '',
       subtype: 'error_max_turns',
-      session_id: 'sess-resume-test'
+      session_id: 'sess-resume-test',
+      num_turns: 3
     })
     const resumeJson = JSON.stringify({
       result: 'PASS: code looks good after partial review',
@@ -129,9 +130,41 @@ fi`)
     }, 'test prompt')
     assert.ok(r.pass, `Expected PASS from nudge resume, got: ${JSON.stringify(r)}`)
     assert.strictEqual(r.reason, 'code looks good after partial review')
+    assert.ok(r.nudge, 'Expected nudge metadata')
+    assert.strictEqual(r.nudge.succeeded, true)
+    assert.strictEqual(r.nudge.numTurns, 3)
 
     // Verify the state file was created (proving the first call happened)
     assert.ok(fs.existsSync(stateFile), 'State file should exist proving two calls were made')
+    cleanup()
+  })
+
+  it('returns nudge.succeeded=false when resume fails', () => {
+    setup()
+    const stateFile = path.join(tmpDir, '.call_count_fail')
+    const maxTurnsJson = JSON.stringify({
+      result: 'partial work',
+      subtype: 'error_max_turns',
+      session_id: 'sess-fail-nudge',
+      num_turns: 5
+    })
+    const claudePath = writeShim('claude', `cat > /dev/null
+if [ -f "${stateFile}" ]; then
+  echo "resume crashed" >&2
+  exit 1
+else
+  touch "${stateFile}"
+  echo '${maxTurnsJson.replace(/'/g, "'\\''")}'
+fi`)
+
+    const r = runReviewer(tmpDir, {
+      command: `${claudePath} -p`,
+      maxAgentTurns: 5
+    }, 'test prompt')
+    // Falls back to original result text
+    assert.ok(r.nudge, 'Expected nudge metadata')
+    assert.strictEqual(r.nudge.succeeded, false)
+    assert.strictEqual(r.nudge.numTurns, 5)
     cleanup()
   })
 

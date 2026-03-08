@@ -281,6 +281,7 @@ describe('parseJsonOutput', () => {
     assert.strictEqual(parsed.result, 'PASS: looks good')
     assert.strictEqual(parsed.sessionId, 'abc-123')
     assert.strictEqual(parsed.subtype, 'success')
+    assert.strictEqual(parsed.numTurns, null)
   })
 
   it('parses error_max_turns JSON', () => {
@@ -288,6 +289,12 @@ describe('parseJsonOutput', () => {
     const parsed = parseJsonOutput(json)
     assert.strictEqual(parsed.subtype, 'error_max_turns')
     assert.strictEqual(parsed.sessionId, 'sess-456')
+  })
+
+  it('extracts num_turns when present', () => {
+    const json = JSON.stringify({ result: 'PASS: ok', session_id: 's1', subtype: 'error_max_turns', num_turns: 7 })
+    const parsed = parseJsonOutput(json)
+    assert.strictEqual(parsed.numTurns, 7)
   })
 
   it('returns null for malformed JSON', () => {
@@ -301,36 +308,47 @@ describe('parseJsonOutput', () => {
     assert.strictEqual(parsed.result, '')
     assert.strictEqual(parsed.sessionId, null)
     assert.strictEqual(parsed.subtype, null)
+    assert.strictEqual(parsed.numTurns, null)
   })
 })
 
 describe('extractReviewText', () => {
   it('returns raw text when jsonMode is false', () => {
     const result = { stdout: '  PASS: looks good  ', stderr: '' }
-    assert.strictEqual(extractReviewText(result, false), 'PASS: looks good')
+    const out = extractReviewText(result, false)
+    assert.strictEqual(out.text, 'PASS: looks good')
+    assert.strictEqual(out.nudge, null)
   })
 
   it('falls back to stderr when stdout is empty in non-json mode', () => {
     const result = { stdout: '', stderr: 'FAIL: bad code' }
-    assert.strictEqual(extractReviewText(result, false), 'FAIL: bad code')
+    const out = extractReviewText(result, false)
+    assert.strictEqual(out.text, 'FAIL: bad code')
+    assert.strictEqual(out.nudge, null)
   })
 
   it('extracts result from success JSON', () => {
     const json = JSON.stringify({ result: 'PASS: all tests pass', subtype: 'success' })
     const result = { stdout: json, stderr: '' }
-    assert.strictEqual(extractReviewText(result, true), 'PASS: all tests pass')
+    const out = extractReviewText(result, true)
+    assert.strictEqual(out.text, 'PASS: all tests pass')
+    assert.strictEqual(out.nudge, null)
   })
 
   it('falls back to raw text on malformed JSON', () => {
     const result = { stdout: 'PASS: raw fallback', stderr: '' }
-    assert.strictEqual(extractReviewText(result, true), 'PASS: raw fallback')
+    const out = extractReviewText(result, true)
+    assert.strictEqual(out.text, 'PASS: raw fallback')
+    assert.strictEqual(out.nudge, null)
   })
 
   it('falls back to raw text when JSON has no result and no subtype', () => {
     const json = JSON.stringify({ something_else: 'data' })
     const result = { stdout: json, stderr: '' }
+    const out = extractReviewText(result, true)
     // Falls through to raw text since result is empty and subtype is null
-    assert.strictEqual(extractReviewText(result, true), json)
+    assert.strictEqual(out.text, json)
+    assert.strictEqual(out.nudge, null)
   })
 })
 
