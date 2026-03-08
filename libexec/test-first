@@ -1,0 +1,34 @@
+#!/usr/bin/env node
+/**
+ * test-first — Remind the agent to write tests before source code.
+ *
+ * Reads hook input JSON from stdin (session_id, params).
+ * Checks the consecutiveUntestedEditCount from session state.
+ * When count >= threshold, outputs a reminder on stdout and exits 0.
+ * Otherwise outputs nothing and exits 0.
+ */
+const { getConsecutiveUntestedEditCount } = require('../lib/session')
+
+if (require.main === module) {
+  let raw = ''
+  process.stdin.setEncoding('utf8')
+  process.stdin.on('data', chunk => { raw += chunk })
+  process.stdin.on('end', () => {
+    let input = {}
+    try { input = JSON.parse(raw) } catch {}
+
+    const sessionId = input.session_id || null
+    const threshold = input.params?.threshold || 3
+
+    const count = getConsecutiveUntestedEditCount(sessionId)
+    if (count >= threshold) {
+      process.stdout.write(
+        `prove_it: You've edited ${count} source files without writing or running tests. Consider writing a failing test before continuing.`
+      )
+    }
+    process.exit(0)
+  })
+  process.stdin.resume()
+} else {
+  module.exports = { getConsecutiveUntestedEditCount }
+}

@@ -564,6 +564,46 @@ describe('session state functions', () => {
     })
   })
 
+  describe('consecutive untested edit count', () => {
+    const {
+      getConsecutiveUntestedEditCount,
+      incrementConsecutiveUntestedEditCount,
+      resetConsecutiveUntestedEditCount
+    } = require('../lib/session')
+
+    it('defaults to 0 when no count exists', () => {
+      assert.strictEqual(getConsecutiveUntestedEditCount('no-count-session'), 0)
+    })
+
+    it('increments the counter', () => {
+      incrementConsecutiveUntestedEditCount(SESSION_ID)
+      assert.strictEqual(getConsecutiveUntestedEditCount(SESSION_ID), 1)
+      incrementConsecutiveUntestedEditCount(SESSION_ID)
+      assert.strictEqual(getConsecutiveUntestedEditCount(SESSION_ID), 2)
+    })
+
+    it('resets the counter to 0', () => {
+      incrementConsecutiveUntestedEditCount(SESSION_ID)
+      incrementConsecutiveUntestedEditCount(SESSION_ID)
+      resetConsecutiveUntestedEditCount(SESSION_ID)
+      assert.strictEqual(getConsecutiveUntestedEditCount(SESSION_ID), 0)
+    })
+
+    it('handles null sessionId gracefully', () => {
+      assert.strictEqual(getConsecutiveUntestedEditCount(null), 0)
+      incrementConsecutiveUntestedEditCount(null) // should not throw
+      resetConsecutiveUntestedEditCount(null) // should not throw
+    })
+
+    it('isolates counters between sessions', () => {
+      incrementConsecutiveUntestedEditCount('session-X')
+      incrementConsecutiveUntestedEditCount('session-X')
+      incrementConsecutiveUntestedEditCount('session-Y')
+      assert.strictEqual(getConsecutiveUntestedEditCount('session-X'), 2)
+      assert.strictEqual(getConsecutiveUntestedEditCount('session-Y'), 1)
+    })
+  })
+
   describe('signal state', () => {
     it('set/get round-trips a signal', () => {
       assert.strictEqual(setSignal(SESSION_ID, 'done', null), true)

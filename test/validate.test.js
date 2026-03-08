@@ -141,6 +141,42 @@ describe('validateConfig', () => {
       assert.strictEqual(errors.length, 0)
     })
 
+    it('validates tests field', () => {
+      // valid array passes
+      const valid = validateConfig(validConfig({ tests: ['**/*.test.js'] }))
+      assert.strictEqual(valid.errors.length, 0)
+
+      // not array
+      const notArray = validateConfig(validConfig({ tests: 'not-array' }))
+      assert.ok(notArray.errors.some(e => e.includes('"tests" must be an array')))
+
+      // contains non-string
+      const nonString = validateConfig(validConfig({ tests: ['ok', 42] }))
+      assert.ok(nonString.errors.some(e => e.includes('tests[1] must be a string')))
+
+      // allows null
+      const nullTests = validateConfig(validConfig({ tests: null }))
+      assert.strictEqual(nullTests.errors.length, 0)
+    })
+
+    it('validates testCommands field', () => {
+      // valid array passes
+      const valid = validateConfig(validConfig({ testCommands: ['my-test-runner'] }))
+      assert.strictEqual(valid.errors.length, 0)
+
+      // not array
+      const notArray = validateConfig(validConfig({ testCommands: 'npm test' }))
+      assert.ok(notArray.errors.some(e => e.includes('"testCommands" must be an array')))
+
+      // contains non-string
+      const nonString = validateConfig(validConfig({ testCommands: ['ok', 42] }))
+      assert.ok(nonString.errors.some(e => e.includes('testCommands[1] must be a string')))
+
+      // allows null
+      const nullCmds = validateConfig(validConfig({ testCommands: null }))
+      assert.strictEqual(nullCmds.errors.length, 0)
+    })
+
     it('validates taskAllowedTools field', () => {
       // valid array passes
       const valid = validateConfig(validConfig({ taskAllowedTools: ['Read', 'Write', 'Bash'] }))

@@ -213,6 +213,25 @@ describe('hasCustomSources', () => {
   })
 })
 
+describe('hasCustomTests', () => {
+  const { hasCustomTests } = require('../lib/config')
+
+  it('returns false for null/undefined config', () => {
+    assert.strictEqual(hasCustomTests(null), false)
+    assert.strictEqual(hasCustomTests(undefined), false)
+  })
+
+  it('returns false for empty or missing tests', () => {
+    assert.strictEqual(hasCustomTests({}), false)
+    assert.strictEqual(hasCustomTests({ tests: [] }), false)
+    assert.strictEqual(hasCustomTests({ tests: null }), false)
+  })
+
+  it('returns true when tests are configured', () => {
+    assert.strictEqual(hasCustomTests({ tests: ['**/*.test.js'] }), true)
+  })
+})
+
 describe('isIgnoredPath', () => {
   const { isIgnoredPath } = require('../lib/config')
   const home = os.homedir()
