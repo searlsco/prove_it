@@ -8,7 +8,9 @@ const {
   isConfigFileEdit,
   isLocalConfigWrite,
   isSourceFile,
+  isTestFile,
   globToRegex,
+  expandBraces,
   walkDir
 } = require('../lib/globs')
 
@@ -158,6 +160,29 @@ describe('globToRegex', () => {
       ['package.json', true],
       ['other.json', false],
       ['dir/package.json', false]
+    ]],
+    ['brace expansion with two options', '*.{js,ts}', [
+      ['foo.js', true],
+      ['foo.ts', true],
+      ['foo.py', false, 'Should not match unlisted extensions']
+    ]],
+    ['brace expansion with three options', '*.{test,spec,unit}.js', [
+      ['foo.test.js', true],
+      ['foo.spec.js', true],
+      ['foo.unit.js', true],
+      ['foo.other.js', false]
+    ]],
+    ['brace expansion in directory name', '**/{test,tests,__tests__}/**/*.js', [
+      ['test/foo.js', true],
+      ['tests/foo.js', true],
+      ['__tests__/foo.js', true],
+      ['src/foo.js', false]
+    ]],
+    ['brace expansion with globstar prefix', '**/*.{test,spec}.*', [
+      ['foo.test.js', true],
+      ['foo.spec.ts', true],
+      ['src/deep/bar.test.py', true],
+      ['foo.js', false]
     ]]
   ]
 
@@ -223,5 +248,78 @@ describe('walkDir', () => {
     const files = new Set()
     walkDir('/nonexistent', '/nonexistent', globToRegex('*.js'), files)
     assert.strictEqual(files.size, 0)
+  })
+})
+
+describe('expandBraces', () => {
+  it('expands simple {a,b} to (?:a|b)', () => {
+    assert.strictEqual(expandBraces('{js,ts}'), '(?:js|ts)')
+  })
+
+  it('expands multiple brace groups', () => {
+    assert.strictEqual(expandBraces('{a,b}.{c,d}'), '(?:a|b).(?:c|d)')
+  })
+
+  it('passes through strings without braces', () => {
+    assert.strictEqual(expandBraces('foo/bar/*.js'), 'foo/bar/*.js')
+  })
+
+  it('handles three-option groups', () => {
+    assert.strictEqual(expandBraces('{test,spec,unit}'), '(?:test|spec|unit)')
+  })
+
+  it('handles single-option braces (degenerate case)', () => {
+    assert.strictEqual(expandBraces('{only}'), '(?:only)')
+  })
+})
+
+describe('isTestFile', () => {
+  const rootDir = '/repo'
+  const tests = [
+    '**/*.{test,spec}.*',
+    '**/*_{test,spec}.*',
+    '**/{test,tests,spec,specs,__tests__}/**/*.*'
+  ]
+
+  const matchCases = [
+    ['foo.test.js', 'foo.test.js'],
+    ['foo.spec.ts', 'foo.spec.ts'],
+    ['nested test file', 'src/lib/foo.test.js'],
+    ['underscore test file', 'src/foo_test.py'],
+    ['underscore spec file', 'src/foo_spec.rb'],
+    ['file in test/ dir', 'test/helpers/setup.js'],
+    ['file in tests/ dir', 'tests/unit/foo.js'],
+    ['file in __tests__/ dir', '__tests__/foo.js'],
+    ['file in spec/ dir', 'spec/models/user.js'],
+    ['file in specs/ dir', 'specs/foo.js'],
+    ['absolute path test file', '/repo/src/foo.test.js']
+  ]
+
+  matchCases.forEach(([label, filePath]) => {
+    it(`matches ${label}`, () => {
+      assert.strictEqual(isTestFile(filePath, rootDir, tests), true)
+    })
+  })
+
+  const noMatchCases = [
+    ['regular source file', 'src/app.js'],
+    ['README', 'README.md'],
+    ['config file', 'config/database.json'],
+    ['file with test in name but not pattern', 'src/testUtils.js'],
+    ['file outside repo', '/other/repo/foo.test.js']
+  ]
+
+  noMatchCases.forEach(([label, filePath]) => {
+    it(`does not match ${label}`, () => {
+      assert.strictEqual(isTestFile(filePath, rootDir, tests), false)
+    })
+  })
+
+  it('returns false when tests is null', () => {
+    assert.strictEqual(isTestFile('foo.test.js', rootDir, null), false)
+  })
+
+  it('returns false when tests is empty', () => {
+    assert.strictEqual(isTestFile('foo.test.js', rootDir, []), false)
   })
 })
