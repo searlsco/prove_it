@@ -6,6 +6,7 @@ const path = require('path')
 const { defaultModel, runAgentCheck, backchannelDir, backchannelReadmePath, createBackchannel, notepadDir, notepadFilePath, writeNotepad, readNotepad } = require('../../lib/checks/agent')
 const { saveSessionState, loadSessionState } = require('../../lib/session')
 const { freshRepo } = require('../helpers')
+const { reviewerFixtures } = require('./hook-harness')
 
 function writeReviewer (dir, name, body) {
   const p = path.join(dir, name)
@@ -35,27 +36,26 @@ describe('agent check', () => {
   // ---------- Story: basic execution ----------
   // PASS, FAIL, SKIP, empty prompt, null prompt, binary not found
   it('handles PASS, FAIL, SKIP, empty/null prompt, and missing binary', () => {
+    const fix = reviewerFixtures()
+
     // PASS
-    const passPath = writeReviewer(tmpDir, 'pass.sh', 'echo "PASS"')
     const pass = runAgentCheck(
-      { name: 'test-review', command: passPath, prompt: 'Review {{project_dir}}' },
+      { name: 'test-review', command: fix.pass, prompt: 'Review {{project_dir}}' },
       ctx(tmpDir)
     )
     assert.strictEqual(pass.pass, true)
 
     // FAIL
-    const failPath = writeReviewer(tmpDir, 'fail.sh', 'echo "FAIL: untested code"')
     const fail = runAgentCheck(
-      { name: 'test-review', command: failPath, prompt: 'Review this' },
+      { name: 'test-review', command: fix.fail, prompt: 'Review this' },
       ctx(tmpDir)
     )
     assert.strictEqual(fail.pass, false)
     assert.ok(fail.reason.includes('untested code'))
 
     // SKIP
-    const skipPath = writeReviewer(tmpDir, 'skip.sh', 'echo "SKIP: changes are unrelated"')
     const skip = runAgentCheck(
-      { name: 'test-review', command: skipPath, prompt: 'Review {{project_dir}}' },
+      { name: 'test-review', command: fix.skip, prompt: 'Review {{project_dir}}' },
       ctx(tmpDir)
     )
     assert.strictEqual(skip.pass, true)
@@ -87,12 +87,9 @@ describe('agent check', () => {
 
   // ---------- Story: crash behavior with explicit model ----------
   it('hard-fails when task has explicit model and reviewer crashes', () => {
-    const crashPath = path.join(tmpDir, 'crash.sh')
-    fs.writeFileSync(crashPath, '#!/usr/bin/env bash\ncat > /dev/null\nexit 1\n')
-    fs.chmodSync(crashPath, 0o755)
-
+    const fix = reviewerFixtures()
     const result = runAgentCheck(
-      { name: 'model-crash', command: crashPath, prompt: 'Review this', model: 'opus' },
+      { name: 'model-crash', command: fix.crash, prompt: 'Review this', model: 'opus' },
       ctx(tmpDir)
     )
     assert.strictEqual(result.pass, false, 'Should hard-fail when model is set and reviewer crashes')
@@ -102,12 +99,9 @@ describe('agent check', () => {
   })
 
   it('soft-skips crash when no explicit model', () => {
-    const crashPath = path.join(tmpDir, 'crash2.sh')
-    fs.writeFileSync(crashPath, '#!/usr/bin/env bash\ncat > /dev/null\nexit 1\n')
-    fs.chmodSync(crashPath, 0o755)
-
+    const fix = reviewerFixtures()
     const result = runAgentCheck(
-      { name: 'no-model-crash', command: crashPath, prompt: 'Review this' },
+      { name: 'no-model-crash', command: fix.crash, prompt: 'Review this' },
       ctx(tmpDir)
     )
     assert.strictEqual(result.pass, true, 'Should soft-skip when no model set')

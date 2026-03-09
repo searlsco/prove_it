@@ -1,34 +1,34 @@
-const { describe, it, beforeEach, afterEach } = require('node:test')
+const { describe, it, before, after, afterEach } = require('node:test')
 const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
-const { spawnSync } = require('child_process')
 
 const {
   invokeHook,
   createTempDir,
   cleanupTempDir,
-  initGitRepo,
   createFile,
   createTestScript,
   createFastTestScript,
   writeConfig,
   makeConfig,
-  isolatedEnv
+  isolatedEnv,
+  freshHarnessRepo,
+  cleanRepo
 } = require('./hook-harness')
 
 describe('v2 dispatcher: core hook behaviors', () => {
   let tmpDir
 
-  beforeEach(() => {
-    tmpDir = createTempDir('prove_it_core_')
-    initGitRepo(tmpDir)
-    createFile(tmpDir, '.gitkeep', '')
-    spawnSync('git', ['add', '.'], { cwd: tmpDir })
-    spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+  before(() => {
+    tmpDir = freshHarnessRepo()
   })
 
   afterEach(() => {
+    cleanRepo(tmpDir)
+  })
+
+  after(() => {
     if (tmpDir) cleanupTempDir(tmpDir)
   })
 

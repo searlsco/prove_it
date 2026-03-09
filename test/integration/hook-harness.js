@@ -81,6 +81,64 @@ function initGitRepo (dir) {
 }
 
 /**
+ * Cached git repo template for fast test setup.
+ * Creates a git repo with .gitkeep once, then copies via fs.cpSync.
+ * Eliminates 5 spawnSync calls per test.
+ */
+let harnessTemplate = null
+
+function freshHarnessRepo () {
+  if (!harnessTemplate) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_harness_tmpl_'))
+    spawnSync('git', ['init'], { cwd: dir })
+    spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir })
+    spawnSync('git', ['config', 'user.name', 'Test'], { cwd: dir })
+    fs.writeFileSync(path.join(dir, '.gitkeep'), '')
+    spawnSync('git', ['add', '.'], { cwd: dir })
+    spawnSync('git', ['commit', '-m', 'init'], { cwd: dir })
+    harnessTemplate = dir
+  }
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_test_'))
+  fs.rmSync(tmpDir, { recursive: true, force: true })
+  fs.cpSync(harnessTemplate, tmpDir, { recursive: true })
+  return tmpDir
+}
+
+/**
+ * Clean a shared repo between tests, preserving git state.
+ * Removes all files/dirs except .git and .gitkeep.
+ */
+function cleanRepo (dir) {
+  for (const entry of fs.readdirSync(dir)) {
+    if (entry === '.git' || entry === '.gitkeep') continue
+    fs.rmSync(path.join(dir, entry), { recursive: true, force: true })
+  }
+}
+
+/**
+ * Shared reviewer script fixtures (created once, reused across tests).
+ */
+let _reviewerFixtures = null
+
+function reviewerFixtures () {
+  if (_reviewerFixtures) return _reviewerFixtures
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_fixtures_'))
+  _reviewerFixtures = {}
+  for (const [name, body] of [
+    ['pass', 'echo "PASS"'],
+    ['fail', 'echo "FAIL: untested code"'],
+    ['skip', 'echo "SKIP: changes are unrelated"'],
+    ['crash', 'exit 1']
+  ]) {
+    const p = path.join(dir, `${name}.sh`)
+    fs.writeFileSync(p, `#!/usr/bin/env bash\ncat > /dev/null\n${body}\n`)
+    fs.chmodSync(p, 0o755)
+    _reviewerFixtures[name] = p
+  }
+  return _reviewerFixtures
+}
+
+/**
  * Create a file in the given directory.
  */
 function createFile (dir, relativePath, content) {
@@ -204,6 +262,9 @@ module.exports = {
   createTempDir,
   cleanupTempDir,
   initGitRepo,
+  freshHarnessRepo,
+  cleanRepo,
+  reviewerFixtures,
   createFile,
   makeExecutable,
   createTestScript,
