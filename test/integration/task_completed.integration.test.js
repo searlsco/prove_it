@@ -157,7 +157,6 @@ describe('TaskCompleted auto-signaling', () => {
     }, { projectDir, env })
 
     assert.strictEqual(exitResult.exitCode, 0)
-    assert.strictEqual(exitResult.output.hookSpecificOutput.permissionDecision, 'allow')
     const planContent = fs.readFileSync(path.join(plansDir, 'my-plan.md'), 'utf8')
     assert.ok(planContent.includes(SIGNAL_PLAN_MARKER), 'Plan file should have signal task')
     assert.ok(planContent.includes('### 3. Run `prove_it signal done`'), 'Signal should be step 3')

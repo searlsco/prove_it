@@ -281,7 +281,27 @@ describe('TDD block injection on ExitPlanMode', () => {
   })
 
   it('injects TDD block after title on ExitPlanMode', () => {
-    writeConfig(tmpDir, makeConfig([]))
+    const injectPlanPath = path.join(__dirname, '..', '..', 'libexec', 'inject-plan')
+    writeConfig(tmpDir, makeConfig([
+      {
+        type: 'claude',
+        event: 'PreToolUse',
+        matcher: 'ExitPlanMode',
+        tasks: [
+          {
+            name: 'inject-plan',
+            type: 'script',
+            command: injectPlanPath,
+            quiet: true,
+            params: {
+              position: 'after-title',
+              marker: 'red-green TDD',
+              block: '## Development approach\n\nFollow red-green TDD for each change:\n\n- Write a test that expresses the behavior you\'re about to implement\n- Run it and verify it fails for the reason you expect\n- Write the minimum source code to make the test pass\n- Re-run the test in isolation and confirm it passes (or the failure message changes as expected) before moving on\n'
+            }
+          }
+        ]
+      }
+    ]))
 
     const plansDir = path.join(tmpDir, '.claude', 'plans')
     fs.mkdirSync(plansDir, { recursive: true })
@@ -306,7 +326,27 @@ describe('TDD block injection on ExitPlanMode', () => {
   })
 
   it('does not double-inject TDD block', () => {
-    writeConfig(tmpDir, makeConfig([]))
+    const injectPlanPath = path.join(__dirname, '..', '..', 'libexec', 'inject-plan')
+    writeConfig(tmpDir, makeConfig([
+      {
+        type: 'claude',
+        event: 'PreToolUse',
+        matcher: 'ExitPlanMode',
+        tasks: [
+          {
+            name: 'inject-plan',
+            type: 'script',
+            command: injectPlanPath,
+            quiet: true,
+            params: {
+              position: 'after-title',
+              marker: 'red-green TDD',
+              block: '## Development approach\n\nFollow red-green TDD for each change:\n'
+            }
+          }
+        ]
+      }
+    ]))
 
     const plansDir = path.join(tmpDir, '.claude', 'plans')
     fs.mkdirSync(plansDir, { recursive: true })

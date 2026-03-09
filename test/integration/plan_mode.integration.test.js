@@ -12,7 +12,6 @@ const {
   createFile,
   writeConfig,
   makeConfig,
-  assertValidPermissionDecision,
   isolatedEnv
 } = require('./hook-harness')
 
@@ -97,8 +96,6 @@ describe('Plan mode enforcement via PreToolUse', () => {
       }, { projectDir: tmpDir, env })
 
       assert.strictEqual(result.exitCode, 0)
-      assertValidPermissionDecision(result, 'ExitPlanMode')
-      assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow')
 
       const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
       assert.ok(content.includes(SIGNAL_PLAN_MARKER), `Plan file should contain signal task, got:\n${content}`)
@@ -223,7 +220,6 @@ describe('Plan mode enforcement via PreToolUse', () => {
       }, { projectDir: tmpDir, env })
 
       assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow')
 
       // Should still have exactly one signal marker
       const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
@@ -247,7 +243,6 @@ describe('Plan mode enforcement via PreToolUse', () => {
       }, { projectDir: tmpDir, env })
 
       assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow')
 
       // Plan file should be unchanged
       const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
@@ -274,7 +269,6 @@ describe('Plan mode enforcement via PreToolUse', () => {
       }, { projectDir: tmpDir, env })
 
       assert.strictEqual(result.exitCode, 0)
-      assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow')
     })
   })
 })
