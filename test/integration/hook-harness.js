@@ -73,10 +73,22 @@ async function invokeDispatcher (hookSpec, input, options = {}) {
   const { dispatch } = require('../../lib/dispatcher/claude')
   const event = hookSpec.split(':')[1]
 
-  // Save and override env vars
+  // Save and override env vars.
+  // Also clear vars that prove_it hooks may set in the parent process,
+  // since invokeHook used cleanEnv (empty base) but we inherit process.env.
+  const ISOLATE_VARS = [
+    'CLAUDE_ENV_FILE', 'CLAUDE_SESSION_ID',
+    'PROVE_IT_DISABLED', 'PROVE_IT_SKIP_NOTIFY'
+  ]
   const savedEnv = {}
   const envOverrides = { ...options.env }
   if (options.projectDir) envOverrides.CLAUDE_PROJECT_DIR = options.projectDir
+  for (const k of ISOLATE_VARS) {
+    if (!(k in envOverrides) && k in process.env) {
+      savedEnv[k] = process.env[k]
+      delete process.env[k]
+    }
+  }
   for (const [k, v] of Object.entries(envOverrides)) {
     savedEnv[k] = process.env[k]
     process.env[k] = v
