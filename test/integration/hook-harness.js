@@ -73,20 +73,14 @@ async function invokeDispatcher (hookSpec, input, options = {}) {
   const { dispatch } = require('../../lib/dispatcher/claude')
   const event = hookSpec.split(':')[1]
 
-  // Snapshot entire env so dispatch can't leak vars between tests.
-  // invokeHook used cleanEnv (empty base); we must fully restore after.
+  // Replace process.env with only the test's vars during dispatch.
+  // This mirrors invokeHook's cleanEnv behavior—no parent vars leak through.
   const envSnapshot = { ...process.env }
-
-  // Clear vars that prove_it's parent hooks inject (e.g. PROVE_IT_DISABLED)
-  // so they don't interfere with in-process dispatch.
-  const CLEAR_VARS = ['PROVE_IT_DISABLED', 'PROVE_IT_SKIP_NOTIFY', 'CLAUDE_ENV_FILE', 'CLAUDE_SESSION_ID']
-  for (const k of CLEAR_VARS) delete process.env[k]
+  for (const k of Object.keys(process.env)) delete process.env[k]
 
   const envOverrides = { ...options.env }
   if (options.projectDir) envOverrides.CLAUDE_PROJECT_DIR = options.projectDir
-  for (const [k, v] of Object.entries(envOverrides)) {
-    process.env[k] = v
-  }
+  Object.assign(process.env, envOverrides)
 
   // Intercept process.exit
   const origExit = process.exit
