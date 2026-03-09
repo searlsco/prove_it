@@ -508,10 +508,10 @@ describe('Config-driven hook behavior (v2)', () => {
     it('script task sees config taskEnv vars', async () => {
       createFile(tmpDir, 'script/env_check', [
         '#!/usr/bin/env bash',
-        'if [ "$TURBOCOMMIT_DISABLED" = "1" ]; then',
+        'if [ "$PROVE_IT_TEST_SENTINEL_ENV" = "1" ]; then',
         '  exit 0',
         'else',
-        '  echo "TURBOCOMMIT_DISABLED was not set" >&2',
+        '  echo "PROVE_IT_TEST_SENTINEL_ENV was not set" >&2',
         '  exit 1',
         'fi'
       ].join('\n'))
@@ -525,7 +525,7 @@ describe('Config-driven hook behavior (v2)', () => {
             { name: 'env-check', type: 'script', command: './script/env_check' }
           ]
         }
-      ], { taskEnv: { TURBOCOMMIT_DISABLED: '1' } }))
+      ], { taskEnv: { PROVE_IT_TEST_SENTINEL_ENV: '1' } }))
 
       const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
@@ -542,10 +542,10 @@ describe('Config-driven hook behavior (v2)', () => {
     it('script task fails without config taskEnv var', async () => {
       createFile(tmpDir, 'script/env_check', [
         '#!/usr/bin/env bash',
-        'if [ "$TURBOCOMMIT_DISABLED" = "1" ]; then',
+        'if [ "$PROVE_IT_TEST_SENTINEL_ENV" = "1" ]; then',
         '  exit 0',
         'else',
-        '  echo "TURBOCOMMIT_DISABLED was not set" >&2',
+        '  echo "PROVE_IT_TEST_SENTINEL_ENV was not set" >&2',
         '  exit 1',
         'fi'
       ].join('\n'))

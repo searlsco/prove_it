@@ -73,22 +73,17 @@ async function invokeDispatcher (hookSpec, input, options = {}) {
   const { dispatch } = require('../../lib/dispatcher/claude')
   const event = hookSpec.split(':')[1]
 
-  // Snapshot env and replace with test vars + essential system vars.
-  // Mirrors invokeHook's cleanEnv while keeping vars child processes need.
+  // Snapshot env for full restore after dispatch.
+  // Clear vars that prove_it's hook runner injects into the process chain.
   const envSnapshot = { ...process.env }
-  const SYSTEM_VARS = [
-    'SHELL', 'TERM', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'LC_CTYPE',
-    'TMPDIR', 'TMP', 'TEMP', 'COLORTERM', 'TERM_PROGRAM',
-    'SSH_AUTH_SOCK', 'XDG_RUNTIME_DIR', 'XDG_CONFIG_HOME'
-  ]
-  for (const k of Object.keys(process.env)) delete process.env[k]
-  for (const k of SYSTEM_VARS) {
-    if (envSnapshot[k]) process.env[k] = envSnapshot[k]
-  }
+  delete process.env.PROVE_IT_DISABLED
+  delete process.env.PROVE_IT_SKIP_NOTIFY
 
   const envOverrides = { ...options.env }
   if (options.projectDir) envOverrides.CLAUDE_PROJECT_DIR = options.projectDir
-  Object.assign(process.env, envOverrides)
+  for (const [k, v] of Object.entries(envOverrides)) {
+    process.env[k] = v
+  }
 
   // Intercept process.exit
   const origExit = process.exit
