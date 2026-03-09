@@ -293,6 +293,13 @@ describe('classifyVerdict with mock claude', () => {
     teardown()
   })
 
+  it('finds first verdict token anywhere in classifier response', () => {
+    shimClaude('printf "I shouldn\'t fail them.\\n\\nI think it\'s a PASS\\n\\nbut maybe SKIP"')
+    const result = classifyVerdict('Some reviewer output')
+    assert.deepStrictEqual(result, { verdict: 'PASS' })
+    teardown()
+  })
+
   it('returns error when classifier outputs a non-verdict sentence', () => {
     shimClaude('echo "I cannot determine the verdict from this output."')
     const result = classifyVerdict('Some gibberish output')
