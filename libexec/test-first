@@ -4,7 +4,7 @@
  *
  * Reads hook input JSON from stdin (session_id, params).
  * Checks the consecutiveUntestedEditCount from session state.
- * When count >= threshold, outputs a reminder on stdout and exits 0.
+ * When count >= untestedEditLimit, outputs a reminder on stdout and exits 0.
  * Otherwise outputs nothing and exits 0.
  */
 const { getConsecutiveUntestedEditCount } = require('../lib/session')
@@ -18,10 +18,10 @@ if (require.main === module) {
     try { input = JSON.parse(raw) } catch {}
 
     const sessionId = input.session_id || null
-    const threshold = input.params?.threshold || 3
+    const untestedEditLimit = input.params?.untestedEditLimit || 3
 
     const count = getConsecutiveUntestedEditCount(sessionId)
-    if (count >= threshold) {
+    if (count >= untestedEditLimit) {
       process.stdout.write(
         `prove_it: You've edited ${count} source files without writing or running tests. Consider writing a failing test before continuing.`
       )

@@ -180,7 +180,7 @@ describe('test-first reminder via additionalContext', () => {
     if (tmpDir) cleanupTempDir(tmpDir)
   })
 
-  it('emits additionalContext when counter meets threshold', () => {
+  it('emits additionalContext when counter meets untestedEditLimit', () => {
     writeConfig(tmpDir, makeConfig([
       {
         type: 'claude',
@@ -192,7 +192,7 @@ describe('test-first reminder via additionalContext', () => {
             type: 'script',
             command: path.join(__dirname, '..', '..', 'libexec', 'test-first'),
             quiet: true,
-            params: { threshold: 2 }
+            params: { untestedEditLimit: 2 }
           }
         ]
       }
@@ -203,7 +203,7 @@ describe('test-first reminder via additionalContext', () => {
 
     createFile(tmpDir, 'src/app.js', 'hello\n')
 
-    // Set counter above threshold
+    // Set counter above untestedEditLimit
     saveSessionState(SESSION_ID, 'consecutiveUntestedEditCount', 3)
 
     const result = invokeHook('claude:PreToolUse', {
@@ -224,7 +224,7 @@ describe('test-first reminder via additionalContext', () => {
       `additionalContext should contain reminder text, got: ${ctx}`)
   })
 
-  it('does not emit additionalContext when counter is below threshold', () => {
+  it('does not emit additionalContext when counter is below untestedEditLimit', () => {
     writeConfig(tmpDir, makeConfig([
       {
         type: 'claude',
@@ -236,7 +236,7 @@ describe('test-first reminder via additionalContext', () => {
             type: 'script',
             command: path.join(__dirname, '..', '..', 'libexec', 'test-first'),
             quiet: true,
-            params: { threshold: 5 }
+            params: { untestedEditLimit: 5 }
           }
         ]
       }
@@ -247,7 +247,7 @@ describe('test-first reminder via additionalContext', () => {
 
     createFile(tmpDir, 'src/app.js', 'hello\n')
 
-    // Set counter below threshold
+    // Set counter below untestedEditLimit
     saveSessionState(SESSION_ID, 'consecutiveUntestedEditCount', 2)
 
     const result = invokeHook('claude:PreToolUse', {
@@ -260,7 +260,7 @@ describe('test-first reminder via additionalContext', () => {
     assert.strictEqual(result.exitCode, 0)
     const ctx = result.output?.hookSpecificOutput?.additionalContext
     assert.ok(!ctx || !ctx.includes('source files without'),
-      'Should not have reminder text when below threshold')
+      'Should not have reminder text when below untestedEditLimit')
   })
 })
 

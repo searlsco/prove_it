@@ -28,10 +28,10 @@ describe('libexec/test-first', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  it('outputs nothing when count is below threshold', () => {
+  it('outputs nothing when count is below untestedEditLimit', () => {
     saveSessionState(SESSION_ID, 'consecutiveUntestedEditCount', 1)
     const result = spawnSync('node', [scriptPath], {
-      input: JSON.stringify({ session_id: SESSION_ID, params: { threshold: 3 } }),
+      input: JSON.stringify({ session_id: SESSION_ID, params: { untestedEditLimit: 3 } }),
       encoding: 'utf8',
       env: { ...process.env }
     })
@@ -39,10 +39,10 @@ describe('libexec/test-first', () => {
     assert.strictEqual(result.stdout, '')
   })
 
-  it('outputs reminder when count meets threshold', () => {
+  it('outputs reminder when count meets untestedEditLimit', () => {
     saveSessionState(SESSION_ID, 'consecutiveUntestedEditCount', 3)
     const result = spawnSync('node', [scriptPath], {
-      input: JSON.stringify({ session_id: SESSION_ID, params: { threshold: 3 } }),
+      input: JSON.stringify({ session_id: SESSION_ID, params: { untestedEditLimit: 3 } }),
       encoding: 'utf8',
       env: { ...process.env }
     })
@@ -51,10 +51,10 @@ describe('libexec/test-first', () => {
     assert.ok(result.stdout.includes('writing a failing test'))
   })
 
-  it('outputs reminder when count exceeds threshold', () => {
+  it('outputs reminder when count exceeds untestedEditLimit', () => {
     saveSessionState(SESSION_ID, 'consecutiveUntestedEditCount', 5)
     const result = spawnSync('node', [scriptPath], {
-      input: JSON.stringify({ session_id: SESSION_ID, params: { threshold: 3 } }),
+      input: JSON.stringify({ session_id: SESSION_ID, params: { untestedEditLimit: 3 } }),
       encoding: 'utf8',
       env: { ...process.env }
     })
@@ -62,7 +62,7 @@ describe('libexec/test-first', () => {
     assert.ok(result.stdout.includes('edited 5 source files'))
   })
 
-  it('uses default threshold of 3 when not specified', () => {
+  it('uses default untestedEditLimit of 3 when not specified', () => {
     saveSessionState(SESSION_ID, 'consecutiveUntestedEditCount', 3)
     const result = spawnSync('node', [scriptPath], {
       input: JSON.stringify({ session_id: SESSION_ID }),
