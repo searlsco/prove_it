@@ -73,15 +73,16 @@ async function invokeDispatcher (hookSpec, input, options = {}) {
   const { dispatch } = require('../../lib/dispatcher/claude')
   const event = hookSpec.split(':')[1]
 
-  // Snapshot env for full restore after dispatch.
-  // Clear vars that prove_it's hook runner injects into the process chain.
-  const envSnapshot = { ...process.env }
-  delete process.env.PROVE_IT_DISABLED
-  delete process.env.PROVE_IT_SKIP_NOTIFY
-
+  // Save and override env vars.
+  // Clear prove_it guard vars that the parent script runner injects.
+  const savedEnv = {}
+  for (const k of ['PROVE_IT_DISABLED', 'PROVE_IT_SKIP_NOTIFY']) {
+    if (k in process.env) { savedEnv[k] = process.env[k]; delete process.env[k] }
+  }
   const envOverrides = { ...options.env }
   if (options.projectDir) envOverrides.CLAUDE_PROJECT_DIR = options.projectDir
   for (const [k, v] of Object.entries(envOverrides)) {
+    savedEnv[k] = process.env[k]
     process.env[k] = v
   }
 
@@ -101,11 +102,10 @@ async function invokeDispatcher (hookSpec, input, options = {}) {
   } finally {
     process.exit = origExit
     process.stdout.write = origWrite
-    // Restore env: remove any keys dispatch added, restore original values
-    for (const k of Object.keys(process.env)) {
-      if (!(k in envSnapshot)) delete process.env[k]
+    for (const [k, v] of Object.entries(savedEnv)) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
     }
-    Object.assign(process.env, envSnapshot)
   }
 
   let output = null
