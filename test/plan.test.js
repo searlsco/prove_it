@@ -8,9 +8,7 @@ const {
   detectLastNumberedHeading,
   buildSignalBlock,
   findPlanFile,
-  appendPlanBlock,
-  TDD_MARKER,
-  TDD_BLOCK
+  appendPlanBlock
 } = require('../lib/plan')
 
 describe('detectLastNumberedHeading', () => {
@@ -142,15 +140,5 @@ describe('appendPlanBlock', () => {
     })
     const content = fs.readFileSync(filePath, 'utf8')
     assert.ok(content.endsWith('Do the thing.\n'), 'Block should be appended at end')
-  })
-})
-
-describe('TDD_BLOCK', () => {
-  it('contains TDD_MARKER', () => {
-    assert.ok(TDD_BLOCK.includes(TDD_MARKER))
-  })
-
-  it('mentions red-green TDD', () => {
-    assert.ok(TDD_BLOCK.includes('red-green TDD'))
   })
 })
