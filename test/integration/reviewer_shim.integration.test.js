@@ -286,6 +286,13 @@ describe('classifyVerdict with mock claude', () => {
     teardown()
   })
 
+  it('extracts verdict when classifier outputs verdict with trailing explanation', () => {
+    shimClaude('printf "FAIL\\n\\nThe review identifies critical coverage gaps."')
+    const result = classifyVerdict('Some reviewer output without a verdict line')
+    assert.deepStrictEqual(result, { verdict: 'FAIL' })
+    teardown()
+  })
+
   it('returns error when classifier outputs a non-verdict sentence', () => {
     shimClaude('echo "I cannot determine the verdict from this output."')
     const result = classifyVerdict('Some gibberish output')
