@@ -7,6 +7,11 @@
     "script/**/*",
     "example/**/*.js"
   ],
+  "tests": [
+    "**/*.{test,spec}.*",
+    "**/*_{test,spec}.*",
+    "**/{test,tests,spec,specs,__tests__}/**/*.*"
+  ],
   "hooks": [
     {
       "type": "claude",
@@ -29,7 +34,40 @@
           "name": "lock-config",
           "type": "script",
           "command": "$(prove_it prefix)/libexec/guard-config",
-          "quiet": true
+          "quiet": true,
+          "params": {
+            "paths": [
+              ".claude/prove_it/config.json",
+              ".claude/prove_it/config.local.json"
+            ]
+          }
+        },
+        {
+          "name": "test-first",
+          "type": "script",
+          "command": "$(prove_it prefix)/libexec/test-first",
+          "quiet": true,
+          "params": {
+            "untestedEditLimit": 3
+          }
+        }
+      ]
+    },
+    {
+      "type": "claude",
+      "event": "PreToolUse",
+      "matcher": "ExitPlanMode",
+      "tasks": [
+        {
+          "name": "inject-plan",
+          "type": "script",
+          "command": "$(prove_it prefix)/libexec/inject-plan",
+          "quiet": true,
+          "params": {
+            "position": "after-title",
+            "marker": "red-green TDD",
+            "block": "## Development approach\n\nFollow red-green TDD for each change:\n\n- Write a test that expresses the behavior you're about to implement\n- Run it and verify it fails for the reason you expect\n- Write the minimum source code to make the test pass\n- Re-run the test in isolation and confirm it passes (or the failure message changes as expected) before moving on\n"
+          }
         }
       ]
     },
@@ -75,9 +113,20 @@
           "promptType": "skill",
           "prompt": "prove-done",
           "model": "opus",
-          "ruleFile": ".claude/rules/testing.md",
+          "ruleFile": ".claude/rules/done.md",
           "when": {
             "signal": "done"
+          }
+        },
+        {
+          "name": "approach-review",
+          "type": "agent",
+          "parallel": true,
+          "promptType": "skill",
+          "prompt": "prove-approach",
+          "model": "sonnet",
+          "when": {
+            "signal": "stuck"
           }
         }
       ]
@@ -97,5 +146,5 @@
       ]
     }
   ],
-  "initSeed": "1fbe76cad04c"
+  "initSeed": "9a8b35d72220"
 }

@@ -414,7 +414,7 @@ async function cmdInit (options = {}) {
   guardProjectDir('init')
   const { initProject, overwriteTeamConfig, isTrackedByGit } = require('./lib/init')
   const repoRoot = process.cwd()
-  const { preservedSources } = options
+  const { preservedSources, preservedTests } = options
 
   const args = process.argv.slice(3)
   const { flags, hasExplicitFlags } = parseInitFlags(args)
@@ -442,18 +442,20 @@ async function cmdInit (options = {}) {
       flags.defaultChecks = await askYesNo(rl, 'Include default checks (code review, coverage review)?')
     }
 
-    const results = initProject(repoRoot, { ...flags, preservedSources })
+    const results = initProject(repoRoot, { ...flags, preservedSources, preservedTests })
 
     // Handle edited config—prompt or respect --overwrite/--no-overwrite
     let overwritten = false
     let sourcesPreserved = results.teamConfig.sourcesPreserved || false
+    let testsPreserved = results.teamConfig.testsPreserved || false
     if (results.teamConfig.edited) {
       if (flags.overwrite === true) {
-        const owResult = overwriteTeamConfig(repoRoot, { ...flags, preservedSources })
+        const owResult = overwriteTeamConfig(repoRoot, { ...flags, preservedSources, preservedTests })
         overwritten = true
         if (owResult.sourcesPreserved) sourcesPreserved = true
+        if (owResult.testsPreserved) testsPreserved = true
       } else if (flags.overwrite === null && rl) {
-        const { buildConfig: buildCfg, configHash: cfgHash, hasCustomSources } = require('./lib/config')
+        const { buildConfig: buildCfg, configHash: cfgHash, hasCustomSources, hasCustomTests } = require('./lib/config')
         const teamConfigPath = path.join(repoRoot, '.claude', 'prove_it', 'config.json')
         const existingContent = fs.readFileSync(teamConfigPath, 'utf8')
         const existingCfg = JSON.parse(existingContent)
@@ -461,8 +463,11 @@ async function cmdInit (options = {}) {
         // Build proposed config (mirrors overwriteTeamConfig logic)
         let sources = preservedSources
         if (!sources && hasCustomSources(existingCfg)) sources = existingCfg.sources
+        let tests = preservedTests
+        if (!tests && hasCustomTests(existingCfg)) tests = existingCfg.tests
         const proposedCfg = buildCfg({ gitHooks: flags.gitHooks, defaultChecks: flags.defaultChecks })
         if (sources) proposedCfg.sources = sources
+        if (tests) proposedCfg.tests = tests
         proposedCfg.initSeed = cfgHash(proposedCfg)
         const proposedContent = JSON.stringify(proposedCfg, null, 2) + '\n'
 
@@ -483,6 +488,7 @@ async function cmdInit (options = {}) {
           fs.writeFileSync(teamConfigPath, ensureTrailingNewline(result.content))
           overwritten = true
           if (sources) sourcesPreserved = true
+          if (tests) testsPreserved = true
         }
       }
       // flags.overwrite === false or user said no → keep existing
@@ -506,6 +512,9 @@ async function cmdInit (options = {}) {
 
     if (sourcesPreserved) {
       log('  Preserved: sources globs from previous config')
+    }
+    if (testsPreserved) {
+      log('  Preserved: tests globs from previous config')
     }
 
     if (results.localConfig.created) {
@@ -1317,12 +1326,13 @@ function main () {
       cmdUpgrade()
       break
     case 'reinit': {
-      const { hasCustomSources } = require('./lib/config')
+      const { hasCustomSources, hasCustomTests } = require('./lib/config')
       const cfgPath = path.join(process.cwd(), '.claude', 'prove_it', 'config.json')
       const existing = loadJson(cfgPath)
       const preservedSources = hasCustomSources(existing) ? existing.sources : null
+      const preservedTests = hasCustomTests(existing) ? existing.tests : null
       cmdDeinit()
-      cmdInit({ preservedSources }).catch(err => {
+      cmdInit({ preservedSources, preservedTests }).catch(err => {
         console.error(`prove_it reinit failed: ${err.message}`)
         process.exit(1)
       })

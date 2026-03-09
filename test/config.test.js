@@ -227,7 +227,13 @@ describe('hasCustomTests', () => {
     assert.strictEqual(hasCustomTests({ tests: null }), false)
   })
 
-  it('returns true when tests are configured', () => {
+  it('returns false for default tests globs', () => {
+    const { buildConfig } = require('../lib/config')
+    const defaults = buildConfig({ gitHooks: false, defaultChecks: false })
+    assert.strictEqual(hasCustomTests({ tests: defaults.tests }), false)
+  })
+
+  it('returns true when tests are customized', () => {
     assert.strictEqual(hasCustomTests({ tests: ['**/*.test.js'] }), true)
   })
 })

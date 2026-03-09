@@ -3,7 +3,7 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 const { freshRepo } = require('../helpers')
-const { configHash } = require('../../lib/config')
+const { configHash, buildConfig } = require('../../lib/config')
 const {
   isScriptTestStub, initProject, overwriteTeamConfig,
   installGitHookShim, removeGitHookShim,
@@ -294,6 +294,21 @@ describe('init integration', () => {
       r = initProject(tmpDir, { gitHooks: false, defaultChecks: true })
       assert.ok(r.teamConfig.upToDate && !r.teamConfig.upgraded)
 
+      // tests-only change → auto-upgraded with tests preserved
+      const tcfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      tcfg.tests = ['test/**/*.spec.js']
+      fs.writeFileSync(cfgPath, JSON.stringify(tcfg, null, 2) + '\n')
+      r = initProject(tmpDir, { gitHooks: false, defaultChecks: true })
+      assert.ok(r.teamConfig.upgraded && !r.teamConfig.edited)
+      assert.ok(r.teamConfig.testsPreserved)
+      const testsCfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      assert.deepStrictEqual(testsCfg.tests, ['test/**/*.spec.js'])
+      assert.strictEqual(testsCfg.initSeed, configHash(testsCfg))
+
+      // Re-init with same flags → upToDate after tests change
+      r = initProject(tmpDir, { gitHooks: false, defaultChecks: true })
+      assert.ok(r.teamConfig.upToDate && !r.teamConfig.upgraded)
+
       // edited (non-sources modification)
       const cfg2 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
       cfg2.hooks = []
@@ -375,6 +390,93 @@ describe('init integration', () => {
       })
       const updated = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
       assert.deepStrictEqual(updated.sources, ['lib/**/*.ts'])
+    })
+
+    it('preserves custom tests from existing config', () => {
+      initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      cfg.tests = ['test/**/*.spec.js']
+      fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
+
+      const result = overwriteTeamConfig(tmpDir, { gitHooks: false, defaultChecks: false })
+      const updated = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      assert.deepStrictEqual(updated.tests, ['test/**/*.spec.js'])
+      assert.strictEqual(updated.initSeed, configHash(updated))
+      assert.strictEqual(result.testsPreserved, true)
+    })
+
+    it('does not preserve default tests', () => {
+      initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+
+      const result = overwriteTeamConfig(tmpDir, { gitHooks: false, defaultChecks: false })
+      const updated = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      assert.deepStrictEqual(updated.tests, buildConfig({ gitHooks: false, defaultChecks: false }).tests)
+      assert.strictEqual(result.testsPreserved, false)
+    })
+
+    it('uses explicitly passed preservedTests over auto-detected', () => {
+      initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      cfg.tests = ['test/**/*.spec.js']
+      fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n')
+
+      overwriteTeamConfig(tmpDir, {
+        gitHooks: false,
+        defaultChecks: false,
+        preservedTests: ['spec/**/*.rb']
+      })
+      const updated = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      assert.deepStrictEqual(updated.tests, ['spec/**/*.rb'])
+    })
+  })
+
+  // ---------- Story: initProject with preservedTests ----------
+  describe('initProject preservedTests', () => {
+    it('injects preservedTests into fresh config with correct initSeed', () => {
+      const results = initProject(tmpDir, {
+        gitHooks: false,
+        defaultChecks: false,
+        preservedTests: ['spec/**/*.rb']
+      })
+      assert.ok(results.teamConfig.created)
+      assert.strictEqual(results.teamConfig.testsPreserved, true)
+
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      assert.deepStrictEqual(cfg.tests, ['spec/**/*.rb'])
+      assert.strictEqual(cfg.initSeed, configHash(cfg))
+    })
+
+    it('does not set testsPreserved when no preservedTests given', () => {
+      const results = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
+      assert.ok(results.teamConfig.created)
+      assert.strictEqual(results.teamConfig.testsPreserved, undefined)
+    })
+
+    it('auto-upgrade preserves tests set via preservedTests', () => {
+      const r1 = initProject(tmpDir, {
+        gitHooks: false,
+        defaultChecks: false,
+        preservedTests: ['test/**/*.spec.js']
+      })
+      assert.ok(r1.teamConfig.created)
+      const cfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.json')
+
+      // Re-init with different flags → auto-upgrade should preserve tests
+      const r2 = initProject(tmpDir, { gitHooks: false, defaultChecks: true })
+      assert.ok(r2.teamConfig.upgraded)
+      assert.ok(r2.teamConfig.testsPreserved)
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      assert.deepStrictEqual(cfg.tests, ['test/**/*.spec.js'])
+      assert.strictEqual(cfg.initSeed, configHash(cfg))
+
+      // Re-init with same flags → upToDate, not a spurious re-upgrade
+      const r3 = initProject(tmpDir, { gitHooks: false, defaultChecks: true })
+      assert.ok(r3.teamConfig.upToDate)
+      assert.ok(!r3.teamConfig.upgraded)
     })
   })
 
