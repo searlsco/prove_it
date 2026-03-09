@@ -8,7 +8,7 @@ const os = require('os')
 describe('libexec/inject-plan', () => {
   let tmpDir
   let origHome
-  const scriptPath = path.join(__dirname, '..', 'libexec', 'inject-plan')
+  const scriptPath = path.join(__dirname, '..', '..', 'libexec', 'inject-plan')
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_inject_plan_'))
