@@ -446,7 +446,7 @@ async function cmdInit (options = {}) {
 
     // Handle edited config—prompt or respect --overwrite/--no-overwrite
     let overwritten = false
-    let preserved = {}
+    const preserved = {}
     for (const key of ['sourcesPreserved', 'testsPreserved']) {
       if (results.teamConfig[key]) preserved[key] = true
     }
@@ -515,10 +515,10 @@ async function cmdInit (options = {}) {
       log(`  Exists:  ${results.teamConfig.path}`)
     }
 
-    if (sourcesPreserved) {
+    if (preserved.sourcesPreserved) {
       log('  Preserved: sources globs from previous config')
     }
-    if (testsPreserved) {
+    if (preserved.testsPreserved) {
       log('  Preserved: tests globs from previous config')
     }
 
@@ -1331,13 +1331,18 @@ function main () {
       cmdUpgrade()
       break
     case 'reinit': {
-      const { hasCustomSources, hasCustomTests } = require('./lib/config')
+      const { hasCustomValue } = require('./lib/config')
       const cfgPath = path.join(process.cwd(), '.claude', 'prove_it', 'config.json')
       const existing = loadJson(cfgPath)
-      const preservedSources = hasCustomSources(existing) ? existing.sources : null
-      const preservedTests = hasCustomTests(existing) ? existing.tests : null
+      const reinitOptions = {}
+      for (const key of ['sources', 'tests']) {
+        if (hasCustomValue(key, existing)) {
+          const camel = 'preserved' + key.charAt(0).toUpperCase() + key.slice(1)
+          reinitOptions[camel] = existing[key]
+        }
+      }
       cmdDeinit()
-      cmdInit({ preservedSources, preservedTests }).catch(err => {
+      cmdInit(reinitOptions).catch(err => {
         console.error(`prove_it reinit failed: ${err.message}`)
         process.exit(1)
       })

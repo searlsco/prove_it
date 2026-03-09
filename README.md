@@ -128,6 +128,7 @@ prove_it is configured with a `hooks` array in `.claude/prove_it/config.json`. E
 {
   "enabled": true,
   "sources": ["src/**/*.js", "lib/**/*.js", "test/**/*.js"],
+  "tests": ["test/**/*.test.js"],
   "hooks": [
     {
       "type": "claude",
@@ -148,6 +149,14 @@ Config files merge (later overrides earlier):
 1. `~/.claude/prove_it/config.json`—global defaults
 2. `.claude/prove_it/config.json`—project config (commit this)
 3. `.claude/prove_it/config.local.json`—local overrides (gitignored, per-developer)
+
+### Source and test globs
+
+`sources` defines which files prove_it considers "your code" — these globs drive conditions like `sourcesModifiedSinceLastRun`, `sourceFilesEditedThisTurn`, and `linesChanged`. Test files should be included in `sources` so that edits to tests are tracked as source changes.
+
+`tests` identifies which source files are test files. This drives the `test-first` check, which counts consecutive edits to non-test files and nudges the agent to write tests. `tests` is typically a subset of `sources` — it doesn't need to be disjoint.
+
+Both `sources` and `tests` are preserved across `prove_it init` / `reinit` when customized, so you won't lose your globs on upgrade.
 
 ### Lifecycle events
 
