@@ -1,0 +1,38 @@
+#!/usr/bin/env node
+/**
+ * inject-plan — Inject a block into a Claude plan file.
+ *
+ * Generic plan injection script. Reads hook input JSON from stdin,
+ * finds the plan file matching tool_input.plan, and inserts
+ * params.block at params.position (idempotent via params.marker).
+ *
+ * Params (via input.params):
+ *   position — 'after-title' or 'before-verification'
+ *   marker   — idempotency marker string
+ *   block    — text to inject
+ */
+const { findPlanFile, appendPlanBlock } = require('../lib/plan')
+
+if (require.main === module) {
+  let raw = ''
+  process.stdin.setEncoding('utf8')
+  process.stdin.on('data', chunk => { raw += chunk })
+  process.stdin.on('end', () => {
+    let input = {}
+    try { input = JSON.parse(raw) } catch {}
+
+    const planText = input.tool_input?.plan || ''
+    const { position, marker, block } = input.params || {}
+
+    if (!planText.trim() || !position || !marker || !block) {
+      process.exit(0)
+    }
+
+    const filePath = findPlanFile(planText.trim())
+    if (!filePath) process.exit(0)
+
+    appendPlanBlock(filePath, { marker, block, position })
+    process.exit(0)
+  })
+  process.stdin.resume()
+}
