@@ -238,13 +238,13 @@ Quiet tasks don't emit SKIP or PASS entries to the session log. FAIL and BOOM en
 
 ### Task timeout
 
-Set `timeout` (in milliseconds) to override the default execution timeout:
+Set `timeout` (in milliseconds) to limit how long a task can run:
 
 ```json
 { "name": "slow-tests", "type": "script", "command": "./script/test", "timeout": 300000 }
 ```
 
-Defaults: 60s for script tasks, 120s for agent tasks, 30s for env tasks.
+Tasks have no timeout by default — they run until completion. Set an explicit timeout if you need to guard against runaway processes.
 
 ### Matchers and triggers
 
