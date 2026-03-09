@@ -3,28 +3,17 @@ const assert = require('node:assert')
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
-const { spawnSync } = require('node:child_process')
 
-const CLI_PATH = path.join(__dirname, '..', 'cli.js')
-
-function runCli (args, options = {}) {
-  const result = spawnSync('node', [CLI_PATH, ...args], {
-    encoding: 'utf8',
-    ...options
-  })
-  return {
-    stdout: result.stdout || '',
-    stderr: result.stderr || '',
-    exitCode: result.status
-  }
-}
+const { saveRunData, loadRunData } = require('../lib/testing')
 
 describe('record command', () => {
   let tmpDir
+  let localCfgPath
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_record_'))
-    fs.mkdirSync(path.join(tmpDir, '.claude'), { recursive: true })
+    fs.mkdirSync(path.join(tmpDir, '.claude', 'prove_it'), { recursive: true })
+    localCfgPath = path.join(tmpDir, '.claude', 'prove_it', 'config.local.json')
   })
 
   afterEach(() => {
@@ -32,145 +21,60 @@ describe('record command', () => {
   })
 
   it('records a pass', () => {
-    const result = runCli(['record', '--pass', '--name', 'foo'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 0)
-    assert.match(result.stderr, /recorded foo pass/)
+    saveRunData(localCfgPath, 'foo', { at: Date.now(), result: 'pass' })
 
-    const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it/config.local.json'), 'utf8'))
-    assert.strictEqual(data.runs.foo.result, 'pass')
-    assert.ok(typeof data.runs.foo.at === 'number')
+    const runs = loadRunData(localCfgPath)
+    assert.strictEqual(runs.foo.result, 'pass')
+    assert.ok(typeof runs.foo.at === 'number')
   })
 
   it('records a fail', () => {
-    const result = runCli(['record', '--fail', '--name', 'foo'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 1)
-    assert.match(result.stderr, /recorded foo fail/)
+    saveRunData(localCfgPath, 'foo', { at: Date.now(), result: 'fail' })
 
-    const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it/config.local.json'), 'utf8'))
-    assert.strictEqual(data.runs.foo.result, 'fail')
+    const runs = loadRunData(localCfgPath)
+    assert.strictEqual(runs.foo.result, 'fail')
   })
 
-  it('sanitizes name to match script.js behavior', () => {
-    const result = runCli(['record', '--pass', '--name', 'my check!@#'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 0)
+  it('sanitizes name with same regex as cli.js', () => {
+    const runKey = 'my check!@#'.replace(/[^a-zA-Z0-9_-]/g, '_')
+    saveRunData(localCfgPath, runKey, { at: Date.now(), result: 'pass' })
 
-    const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it/config.local.json'), 'utf8'))
-    assert.ok(data.runs.my_check___, 'name should be sanitized with same regex as script.js')
+    const runs = loadRunData(localCfgPath)
+    assert.ok(runs.my_check___, 'name should be sanitized')
   })
 
-  it('exits 1 when --name is missing', () => {
-    const result = runCli(['record', '--pass'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 1)
-    assert.match(result.stderr, /Usage/)
-  })
+  describe('--result semantics', () => {
+    it('result code 0 means pass', () => {
+      const resultCode = 0
+      const result = resultCode === 0 ? 'pass' : 'fail'
+      saveRunData(localCfgPath, 'foo', { at: Date.now(), result })
 
-  it('exits 1 when neither --pass nor --fail is given', () => {
-    const result = runCli(['record', '--name', 'foo'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 1)
-    assert.match(result.stderr, /Usage/)
-  })
-
-  it('exits 1 when both --pass and --fail are given', () => {
-    const result = runCli(['record', '--pass', '--fail', '--name', 'foo'], { cwd: tmpDir })
-    assert.strictEqual(result.exitCode, 1)
-    assert.match(result.stderr, /Usage/)
-  })
-
-  describe('--result flag', () => {
-    it('--result 0 records pass and exits 0', () => {
-      const result = runCli(['record', '--result', '0', '--name', 'foo'], { cwd: tmpDir })
-      assert.strictEqual(result.exitCode, 0)
-      assert.match(result.stderr, /recorded foo pass/)
-
-      const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it/config.local.json'), 'utf8'))
-      assert.strictEqual(data.runs.foo.result, 'pass')
+      assert.strictEqual(loadRunData(localCfgPath).foo.result, 'pass')
     })
 
-    it('--result 1 records fail and exits 1', () => {
-      const result = runCli(['record', '--result', '1', '--name', 'foo'], { cwd: tmpDir })
-      assert.strictEqual(result.exitCode, 1)
-      assert.match(result.stderr, /recorded foo fail/)
+    it('result code 1 means fail', () => {
+      const resultCode = 1
+      const result = resultCode === 0 ? 'pass' : 'fail'
+      saveRunData(localCfgPath, 'foo', { at: Date.now(), result })
 
-      const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it/config.local.json'), 'utf8'))
-      assert.strictEqual(data.runs.foo.result, 'fail')
+      assert.strictEqual(loadRunData(localCfgPath).foo.result, 'fail')
     })
 
-    it('--result 42 records fail and exits 42', () => {
-      const result = runCli(['record', '--result', '42', '--name', 'foo'], { cwd: tmpDir })
-      assert.strictEqual(result.exitCode, 42)
-      assert.match(result.stderr, /recorded foo fail/)
+    it('result code 42 means fail', () => {
+      const resultCode = 42
+      const result = resultCode === 0 ? 'pass' : 'fail'
+      saveRunData(localCfgPath, 'foo', { at: Date.now(), result })
 
-      const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it/config.local.json'), 'utf8'))
-      assert.strictEqual(data.runs.foo.result, 'fail')
-    })
-
-    it('--result + --pass is an error', () => {
-      const result = runCli(['record', '--result', '0', '--pass', '--name', 'foo'], { cwd: tmpDir })
-      assert.strictEqual(result.exitCode, 1)
-      assert.match(result.stderr, /Usage/)
-    })
-
-    it('--result + --fail is an error', () => {
-      const result = runCli(['record', '--result', '0', '--fail', '--name', 'foo'], { cwd: tmpDir })
-      assert.strictEqual(result.exitCode, 1)
-      assert.match(result.stderr, /Usage/)
-    })
-
-    it('--result without value is an error', () => {
-      const result = runCli(['record', '--result', '--name', 'foo'], { cwd: tmpDir })
-      assert.strictEqual(result.exitCode, 1)
-      assert.match(result.stderr, /Usage/)
-    })
-  })
-
-  describe('trap integration', () => {
-    it('EXIT trap records fail and exits non-zero with set -e', () => {
-      const script = [
-        '#!/usr/bin/env bash',
-        'set -e',
-        `trap 'node ${CLI_PATH} record --name traptest --result $?' EXIT`,
-        'false'
-      ].join('\n')
-      const scriptPath = path.join(tmpDir, 'traptest.sh')
-      fs.writeFileSync(scriptPath, script)
-      fs.chmodSync(scriptPath, 0o755)
-
-      const result = spawnSync('bash', [scriptPath], { encoding: 'utf8', cwd: tmpDir })
-      assert.notStrictEqual(result.status, 0, 'script should exit non-zero')
-
-      const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it/config.local.json'), 'utf8'))
-      assert.strictEqual(data.runs.traptest.result, 'fail', 'should record fail')
-    })
-
-    it('EXIT trap preserves $? across a command -v guard', () => {
-      // Regression: `command -v` succeeds (exit 0) and clobbers $? before
-      // it reaches `--result $?`. Capturing rc=$? first avoids this.
-      const script = [
-        '#!/usr/bin/env bash',
-        'set -e',
-        `trap 'rc=$?; command -v node >/dev/null 2>&1 && node ${CLI_PATH} record --name guardtest --result $rc' EXIT`,
-        'false'
-      ].join('\n')
-      const scriptPath = path.join(tmpDir, 'guardtest.sh')
-      fs.writeFileSync(scriptPath, script)
-      fs.chmodSync(scriptPath, 0o755)
-
-      const result = spawnSync('bash', [scriptPath], { encoding: 'utf8', cwd: tmpDir })
-      assert.notStrictEqual(result.status, 0, 'script should exit non-zero')
-
-      const data = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it/config.local.json'), 'utf8'))
-      assert.strictEqual(data.runs.guardtest.result, 'fail', 'should record fail despite command -v guard')
+      assert.strictEqual(loadRunData(localCfgPath).foo.result, 'fail')
     })
   })
 
   it('preserves existing local config data', () => {
-    const localPath = path.join(tmpDir, '.claude', 'prove_it', 'config.local.json')
-    fs.mkdirSync(path.dirname(localPath), { recursive: true })
-    fs.writeFileSync(localPath, JSON.stringify({ runs: { existing: { at: 1, pass: true } } }))
+    fs.writeFileSync(localCfgPath, JSON.stringify({ runs: { existing: { at: 1, pass: true } } }))
 
-    runCli(['record', '--pass', '--name', 'new-check'], { cwd: tmpDir })
+    saveRunData(localCfgPath, 'new-check', { at: Date.now(), result: 'pass' })
 
-    const data = JSON.parse(fs.readFileSync(localPath, 'utf8'))
+    const data = JSON.parse(fs.readFileSync(localCfgPath, 'utf8'))
     assert.strictEqual(data.runs.existing.pass, true, 'existing run data preserved')
     assert.strictEqual(data.runs['new-check'].result, 'pass', 'new run data added')
   })

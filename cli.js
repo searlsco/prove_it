@@ -1187,36 +1187,25 @@ function cmdMonitor () {
 function cmdUpgrade () {
   const { spawnSync } = require('child_process')
   const { findProveItProject } = require('./lib/config')
+  const { runUpgradeSteps } = require('./lib/upgrade')
 
   const run = (cmd, args, opts) => {
     const r = spawnSync(cmd, args, { stdio: 'inherit', ...opts })
     return r.status === 0
   }
 
-  log('Upgrading prove_it...')
-  if (!run('brew', ['upgrade', 'searlsco/tap/prove_it'])) {
-    console.error('brew upgrade failed')
+  const result = runUpgradeSteps({
+    run,
+    cwd: process.cwd(),
+    homeDir: os.homedir(),
+    findProject: findProveItProject,
+    log
+  })
+
+  if (!result.ok) {
+    console.error(result.error)
     process.exit(1)
   }
-
-  log('Reinstalling hooks and skills...')
-  if (!run('prove_it', ['install'])) {
-    console.error('prove_it install failed')
-    process.exit(1)
-  }
-
-  const homeDir = os.homedir()
-  const projectDir = findProveItProject(process.cwd())
-  if (projectDir && projectDir !== homeDir) {
-    log(`Reinitializing project (${projectDir})...`)
-    if (!run('prove_it', ['init'], { cwd: projectDir })) {
-      console.error('prove_it init failed')
-      process.exit(1)
-    }
-  }
-
-  log('')
-  log('Upgrade complete. Restart Claude Code for changes to take effect.')
 }
 
 // ============================================================================

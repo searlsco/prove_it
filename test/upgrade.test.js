@@ -1,155 +1,137 @@
-const { describe, it, beforeEach, afterEach } = require('node:test')
+const { describe, it } = require('node:test')
 const assert = require('node:assert')
-const os = require('os')
-const fs = require('fs')
-const path = require('path')
-const { spawnSync } = require('child_process')
 
-const CLI_PATH = path.join(__dirname, '..', 'cli.js')
+const { runUpgradeSteps } = require('../lib/upgrade')
 
 describe('cmdUpgrade', () => {
-  let tmpDir
-  let binDir
-  let logFile
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_upgrade_'))
-    binDir = path.join(tmpDir, 'bin')
-    logFile = path.join(tmpDir, 'calls.log')
-    fs.mkdirSync(binDir)
-  })
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true })
-  })
-
-  function writeMock (name, exitCode) {
-    const scriptPath = path.join(binDir, name)
-    fs.writeFileSync(scriptPath, `#!/bin/sh\necho "${name} $*" >> "${logFile}"\nexit ${exitCode}\n`)
-    fs.chmodSync(scriptPath, 0o755)
-  }
-
-  function runUpgrade (cwd, extraEnv) {
-    const env = {
-      ...process.env,
-      PATH: binDir + ':' + process.env.PATH,
-      ...extraEnv
+  function makeRunner (results) {
+    const calls = []
+    const run = (cmd, args, opts) => {
+      calls.push({ cmd, args, opts })
+      const key = `${cmd} ${args[0]}`
+      return results[key] !== false
     }
-    return spawnSync('node', [CLI_PATH, 'upgrade'], {
-      encoding: 'utf8',
-      cwd,
-      env
-    })
-  }
-
-  function getCalls () {
-    try {
-      return fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean)
-    } catch {
-      return []
-    }
+    return { run, calls }
   }
 
   it('calls brew upgrade, prove_it install in order (no project)', () => {
-    writeMock('brew', 0)
-    writeMock('prove_it', 0)
+    const { run, calls } = makeRunner({})
+    const logs = []
 
-    const workDir = path.join(tmpDir, 'no-project')
-    fs.mkdirSync(workDir)
+    const result = runUpgradeSteps({
+      run,
+      cwd: '/no-project',
+      homeDir: '/home',
+      findProject: () => null,
+      log: (msg) => logs.push(msg)
+    })
 
-    const r = runUpgrade(workDir)
-    assert.strictEqual(r.status, 0, `stderr: ${r.stderr}`)
-
-    const calls = getCalls()
+    assert.strictEqual(result.ok, true)
     assert.strictEqual(calls.length, 2)
-    assert.match(calls[0], /^brew upgrade searlsco\/tap\/prove_it$/)
-    assert.match(calls[1], /^prove_it install$/)
-    assert.match(r.stdout, /Upgrade complete/)
+    assert.strictEqual(calls[0].cmd, 'brew')
+    assert.deepStrictEqual(calls[0].args, ['upgrade', 'searlsco/tap/prove_it'])
+    assert.strictEqual(calls[1].cmd, 'prove_it')
+    assert.deepStrictEqual(calls[1].args, ['install'])
+    assert.ok(logs.some(m => m.includes('Upgrade complete')))
   })
 
   it('calls prove_it init when project config is found', () => {
-    writeMock('brew', 0)
-    writeMock('prove_it', 0)
+    const { run, calls } = makeRunner({})
+    const logs = []
 
-    const projectDir = path.join(tmpDir, 'with-project')
-    fs.mkdirSync(path.join(projectDir, '.claude', 'prove_it'), { recursive: true })
-    fs.writeFileSync(path.join(projectDir, '.claude', 'prove_it', 'config.json'), '{}')
+    const result = runUpgradeSteps({
+      run,
+      cwd: '/project',
+      homeDir: '/home',
+      findProject: () => '/project',
+      log: (msg) => logs.push(msg)
+    })
 
-    const r = runUpgrade(projectDir)
-    assert.strictEqual(r.status, 0, `stderr: ${r.stderr}`)
-
-    const calls = getCalls()
+    assert.strictEqual(result.ok, true)
     assert.strictEqual(calls.length, 3)
-    assert.match(calls[2], /^prove_it init$/)
-    assert.match(r.stdout, /Reinitializing project/)
+    assert.strictEqual(calls[2].cmd, 'prove_it')
+    assert.deepStrictEqual(calls[2].args, ['init'])
+    assert.deepStrictEqual(calls[2].opts, { cwd: '/project' })
+    assert.ok(logs.some(m => m.includes('Reinitializing project')))
   })
 
   it('finds project config in ancestor directory', () => {
-    writeMock('brew', 0)
-    writeMock('prove_it', 0)
+    const { run, calls } = makeRunner({})
 
-    const projectDir = path.join(tmpDir, 'ancestor-project')
-    const subDir = path.join(projectDir, 'src', 'lib')
-    fs.mkdirSync(subDir, { recursive: true })
-    fs.mkdirSync(path.join(projectDir, '.claude', 'prove_it'), { recursive: true })
-    fs.writeFileSync(path.join(projectDir, '.claude', 'prove_it', 'config.json'), '{}')
+    const result = runUpgradeSteps({
+      run,
+      cwd: '/project/src/lib',
+      homeDir: '/home',
+      findProject: () => '/project',
+      log: () => {}
+    })
 
-    const r = runUpgrade(subDir)
-    assert.strictEqual(r.status, 0, `stderr: ${r.stderr}`)
-
-    const calls = getCalls()
+    assert.strictEqual(result.ok, true)
     assert.strictEqual(calls.length, 3)
-    assert.match(calls[2], /^prove_it init$/)
+    assert.deepStrictEqual(calls[2].opts, { cwd: '/project' })
   })
 
-  it('stops and exits 1 on brew upgrade failure', () => {
-    writeMock('brew', 1)
-    writeMock('prove_it', 0)
+  it('stops and returns error on brew upgrade failure', () => {
+    const { run, calls } = makeRunner({ 'brew upgrade': false })
 
-    const workDir = path.join(tmpDir, 'fail-upgrade')
-    fs.mkdirSync(workDir)
+    const result = runUpgradeSteps({
+      run,
+      cwd: '/work',
+      homeDir: '/home',
+      findProject: () => null,
+      log: () => {}
+    })
 
-    const r = runUpgrade(workDir)
-    assert.strictEqual(r.status, 1)
-    assert.match(r.stderr, /brew upgrade failed/)
-
-    const calls = getCalls()
+    assert.strictEqual(result.ok, false)
+    assert.strictEqual(result.error, 'brew upgrade failed')
     assert.strictEqual(calls.length, 1, 'should only call brew upgrade')
   })
 
-  it('stops and exits 1 on prove_it install failure', () => {
-    writeMock('brew', 0)
-    // prove_it mock that fails for install
-    const scriptPath = path.join(binDir, 'prove_it')
-    fs.writeFileSync(scriptPath, `#!/bin/sh
-echo "prove_it $*" >> "${logFile}"
-exit 1
-`)
-    fs.chmodSync(scriptPath, 0o755)
+  it('stops and returns error on prove_it install failure', () => {
+    const { run, calls } = makeRunner({ 'prove_it install': false })
 
-    const workDir = path.join(tmpDir, 'fail-install')
-    fs.mkdirSync(workDir)
+    const result = runUpgradeSteps({
+      run,
+      cwd: '/work',
+      homeDir: '/home',
+      findProject: () => null,
+      log: () => {}
+    })
 
-    const r = runUpgrade(workDir)
-    assert.strictEqual(r.status, 1)
-    assert.match(r.stderr, /prove_it install failed/)
-
-    const calls = getCalls()
+    assert.strictEqual(result.ok, false)
+    assert.strictEqual(result.error, 'prove_it install failed')
     assert.strictEqual(calls.length, 2, 'should call brew upgrade and prove_it install')
   })
 
   it('skips prove_it init when no project config exists', () => {
-    writeMock('brew', 0)
-    writeMock('prove_it', 0)
+    const { run, calls } = makeRunner({})
+    const logs = []
 
-    const workDir = path.join(tmpDir, 'no-config')
-    fs.mkdirSync(workDir)
+    const result = runUpgradeSteps({
+      run,
+      cwd: '/no-config',
+      homeDir: '/home',
+      findProject: () => null,
+      log: (msg) => logs.push(msg)
+    })
 
-    const r = runUpgrade(workDir)
-    assert.strictEqual(r.status, 0)
-
-    const calls = getCalls()
+    assert.strictEqual(result.ok, true)
     assert.strictEqual(calls.length, 2, 'should not call prove_it init')
-    assert.doesNotMatch(r.stdout, /Reinitializing/)
+    assert.ok(!logs.some(m => m.includes('Reinitializing')))
+  })
+
+  it('skips prove_it init when project dir equals home dir', () => {
+    const { run, calls } = makeRunner({})
+
+    const result = runUpgradeSteps({
+      run,
+      cwd: '/home',
+      homeDir: '/home',
+      findProject: () => '/home',
+      log: () => {}
+    })
+
+    assert.strictEqual(result.ok, true)
+    assert.strictEqual(calls.length, 2, 'should not call prove_it init for home dir')
   })
 })
