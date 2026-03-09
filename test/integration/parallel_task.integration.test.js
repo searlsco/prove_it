@@ -232,6 +232,40 @@ describe('parallel task execution', () => {
       `No orphaned result files should remain, got: ${remaining.join(', ')}`)
   })
 
+  it('parallel fail-fast: fast failure kills slow sibling immediately', () => {
+    // Fast task fails instantly; slow task sleeps 30s.
+    // With fail-fast, the hook should return in well under 30s.
+    const failScript = path.join(projectDir, 'script', 'fast-fail')
+    createFile(projectDir, 'script/fast-fail', '#!/usr/bin/env bash\necho "FAIL: instant" >&2\nexit 1\n')
+    makeExecutable(failScript)
+
+    const slowScript = path.join(projectDir, 'script', 'slow-pass')
+    createFile(projectDir, 'script/slow-pass', '#!/usr/bin/env bash\nsleep 30\nexit 0\n')
+    makeExecutable(slowScript)
+
+    writeConfig(projectDir, makeConfig([
+      {
+        type: 'claude',
+        event: 'Stop',
+        tasks: [
+          { name: 'fast-fail', type: 'script', parallel: true, command: './script/fast-fail' },
+          { name: 'slow-pass', type: 'script', parallel: true, command: './script/slow-pass' }
+        ]
+      }
+    ]))
+
+    const sessionId = 'test-parallel-failfast-' + Date.now()
+    const start = Date.now()
+    const r = invokeHook('claude:Stop', {
+      hook_event_name: 'Stop',
+      session_id: sessionId
+    }, { projectDir, env })
+    const elapsed = Date.now() - start
+
+    assert.strictEqual(r.output.decision, 'block', 'Should block on fast failure')
+    assert.ok(elapsed < 10000, `Should fail-fast in under 10s, took ${elapsed}ms`)
+  })
+
   it('parallel: true on SessionStart is ignored (runs synchronously)', () => {
     writeConfig(projectDir, makeConfig([
       {

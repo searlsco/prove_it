@@ -446,28 +446,34 @@ async function cmdInit (options = {}) {
 
     // Handle edited config—prompt or respect --overwrite/--no-overwrite
     let overwritten = false
-    let sourcesPreserved = results.teamConfig.sourcesPreserved || false
-    let testsPreserved = results.teamConfig.testsPreserved || false
+    let preserved = {}
+    for (const key of ['sourcesPreserved', 'testsPreserved']) {
+      if (results.teamConfig[key]) preserved[key] = true
+    }
     if (results.teamConfig.edited) {
       if (flags.overwrite === true) {
         const owResult = overwriteTeamConfig(repoRoot, { ...flags, preservedSources, preservedTests })
         overwritten = true
-        if (owResult.sourcesPreserved) sourcesPreserved = true
-        if (owResult.testsPreserved) testsPreserved = true
+        Object.assign(preserved, owResult)
       } else if (flags.overwrite === null && rl) {
-        const { buildConfig: buildCfg, configHash: cfgHash, hasCustomSources, hasCustomTests } = require('./lib/config')
+        const { buildConfig: buildCfg, configHash: cfgHash, hasCustomValue } = require('./lib/config')
         const teamConfigPath = path.join(repoRoot, '.claude', 'prove_it', 'config.json')
         const existingContent = fs.readFileSync(teamConfigPath, 'utf8')
         const existingCfg = JSON.parse(existingContent)
 
         // Build proposed config (mirrors overwriteTeamConfig logic)
-        let sources = preservedSources
-        if (!sources && hasCustomSources(existingCfg)) sources = existingCfg.sources
-        let tests = preservedTests
-        if (!tests && hasCustomTests(existingCfg)) tests = existingCfg.tests
+        const keyOverrides = {}
+        if (preservedSources) keyOverrides.sources = preservedSources
+        if (preservedTests) keyOverrides.tests = preservedTests
         const proposedCfg = buildCfg({ gitHooks: flags.gitHooks, defaultChecks: flags.defaultChecks })
-        if (sources) proposedCfg.sources = sources
-        if (tests) proposedCfg.tests = tests
+        const proposedPreserved = {}
+        for (const key of ['sources', 'tests']) {
+          const value = keyOverrides[key] || (hasCustomValue(key, existingCfg) ? existingCfg[key] : null)
+          if (value) {
+            proposedCfg[key] = value
+            proposedPreserved[`${key}Preserved`] = true
+          }
+        }
         proposedCfg.initSeed = cfgHash(proposedCfg)
         const proposedContent = JSON.stringify(proposedCfg, null, 2) + '\n'
 
@@ -487,8 +493,7 @@ async function cmdInit (options = {}) {
           // Write the accepted content (may be agent-merged, not the original proposed)
           fs.writeFileSync(teamConfigPath, ensureTrailingNewline(result.content))
           overwritten = true
-          if (sources) sourcesPreserved = true
-          if (tests) testsPreserved = true
+          Object.assign(preserved, proposedPreserved)
         }
       }
       // flags.overwrite === false or user said no → keep existing
