@@ -5,6 +5,7 @@ const path = require('path')
 
 const {
   invokeHook,
+  invokeDispatcher,
   createTempDir,
   cleanupTempDir,
   createFile,
@@ -33,7 +34,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
   })
 
   describe('Stop hook', () => {
-    it('blocks when fast tests fail', () => {
+    it('blocks when fast tests fail', async () => {
       createFastTestScript(tmpDir, false)
       writeConfig(tmpDir, makeConfig([
         {
@@ -45,7 +46,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         }
       ]))
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-stop-fail',
         cwd: tmpDir
@@ -63,7 +64,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         `systemMessage should mention failure, got: ${result.output.systemMessage}`)
     })
 
-    it('approves when fast tests pass', () => {
+    it('approves when fast tests pass', async () => {
       createFastTestScript(tmpDir, true)
       writeConfig(tmpDir, makeConfig([
         {
@@ -75,7 +76,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         }
       ]))
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-stop-pass',
         cwd: tmpDir
@@ -91,7 +92,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
   })
 
   describe('Pre-commit hook (PreToolUse)', () => {
-    it('blocks commit when tests fail', () => {
+    it('blocks commit when tests fail', async () => {
       createTestScript(tmpDir, false)
       writeConfig(tmpDir, makeConfig([
         {
@@ -105,7 +106,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         }
       ]))
 
-      const result = invokeHook('claude:PreToolUse', {
+      const result = await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "ship it"' },
@@ -127,7 +128,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         'denied PreToolUse should include systemMessage for user visibility')
     })
 
-    it('allows commit when tests pass', () => {
+    it('allows commit when tests pass', async () => {
       createTestScript(tmpDir, true)
       writeConfig(tmpDir, makeConfig([
         {
@@ -141,7 +142,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         }
       ]))
 
-      const result = invokeHook('claude:PreToolUse', {
+      const result = await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "ship it"' },
@@ -159,7 +160,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         'allowed PreToolUse should not include systemMessage')
     })
 
-    it('ignores non-matching Bash commands', () => {
+    it('ignores non-matching Bash commands', async () => {
       writeConfig(tmpDir, makeConfig([
         {
           type: 'claude',
@@ -172,7 +173,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         }
       ]))
 
-      const result = invokeHook('claude:PreToolUse', {
+      const result = await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'git status' },
@@ -186,7 +187,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
   })
 
   describe('SessionStart hook', () => {
-    it('emits structured JSON output', () => {
+    it('emits structured JSON output', async () => {
       createFile(tmpDir, 'hello_check.sh', '#!/usr/bin/env bash\necho "hello from session start"\nexit 0\n')
       const fs = require('fs')
       const path = require('path')
@@ -202,7 +203,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         }
       ]))
 
-      const result = invokeHook('claude:SessionStart', {
+      const result = await invokeDispatcher('claude:SessionStart', {
         hook_event_name: 'SessionStart',
         session_id: 'test-session',
         source: 'startup',
@@ -215,7 +216,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         'Should include script output in hookSpecificOutput.additionalContext')
     })
 
-    it('does not block on failing check—collects output instead', () => {
+    it('does not block on failing check—collects output instead', async () => {
       createFile(tmpDir, 'fail_check.sh', '#!/usr/bin/env bash\necho "startup failure" >&2\nexit 1\n')
       createFile(tmpDir, 'pass_check.sh', '#!/usr/bin/env bash\necho "session started ok"\nexit 0\n')
       const fs = require('fs')
@@ -234,7 +235,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         }
       ]))
 
-      const result = invokeHook('claude:SessionStart', {
+      const result = await invokeDispatcher('claude:SessionStart', {
         hook_event_name: 'SessionStart',
         session_id: 'test-session-fail',
         source: 'startup',
@@ -371,10 +372,10 @@ describe('v2 dispatcher: core hook behaviors', () => {
   })
 
   describe('disabled hooks', () => {
-    it('exits silently when enabled: false', () => {
+    it('exits silently when enabled: false', async () => {
       writeConfig(tmpDir, makeConfig([], { enabled: false }))
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-disabled',
         cwd: tmpDir
@@ -384,7 +385,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
       assert.strictEqual(result.output, null)
     })
 
-    it('exits silently when PROVE_IT_DISABLED is set', () => {
+    it('exits silently when PROVE_IT_DISABLED is set', async () => {
       writeConfig(tmpDir, makeConfig([
         {
           type: 'claude',
@@ -395,7 +396,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         }
       ]))
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-env-disabled',
         cwd: tmpDir
@@ -414,7 +415,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         .filter(l => l).map(l => JSON.parse(l))
     }
 
-    it('logs durationMs for passing claude Stop task', () => {
+    it('logs durationMs for passing claude Stop task', async () => {
       createFastTestScript(tmpDir, true)
       writeConfig(tmpDir, makeConfig([
         {
@@ -427,7 +428,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
       ]))
 
       const sessionId = 'test-duration-pass'
-      invokeHook('claude:Stop', {
+      await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -442,7 +443,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         `durationMs should be non-negative, got ${passEntry.durationMs}`)
     })
 
-    it('logs durationMs for failing claude Stop task', () => {
+    it('logs durationMs for failing claude Stop task', async () => {
       createFastTestScript(tmpDir, false)
       writeConfig(tmpDir, makeConfig([
         {
@@ -455,7 +456,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
       ]))
 
       const sessionId = 'test-duration-fail'
-      invokeHook('claude:Stop', {
+      await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -506,7 +507,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         `durationMs should be non-negative, got ${taskEntry.durationMs}`)
     })
 
-    it('does not log durationMs for skipped tasks', () => {
+    it('does not log durationMs for skipped tasks', async () => {
       writeConfig(tmpDir, makeConfig([
         {
           type: 'claude',
@@ -518,7 +519,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
       ]))
 
       const sessionId = 'test-duration-skip'
-      invokeHook('claude:Stop', {
+      await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -533,7 +534,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
   })
 
   describe('quiet task output suppression', () => {
-    it('quiet task pass reason is excluded from PreToolUse output', () => {
+    it('quiet task pass reason is excluded from PreToolUse output', async () => {
       writeConfig(tmpDir, makeConfig([
         {
           type: 'claude',
@@ -545,7 +546,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         }
       ]))
 
-      const result = invokeHook('claude:PreToolUse', {
+      const result = await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Edit',
         tool_input: { file_path: path.join(tmpDir, 'README.md'), old_string: 'a', new_string: 'b' },
@@ -570,7 +571,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
       )
     })
 
-    it('quiet task pass reason is excluded from Stop output', () => {
+    it('quiet task pass reason is excluded from Stop output', async () => {
       createFastTestScript(tmpDir, true)
       writeConfig(tmpDir, makeConfig([
         {
@@ -582,7 +583,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         }
       ]))
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-quiet-stop',
         cwd: tmpDir
@@ -601,7 +602,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
       )
     })
 
-    it('non-quiet task output appears alongside quiet task', () => {
+    it('non-quiet task output appears alongside quiet task', async () => {
       createFastTestScript(tmpDir, true)
       createTestScript(tmpDir, true)
       writeConfig(tmpDir, makeConfig([
@@ -615,7 +616,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         }
       ]))
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-quiet-mixed',
         cwd: tmpDir
@@ -643,7 +644,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         .filter(l => l).map(l => JSON.parse(l))
     }
 
-    it('quiet task suppresses session log for PASS but not for FAIL', () => {
+    it('quiet task suppresses session log for PASS but not for FAIL', async () => {
       createFastTestScript(tmpDir, false)
       writeConfig(tmpDir, makeConfig([
         {
@@ -665,7 +666,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
       // First: PreToolUse pass—quiet task should not log
       const sid = 'test-quiet-log'
-      invokeHook('claude:PreToolUse', {
+      await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Edit',
         tool_input: { file_path: path.join(tmpDir, 'README.md'), old_string: 'a', new_string: 'b' },
@@ -678,7 +679,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         'Quiet passing task should produce no session log entries')
 
       // Second: Stop fail—quiet task should still log FAIL
-      invokeHook('claude:Stop', {
+      await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sid,
         cwd: tmpDir
@@ -692,7 +693,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
   })
 
   describe('task crash handling', () => {
-    it('logs BOOM and approves when a task throws', () => {
+    it('logs BOOM and approves when a task throws', async () => {
       const env = isolatedEnv(tmpDir)
 
       // Put the crashing task in the global config (bypasses validation,
@@ -709,7 +710,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         }]
       }, null, 2))
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-crash-boom',
         cwd: tmpDir
@@ -731,7 +732,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
   })
 
   describe('non-git directory', () => {
-    it('runs hooks in non-git directory when config exists', () => {
+    it('runs hooks in non-git directory when config exists', async () => {
       const nonGitDir = createTempDir('prove_it_nongit_')
       createFastTestScript(nonGitDir, true)
       writeConfig(nonGitDir, makeConfig([
@@ -744,7 +745,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
         }
       ]))
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-nongit',
         cwd: nonGitDir

@@ -18,6 +18,13 @@ const CLI_PATH = path.join(__dirname, '..', '..', 'cli.js')
 const VALID_PERMISSION_DECISIONS = ['allow', 'deny', 'ask']
 
 /**
+ * Sentinel error thrown to intercept process.exit() during in-process dispatch.
+ */
+class DispatchExit extends Error {
+  constructor () { super(''); this.name = 'DispatchExit' }
+}
+
+/**
  * Invoke a dispatcher via the CLI.
  *
  * @param {string} hookSpec - Hook spec (e.g., "claude:Stop", "claude:PreToolUse")
@@ -55,6 +62,51 @@ function invokeHook (hookSpec, input, options = {}) {
     stderr: result.stderr || '',
     output
   }
+}
+
+/**
+ * Invoke a dispatcher in-process (no subprocess spawn).
+ * Intercepts process.exit and stdout to capture output.
+ * ~10x faster than invokeHook for Claude dispatcher tests.
+ */
+async function invokeDispatcher (hookSpec, input, options = {}) {
+  const { dispatch } = require('../../lib/dispatcher/claude')
+  const event = hookSpec.split(':')[1]
+
+  // Save and override env vars
+  const savedEnv = {}
+  const envOverrides = { ...options.env }
+  if (options.projectDir) envOverrides.CLAUDE_PROJECT_DIR = options.projectDir
+  for (const [k, v] of Object.entries(envOverrides)) {
+    savedEnv[k] = process.env[k]
+    process.env[k] = v
+  }
+
+  // Intercept process.exit
+  const origExit = process.exit
+  process.exit = () => { throw new DispatchExit() }
+
+  // Capture stdout
+  const origWrite = process.stdout.write
+  let stdout = ''
+  process.stdout.write = function (chunk) { stdout += chunk; return true }
+
+  try {
+    await dispatch(event, input)
+  } catch (e) {
+    if (!(e instanceof DispatchExit)) throw e
+  } finally {
+    process.exit = origExit
+    process.stdout.write = origWrite
+    for (const [k, v] of Object.entries(savedEnv)) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+  }
+
+  let output = null
+  try { if (stdout.trim()) output = JSON.parse(stdout) } catch {}
+  return { exitCode: 0, stdout, stderr: '', output }
 }
 
 /**
@@ -259,6 +311,7 @@ function isolatedEnv (tmpDir) {
 
 module.exports = {
   invokeHook,
+  invokeDispatcher,
   createTempDir,
   cleanupTempDir,
   initGitRepo,

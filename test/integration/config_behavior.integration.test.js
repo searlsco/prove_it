@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 
 const {
-  invokeHook,
+  invokeDispatcher,
   createTempDir,
   cleanupTempDir,
   createFile,
@@ -42,7 +42,7 @@ describe('Config-driven hook behavior (v2)', () => {
   // ──── Custom test commands via config ────
 
   describe('Custom test commands via config', () => {
-    it('commit gate uses custom test command', () => {
+    it('commit gate uses custom test command', async () => {
       createFile(tmpDir, 'script/custom_test', '#!/usr/bin/env bash\nexit 0\n')
       fs.chmodSync(path.join(tmpDir, 'script', 'custom_test'), 0o755)
       writeConfig(tmpDir, makeConfig([
@@ -57,7 +57,7 @@ describe('Config-driven hook behavior (v2)', () => {
         }
       ]))
 
-      const result = invokeHook('claude:PreToolUse', {
+      const result = await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "test"' },
@@ -73,7 +73,7 @@ describe('Config-driven hook behavior (v2)', () => {
       )
     })
 
-    it('stop hook uses custom fast test command', () => {
+    it('stop hook uses custom fast test command', async () => {
       createFile(tmpDir, 'script/custom_fast', '#!/usr/bin/env bash\nexit 0\n')
       fs.chmodSync(path.join(tmpDir, 'script', 'custom_fast'), 0o755)
       writeConfig(tmpDir, makeConfig([
@@ -86,7 +86,7 @@ describe('Config-driven hook behavior (v2)', () => {
         }
       ]))
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-custom-fast',
         cwd: tmpDir
@@ -102,11 +102,11 @@ describe('Config-driven hook behavior (v2)', () => {
   // ──── Hook disable via config ────
 
   describe('Hook disable via config', () => {
-    it('exits silently when enabled: false', () => {
+    it('exits silently when enabled: false', async () => {
       writeConfig(tmpDir, makeConfig([], { enabled: false }))
       createTestScript(tmpDir, true)
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-disabled',
         cwd: tmpDir
@@ -117,7 +117,7 @@ describe('Config-driven hook behavior (v2)', () => {
         'Stop hook should exit silently when disabled')
     })
 
-    it('exit silently for PreToolUse when no matching hooks', () => {
+    it('exit silently for PreToolUse when no matching hooks', async () => {
       // Config has Stop hooks but no PreToolUse hooks
       writeConfig(tmpDir, makeConfig([
         {
@@ -129,7 +129,7 @@ describe('Config-driven hook behavior (v2)', () => {
         }
       ]))
 
-      const result = invokeHook('claude:PreToolUse', {
+      const result = await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "test"' },
@@ -145,7 +145,7 @@ describe('Config-driven hook behavior (v2)', () => {
   // ──── PROVE_IT_DISABLED env var ────
 
   describe('PROVE_IT_DISABLED env var', () => {
-    it('stop hook exits silently when PROVE_IT_DISABLED=1', () => {
+    it('stop hook exits silently when PROVE_IT_DISABLED=1', async () => {
       createFastTestScript(tmpDir, false) // Would block if not disabled
       writeConfig(tmpDir, makeConfig([
         {
@@ -157,7 +157,7 @@ describe('Config-driven hook behavior (v2)', () => {
         }
       ]))
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-env-disabled',
         cwd: tmpDir
@@ -168,7 +168,7 @@ describe('Config-driven hook behavior (v2)', () => {
         'Stop hook should exit silently when PROVE_IT_DISABLED=1')
     })
 
-    it('PreToolUse exits silently when PROVE_IT_DISABLED=1', () => {
+    it('PreToolUse exits silently when PROVE_IT_DISABLED=1', async () => {
       createTestScript(tmpDir, false)
       writeConfig(tmpDir, makeConfig([
         {
@@ -182,7 +182,7 @@ describe('Config-driven hook behavior (v2)', () => {
         }
       ]))
 
-      const result = invokeHook('claude:PreToolUse', {
+      const result = await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "test"' },
@@ -208,7 +208,7 @@ describe('Config-driven hook behavior (v2)', () => {
       if (nonGitDir) cleanupTempDir(nonGitDir)
     })
 
-    it('stop hook runs checks in non-git directory', () => {
+    it('stop hook runs checks in non-git directory', async () => {
       createFastTestScript(nonGitDir, true)
       writeConfig(nonGitDir, makeConfig([
         {
@@ -220,7 +220,7 @@ describe('Config-driven hook behavior (v2)', () => {
         }
       ]))
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-nongit',
         cwd: nonGitDir
@@ -231,7 +231,7 @@ describe('Config-driven hook behavior (v2)', () => {
       assert.strictEqual(result.output.decision, 'approve')
     })
 
-    it('PreToolUse runs checks in non-git directory', () => {
+    it('PreToolUse runs checks in non-git directory', async () => {
       createTestScript(nonGitDir, true)
       writeConfig(nonGitDir, makeConfig([
         {
@@ -245,7 +245,7 @@ describe('Config-driven hook behavior (v2)', () => {
         }
       ]))
 
-      const result = invokeHook('claude:PreToolUse', {
+      const result = await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "test"' },
@@ -260,7 +260,7 @@ describe('Config-driven hook behavior (v2)', () => {
   // ──── ignoredPaths ────
 
   describe('ignoredPaths', () => {
-    it('exits silently when project is in ignoredPaths', () => {
+    it('exits silently when project is in ignoredPaths', async () => {
       createFastTestScript(tmpDir, false) // Would block if not ignored
       writeConfig(tmpDir, makeConfig([
         {
@@ -278,7 +278,7 @@ describe('Config-driven hook behavior (v2)', () => {
       fs.writeFileSync(path.join(proveItDir, 'config.json'),
         JSON.stringify({ ignoredPaths: [tmpDir] }), 'utf8')
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-ignored',
         cwd: tmpDir
@@ -293,7 +293,7 @@ describe('Config-driven hook behavior (v2)', () => {
   // ──── .local.json overrides ────
 
   describe('.local.json overrides', () => {
-    it('local.json overrides project config to disable', () => {
+    it('local.json overrides project config to disable', async () => {
       // Project config has a hook entry
       writeConfig(tmpDir, makeConfig([
         {
@@ -310,7 +310,7 @@ describe('Config-driven hook behavior (v2)', () => {
       }))
       createFastTestScript(tmpDir, false) // Would block if not disabled
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-local-override',
         cwd: tmpDir
@@ -325,7 +325,7 @@ describe('Config-driven hook behavior (v2)', () => {
   // ──── when conditions ────
 
   describe('when conditions', () => {
-    it('skips check when fileExists condition is not met', () => {
+    it('skips check when fileExists condition is not met', async () => {
       // Task has when: { fileExists: '.missing' }—directory does not exist
       writeConfig(tmpDir, makeConfig([
         {
@@ -343,7 +343,7 @@ describe('Config-driven hook behavior (v2)', () => {
         }
       ]))
 
-      const result = invokeHook('claude:PreToolUse', {
+      const result = await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Edit',
         tool_input: { file_path: path.join(tmpDir, 'src/app.js') },
@@ -362,7 +362,7 @@ describe('Config-driven hook behavior (v2)', () => {
       }
     })
 
-    it('skips task with enabled: false and logs SKIP with Disabled reason', () => {
+    it('skips task with enabled: false and logs SKIP with Disabled reason', async () => {
       const sessionId = 'test-enabled-false-skip'
       writeConfig(tmpDir, makeConfig([
         {
@@ -380,7 +380,7 @@ describe('Config-driven hook behavior (v2)', () => {
       ]))
 
       const env = isolatedEnv(tmpDir)
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -403,7 +403,7 @@ describe('Config-driven hook behavior (v2)', () => {
         `SKIP reason should be 'Disabled', got: ${skipEntry.reason}`)
     })
 
-    it('runs task with enabled: true', () => {
+    it('runs task with enabled: true', async () => {
       createFastTestScript(tmpDir, false)
       writeConfig(tmpDir, makeConfig([
         {
@@ -420,7 +420,7 @@ describe('Config-driven hook behavior (v2)', () => {
         }
       ]))
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-enabled-true-runs',
         cwd: tmpDir
@@ -432,7 +432,7 @@ describe('Config-driven hook behavior (v2)', () => {
         'Failing task with enabled: true should block')
     })
 
-    it('logs SKIP entry when when condition is not met', () => {
+    it('logs SKIP entry when when condition is not met', async () => {
       const sessionId = 'test-when-skip-log'
       writeConfig(tmpDir, makeConfig([
         {
@@ -450,7 +450,7 @@ describe('Config-driven hook behavior (v2)', () => {
       ]))
 
       const env = isolatedEnv(tmpDir)
-      invokeHook('claude:Stop', {
+      await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -466,7 +466,7 @@ describe('Config-driven hook behavior (v2)', () => {
         `SKIP reason should mention 'was not found', got: ${skipEntry.reason}`)
     })
 
-    it('logs SKIP for variablesPresent when variable is empty', () => {
+    it('logs SKIP for variablesPresent when variable is empty', async () => {
       const sessionId = 'test-when-vp-skip'
       writeConfig(tmpDir, makeConfig([
         {
@@ -484,7 +484,7 @@ describe('Config-driven hook behavior (v2)', () => {
       ]))
 
       const env = isolatedEnv(tmpDir)
-      invokeHook('claude:Stop', {
+      await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -505,7 +505,7 @@ describe('Config-driven hook behavior (v2)', () => {
   // ──── top-level env ────
 
   describe('top-level taskEnv config', () => {
-    it('script task sees config taskEnv vars', () => {
+    it('script task sees config taskEnv vars', async () => {
       createFile(tmpDir, 'script/env_check', [
         '#!/usr/bin/env bash',
         'if [ "$TURBOCOMMIT_DISABLED" = "1" ]; then',
@@ -527,7 +527,7 @@ describe('Config-driven hook behavior (v2)', () => {
         }
       ], { taskEnv: { TURBOCOMMIT_DISABLED: '1' } }))
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-config-env',
         cwd: tmpDir
@@ -539,7 +539,7 @@ describe('Config-driven hook behavior (v2)', () => {
         'Script should pass when config taskEnv var is present')
     })
 
-    it('script task fails without config taskEnv var', () => {
+    it('script task fails without config taskEnv var', async () => {
       createFile(tmpDir, 'script/env_check', [
         '#!/usr/bin/env bash',
         'if [ "$TURBOCOMMIT_DISABLED" = "1" ]; then',
@@ -561,7 +561,7 @@ describe('Config-driven hook behavior (v2)', () => {
         }
       ]))
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-config-env-absent',
         cwd: tmpDir
@@ -573,7 +573,7 @@ describe('Config-driven hook behavior (v2)', () => {
         'Script should fail when config taskEnv var is absent')
     })
 
-    it('empty taskEnv object does not break dispatch', () => {
+    it('empty taskEnv object does not break dispatch', async () => {
       createFastTestScript(tmpDir, true)
       writeConfig(tmpDir, makeConfig([
         {
@@ -585,7 +585,7 @@ describe('Config-driven hook behavior (v2)', () => {
         }
       ], { taskEnv: {} }))
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-config-env-empty',
         cwd: tmpDir
@@ -600,7 +600,7 @@ describe('Config-driven hook behavior (v2)', () => {
   // ──── top-level model ────
 
   describe('top-level model config', () => {
-    it('agent task uses top-level model when task has no model', () => {
+    it('agent task uses top-level model when task has no model', async () => {
       // Put a fake 'claude' shim that captures args on PATH
       const shimDir = path.join(tmpDir, 'shims')
       const capturePath = path.join(tmpDir, 'captured_args.txt')
@@ -626,7 +626,7 @@ describe('Config-driven hook behavior (v2)', () => {
       const env = isolatedEnv(tmpDir)
       env.PATH = `${shimDir}:${process.env.PATH}`
 
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'test-top-level-model',
         cwd: tmpDir
@@ -646,7 +646,7 @@ describe('Config-driven hook behavior (v2)', () => {
   // ──── sourcesModifiedSinceLastRun ────
 
   describe('sourcesModifiedSinceLastRun', () => {
-    it('fires on first run, skips on second when no files changed, fires after source touch', () => {
+    it('fires on first run, skips on second when no files changed, fires after source touch', async () => {
       const sessionId = 'test-smslr-integration'
       // Create a source file
       createFile(tmpDir, 'src/app.js', 'console.log("hello")\n')
@@ -671,7 +671,7 @@ describe('Config-driven hook behavior (v2)', () => {
       const env = isolatedEnv(tmpDir)
 
       // First invocation: should fire (no prior run data)
-      const result1 = invokeHook('claude:Stop', {
+      const result1 = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -681,7 +681,7 @@ describe('Config-driven hook behavior (v2)', () => {
       assert.strictEqual(result1.output.decision, 'approve')
 
       // Second invocation: should skip (no source changes)
-      const result2 = invokeHook('claude:Stop', {
+      const result2 = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -702,7 +702,7 @@ describe('Config-driven hook behavior (v2)', () => {
       const srcPath = path.join(tmpDir, 'src', 'app.js')
       fs.utimesSync(srcPath, new Date(now + 2000), new Date(now + 2000))
 
-      const result3 = invokeHook('claude:Stop', {
+      const result3 = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -712,7 +712,7 @@ describe('Config-driven hook behavior (v2)', () => {
       assert.strictEqual(result3.output.decision, 'approve')
     })
 
-    it('re-runs failing task instead of silently skipping', () => {
+    it('re-runs failing task instead of silently skipping', async () => {
       const sessionId = 'test-smslr-failure-sticky'
       createFile(tmpDir, 'src/app.js', 'code\n')
       createFile(tmpDir, 'script/check', '#!/usr/bin/env bash\nexit 1\n')
@@ -735,7 +735,7 @@ describe('Config-driven hook behavior (v2)', () => {
       const env = isolatedEnv(tmpDir)
 
       // First run: task fails
-      const result1 = invokeHook('claude:Stop', {
+      const result1 = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -745,7 +745,7 @@ describe('Config-driven hook behavior (v2)', () => {
       assert.strictEqual(result1.output.decision, 'block', 'Should block on failure')
 
       // Second run (no source changes): should re-run (failures are never cached)
-      const result2 = invokeHook('claude:Stop', {
+      const result2 = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -759,7 +759,7 @@ describe('Config-driven hook behavior (v2)', () => {
       const srcPath = path.join(tmpDir, 'src', 'app.js')
       fs.utimesSync(srcPath, new Date(now + 2000), new Date(now + 2000))
 
-      const result3 = invokeHook('claude:Stop', {
+      const result3 = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -773,7 +773,7 @@ describe('Config-driven hook behavior (v2)', () => {
   // ──── sourceFilesEditedThisTurn + toolsUsed when conditions ────
 
   describe('sourceFilesEditedThisTurn when condition', () => {
-    it('fires Stop after PreToolUse records source edits', () => {
+    it('fires Stop after PreToolUse records source edits', async () => {
       const sessionId = 'test-sfe-integration'
       createFile(tmpDir, 'src/app.js', 'console.log("hello")\n')
       createFile(tmpDir, 'script/check', '#!/usr/bin/env bash\nexit 0\n')
@@ -804,7 +804,7 @@ describe('Config-driven hook behavior (v2)', () => {
       const env = isolatedEnv(tmpDir)
 
       // Stop without prior PreToolUse → should skip (no edits)
-      const result1 = invokeHook('claude:Stop', {
+      const result1 = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -818,7 +818,7 @@ describe('Config-driven hook behavior (v2)', () => {
       assert.ok(skipEntry, 'Should have SKIP entry when no edits recorded')
 
       // Now simulate PreToolUse for Edit on source file
-      invokeHook('claude:PreToolUse', {
+      await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Edit',
         tool_input: { file_path: path.join(tmpDir, 'src', 'app.js'), old_string: 'a', new_string: 'b' },
@@ -827,7 +827,7 @@ describe('Config-driven hook behavior (v2)', () => {
       }, { projectDir: tmpDir, env })
 
       // Stop should now fire
-      const result2 = invokeHook('claude:Stop', {
+      const result2 = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -837,7 +837,7 @@ describe('Config-driven hook behavior (v2)', () => {
       assert.strictEqual(result2.output.decision, 'approve')
     })
 
-    it('cross-session isolation: session B does not see session A edits', () => {
+    it('cross-session isolation: session B does not see session A edits', async () => {
       createFile(tmpDir, 'src/app.js', 'code\n')
       createFile(tmpDir, 'script/check', '#!/usr/bin/env bash\nexit 0\n')
       fs.chmodSync(path.join(tmpDir, 'script', 'check'), 0o755)
@@ -865,7 +865,7 @@ describe('Config-driven hook behavior (v2)', () => {
       const env = isolatedEnv(tmpDir)
 
       // Session A records edits
-      invokeHook('claude:PreToolUse', {
+      await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Edit',
         tool_input: { file_path: path.join(tmpDir, 'src', 'app.js'), old_string: 'a', new_string: 'b' },
@@ -874,7 +874,7 @@ describe('Config-driven hook behavior (v2)', () => {
       }, { projectDir: tmpDir, env })
 
       // Session B's Stop should skip (no edits in B)
-      const result = invokeHook('claude:Stop', {
+      const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: 'session-B',
         cwd: tmpDir
@@ -887,7 +887,7 @@ describe('Config-driven hook behavior (v2)', () => {
       assert.ok(skipEntry, 'Session B should skip because it has no edits')
     })
 
-    it('turn reset: after successful Stop, next Stop skips unless new edits', () => {
+    it('turn reset: after successful Stop, next Stop skips unless new edits', async () => {
       const sessionId = 'test-sfe-reset'
       createFile(tmpDir, 'src/app.js', 'code\n')
       createFile(tmpDir, 'script/check', '#!/usr/bin/env bash\nexit 0\n')
@@ -916,7 +916,7 @@ describe('Config-driven hook behavior (v2)', () => {
       const env = isolatedEnv(tmpDir)
 
       // Record edit, then Stop
-      invokeHook('claude:PreToolUse', {
+      await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Edit',
         tool_input: { file_path: path.join(tmpDir, 'src', 'app.js'), old_string: 'a', new_string: 'b' },
@@ -924,7 +924,7 @@ describe('Config-driven hook behavior (v2)', () => {
         cwd: tmpDir
       }, { projectDir: tmpDir, env })
 
-      const result1 = invokeHook('claude:Stop', {
+      const result1 = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -934,7 +934,7 @@ describe('Config-driven hook behavior (v2)', () => {
       assert.strictEqual(result1.output.decision, 'approve')
 
       // Second Stop without new edits → should skip
-      const result2 = invokeHook('claude:Stop', {
+      const result2 = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -948,7 +948,7 @@ describe('Config-driven hook behavior (v2)', () => {
   })
 
   describe('toolsUsed when condition', () => {
-    it('fires Stop only when specified tool was used', () => {
+    it('fires Stop only when specified tool was used', async () => {
       const sessionId = 'test-tu-integration'
       createFile(tmpDir, 'src/app.swift', 'code\n')
       createFile(tmpDir, 'script/check', '#!/usr/bin/env bash\nexit 0\n')
@@ -977,7 +977,7 @@ describe('Config-driven hook behavior (v2)', () => {
       const env = isolatedEnv(tmpDir)
 
       // Edit with Edit tool (not in toolsUsed list) → Stop should skip
-      invokeHook('claude:PreToolUse', {
+      await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'Edit',
         tool_input: { file_path: path.join(tmpDir, 'src', 'app.swift'), old_string: 'a', new_string: 'b' },
@@ -985,7 +985,7 @@ describe('Config-driven hook behavior (v2)', () => {
         cwd: tmpDir
       }, { projectDir: tmpDir, env })
 
-      const result1 = invokeHook('claude:Stop', {
+      const result1 = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId,
         cwd: tmpDir
@@ -999,7 +999,7 @@ describe('Config-driven hook behavior (v2)', () => {
       // Now use XcodeEdit → Stop should fire
       // First reset by simulating a successful stop (need fresh session for clean slate)
       const sessionId2 = 'test-tu-integration-2'
-      invokeHook('claude:PreToolUse', {
+      await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
         tool_name: 'XcodeEdit',
         tool_input: { file_path: path.join(tmpDir, 'src', 'app.swift') },
@@ -1007,7 +1007,7 @@ describe('Config-driven hook behavior (v2)', () => {
         cwd: tmpDir
       }, { projectDir: tmpDir, env })
 
-      const result2 = invokeHook('claude:Stop', {
+      const result2 = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
         session_id: sessionId2,
         cwd: tmpDir
