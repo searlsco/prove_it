@@ -365,7 +365,7 @@ describe('TDD block injection on ExitPlanMode', () => {
         matcher: 'ExitPlanMode',
         tasks: [
           {
-            name: 'inject-plan',
+            name: 'inject-tdd-plan',
             type: 'script',
             command: injectPlanPath,
             quiet: true,
@@ -410,7 +410,7 @@ describe('TDD block injection on ExitPlanMode', () => {
         matcher: 'ExitPlanMode',
         tasks: [
           {
-            name: 'inject-plan',
+            name: 'inject-tdd-plan',
             type: 'script',
             command: injectPlanPath,
             quiet: true,
