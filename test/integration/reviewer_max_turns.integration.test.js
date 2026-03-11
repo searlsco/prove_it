@@ -168,6 +168,40 @@ fi`)
     cleanup()
   })
 
+  it('skips classifyVerdict when nudge fails and fallback text is unparseable', () => {
+    setup()
+    const stateFile = path.join(tmpDir, '.call_count_no_classify')
+    // result is empty string — fallback will be the raw JSON stdout,
+    // which is not a verdict. Without the gate, this would call the real
+    // claude binary for classification and block for 30s.
+    const maxTurnsJson = JSON.stringify({
+      result: '',
+      subtype: 'error_max_turns',
+      session_id: 'sess-no-classify',
+      num_turns: 5
+    })
+    const claudePath = writeShim('claude', `cat > /dev/null
+if [ -f "${stateFile}" ]; then
+  echo "resume crashed" >&2
+  exit 1
+else
+  touch "${stateFile}"
+  echo '${maxTurnsJson.replace(/'/g, "'\\''")}'
+fi`)
+
+    const r = runReviewer(tmpDir, {
+      command: `${claudePath} -p`,
+      maxAgentTurns: 5,
+      timeout: 3000
+    }, 'test prompt')
+    // Should return an error, not attempt to classify via haiku
+    assert.ok(r.error, `Expected error when nudge fails with unparseable text, got: ${JSON.stringify(r)}`)
+    assert.ok(r.nudge, 'Expected nudge metadata')
+    assert.strictEqual(r.nudge.succeeded, false)
+    assert.strictEqual(r.nudge.numTurns, 5)
+    cleanup()
+  })
+
   it('falls back to raw text when JSON is malformed', () => {
     setup()
     const claudePath = writeShim('claude',
