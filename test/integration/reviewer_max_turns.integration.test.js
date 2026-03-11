@@ -98,7 +98,7 @@ describe('runReviewer with maxAgentTurns (shim-based)', () => {
     cleanup()
   })
 
-  it('handles error_max_turns by nudging with resume', () => {
+  it('handles error_max_turns with a final-turn resume', () => {
     setup()
     // The initial claude call returns error_max_turns with a session_id.
     // The resume call (same binary) should return a verdict.
@@ -128,18 +128,18 @@ fi`)
       command: `${claudePath} -p`,
       maxAgentTurns: 3
     }, 'test prompt')
-    assert.ok(r.pass, `Expected PASS from wrap-up resume, got: ${JSON.stringify(r)}`)
+    assert.ok(r.pass, `Expected PASS from final-turn resume, got: ${JSON.stringify(r)}`)
     assert.strictEqual(r.reason, 'code looks good after partial review')
-    assert.ok(r.wrapUp, 'Expected wrap-up metadata')
-    assert.strictEqual(r.wrapUp.succeeded, true)
-    assert.strictEqual(r.wrapUp.numTurns, 3)
+    assert.ok(r.finalTurn, 'Expected finalTurn metadata')
+    assert.strictEqual(r.finalTurn.succeeded, true)
+    assert.strictEqual(r.finalTurn.numTurns, 3)
 
     // Verify the state file was created (proving the first call happened)
     assert.ok(fs.existsSync(stateFile), 'State file should exist proving two calls were made')
     cleanup()
   })
 
-  it('returns wrap-up.succeeded=false when resume fails', () => {
+  it('returns finalTurn.succeeded=false when resume fails', () => {
     setup()
     const stateFile = path.join(tmpDir, '.call_count_fail')
     const maxTurnsJson = JSON.stringify({
@@ -162,13 +162,13 @@ fi`)
       maxAgentTurns: 5
     }, 'test prompt')
     // Falls back to original result text
-    assert.ok(r.wrapUp, 'Expected wrap-up metadata')
-    assert.strictEqual(r.wrapUp.succeeded, false)
-    assert.strictEqual(r.wrapUp.numTurns, 5)
+    assert.ok(r.finalTurn, 'Expected finalTurn metadata')
+    assert.strictEqual(r.finalTurn.succeeded, false)
+    assert.strictEqual(r.finalTurn.numTurns, 5)
     cleanup()
   })
 
-  it('skips classifyVerdict when wrap-up fails and fallback text is unparseable', () => {
+  it('skips classifyVerdict when final turn fails and fallback text is unparseable', () => {
     setup()
     const stateFile = path.join(tmpDir, '.call_count_no_classify')
     // result is empty string — fallback will be the raw JSON stdout,
@@ -195,10 +195,10 @@ fi`)
       timeout: 3000
     }, 'test prompt')
     // Should return an error, not attempt to classify via haiku
-    assert.ok(r.error, `Expected error when wrap-up fails with unparseable text, got: ${JSON.stringify(r)}`)
-    assert.ok(r.wrapUp, 'Expected wrap-up metadata')
-    assert.strictEqual(r.wrapUp.succeeded, false)
-    assert.strictEqual(r.wrapUp.numTurns, 5)
+    assert.ok(r.error, `Expected error when final turn fails with unparseable text, got: ${JSON.stringify(r)}`)
+    assert.ok(r.finalTurn, 'Expected finalTurn metadata')
+    assert.strictEqual(r.finalTurn.succeeded, false)
+    assert.strictEqual(r.finalTurn.numTurns, 5)
     cleanup()
   })
 

@@ -1,7 +1,7 @@
 const { describe, it } = require('node:test')
 const assert = require('node:assert')
 
-const { isCodexModel, parseVerdict, parseJsonOutput, extractReviewText, WRAP_UP_PROMPT } = require('../lib/shared')
+const { isCodexModel, parseVerdict, parseJsonOutput, extractReviewText, FINAL_TURN_PROMPT } = require('../lib/shared')
 
 describe('parseVerdict', () => {
   describe('PASS responses', () => {
@@ -317,14 +317,14 @@ describe('extractReviewText', () => {
     const result = { stdout: '  PASS: looks good  ', stderr: '' }
     const out = extractReviewText(result, false)
     assert.strictEqual(out.text, 'PASS: looks good')
-    assert.strictEqual(out.wrapUp, null)
+    assert.strictEqual(out.finalTurn, null)
   })
 
   it('falls back to stderr when stdout is empty in non-json mode', () => {
     const result = { stdout: '', stderr: 'FAIL: bad code' }
     const out = extractReviewText(result, false)
     assert.strictEqual(out.text, 'FAIL: bad code')
-    assert.strictEqual(out.wrapUp, null)
+    assert.strictEqual(out.finalTurn, null)
   })
 
   it('extracts result from success JSON', () => {
@@ -332,14 +332,14 @@ describe('extractReviewText', () => {
     const result = { stdout: json, stderr: '' }
     const out = extractReviewText(result, true)
     assert.strictEqual(out.text, 'PASS: all tests pass')
-    assert.strictEqual(out.wrapUp, null)
+    assert.strictEqual(out.finalTurn, null)
   })
 
   it('falls back to raw text on malformed JSON', () => {
     const result = { stdout: 'PASS: raw fallback', stderr: '' }
     const out = extractReviewText(result, true)
     assert.strictEqual(out.text, 'PASS: raw fallback')
-    assert.strictEqual(out.wrapUp, null)
+    assert.strictEqual(out.finalTurn, null)
   })
 
   it('falls back to raw text when JSON has no result and no subtype', () => {
@@ -348,19 +348,19 @@ describe('extractReviewText', () => {
     const out = extractReviewText(result, true)
     // Falls through to raw text since result is empty and subtype is null
     assert.strictEqual(out.text, json)
-    assert.strictEqual(out.wrapUp, null)
+    assert.strictEqual(out.finalTurn, null)
   })
 })
 
-describe('WRAP_UP_PROMPT', () => {
+describe('FINAL_TURN_PROMPT', () => {
   it('is a non-empty string', () => {
-    assert.ok(typeof WRAP_UP_PROMPT === 'string')
-    assert.ok(WRAP_UP_PROMPT.length > 0)
+    assert.ok(typeof FINAL_TURN_PROMPT === 'string')
+    assert.ok(FINAL_TURN_PROMPT.length > 0)
   })
 
   it('mentions PASS, FAIL, and SKIP', () => {
-    assert.ok(WRAP_UP_PROMPT.includes('PASS'))
-    assert.ok(WRAP_UP_PROMPT.includes('FAIL'))
-    assert.ok(WRAP_UP_PROMPT.includes('SKIP'))
+    assert.ok(FINAL_TURN_PROMPT.includes('PASS'))
+    assert.ok(FINAL_TURN_PROMPT.includes('FAIL'))
+    assert.ok(FINAL_TURN_PROMPT.includes('SKIP'))
   })
 })
