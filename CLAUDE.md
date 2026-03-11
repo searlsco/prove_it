@@ -15,6 +15,7 @@ prove_it is a config-driven hook framework for Claude Code. It reads `.claude/pr
 - `lib/checks/env.js`—Runs env tasks that inject environment variables via CLAUDE_ENV_FILE
 - `libexec/guard-config`—Standalone script: blocks edits to prove_it config files
 - `libexec/briefing`—Standalone script: renders session orientation on SessionStart
+- `lib/defaults.js`—Single source of truth for config defaults (`CONFIG_DEFAULTS`, `DEFAULT_MODELS`, `DEFAULT_ALLOWED_TOOLS`)
 - `lib/config.js`—Config loading, merging, and `buildConfig()` for init
 - `lib/init.js`—Project initialization, git hook shim management
 - `lib/template.js`—Template variable expansion for agent prompts
@@ -73,6 +74,28 @@ Because the global config sets `enabled: true`, prove_it runs in any project onc
 installed globally. Deleting a project's `.claude/prove_it/config.json` does not stop
 prove_it if the global config has `enabled: true`—it just means no project-specific
 tasks are configured.
+
+### Config defaults cascade
+
+All config defaults live in `lib/defaults.js`. This is the single source of truth.
+
+The runtime config cascade (each layer overrides the previous):
+
+1. `configDefaults()` from `lib/defaults.js` — fully-qualified base config
+2. `~/.claude/prove_it/config.json` — global user config (written by `prove_it install`)
+3. Ancestor `.claude/prove_it/config.json` files — walked root-to-cwd
+4. `cwd/.claude/prove_it/config.local.json` — local project overrides
+
+By the time dispatcher code reads `cfg.maxAgentTurns`, it already has the
+default value of 10. No `|| fallback` patterns are needed downstream.
+
+**Rules:**
+- Never add `|| <default>` when reading from the merged config — add the
+  default to `CONFIG_DEFAULTS` in `lib/defaults.js` instead
+- `buildGlobalConfig()` and `baseConfig()` in `lib/config.js` reference
+  `CONFIG_DEFAULTS` so generated config files stay in sync with runtime
+- `DEFAULT_MODELS` and `DEFAULT_ALLOWED_TOOLS` also live in `lib/defaults.js`
+  (code-level constants, not user config, but same canonical location)
 
 ## Conventions
 

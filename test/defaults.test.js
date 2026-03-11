@@ -11,10 +11,13 @@ describe('CONFIG_DEFAULTS', () => {
     assert.strictEqual(CONFIG_DEFAULTS.maxAgentTurns, 10)
     assert.deepStrictEqual(CONFIG_DEFAULTS.format, { maxOutputChars: 12000 })
     assert.deepStrictEqual(CONFIG_DEFAULTS.taskEnv, { TURBOCOMMIT_DISABLED: '1' })
-    assert.strictEqual(CONFIG_DEFAULTS.taskAllowedTools, null)
-    assert.strictEqual(CONFIG_DEFAULTS.taskBypassPermissions, null)
-    assert.strictEqual(CONFIG_DEFAULTS.model, null)
     assert.deepStrictEqual(CONFIG_DEFAULTS.fileEditingTools, [])
+  })
+
+  it('does not include optional nullable keys that would trip the validator', () => {
+    assert.strictEqual('model' in CONFIG_DEFAULTS, false)
+    assert.strictEqual('taskAllowedTools' in CONFIG_DEFAULTS, false)
+    assert.strictEqual('taskBypassPermissions' in CONFIG_DEFAULTS, false)
   })
 })
 

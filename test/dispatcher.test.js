@@ -3,7 +3,8 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
-const { matchesHookEntry, evaluateWhen, defaultConfig, settleTaskResult, spawnAsyncTask, harvestAsyncResults, cleanAsyncDir, hasSignalGatedTasks, forkParallelTask, killParallelBatch, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
+const { matchesHookEntry, evaluateWhen, settleTaskResult, spawnAsyncTask, harvestAsyncResults, cleanAsyncDir, hasSignalGatedTasks, forkParallelTask, killParallelBatch, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
+const { configDefaults } = require('../lib/defaults')
 const { whenHasKey } = require('../lib/git')
 const { recordFileEdit, resetTurnTracking, getAsyncDir } = require('../lib/session')
 
@@ -611,12 +612,15 @@ describe('claude dispatcher', () => {
     })
   })
 
-  describe('defaultConfig', () => {
-    it('returns disabled config with empty hooks and no format', () => {
-      const config = defaultConfig()
+  describe('configDefaults', () => {
+    it('returns fully-qualified config with all defaults populated', () => {
+      const config = configDefaults()
       assert.strictEqual(config.enabled, false)
       assert.deepStrictEqual(config.hooks, [])
-      assert.strictEqual(config.format, undefined)
+      assert.strictEqual(config.maxAgentTurns, 10)
+      assert.deepStrictEqual(config.format, { maxOutputChars: 12000 })
+      assert.deepStrictEqual(config.taskEnv, { TURBOCOMMIT_DISABLED: '1' })
+      assert.deepStrictEqual(config.fileEditingTools, [])
     })
   })
 

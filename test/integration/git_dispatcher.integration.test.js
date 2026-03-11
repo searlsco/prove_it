@@ -3,17 +3,19 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
-const { defaultConfig, matchGitEntries, runGitTasks } = require('../../lib/dispatcher/git')
+const { matchGitEntries, runGitTasks } = require('../../lib/dispatcher/git')
+const { configDefaults } = require('../../lib/defaults')
 const { readRef, churnSinceRef, sanitizeRefName } = require('../../lib/git')
 const { freshRepo } = require('../helpers')
 
 describe('git dispatcher', () => {
-  it('defaultConfig returns safe defaults', () => {
-    const cfg = defaultConfig()
+  it('configDefaults returns fully-qualified config', () => {
+    const cfg = configDefaults()
     assert.strictEqual(cfg.enabled, false)
     assert.deepStrictEqual(cfg.hooks, [])
     assert.strictEqual(cfg.sources, null)
-    assert.strictEqual(cfg.format, undefined)
+    assert.deepStrictEqual(cfg.format, { maxOutputChars: 12000 })
+    assert.strictEqual(cfg.maxAgentTurns, 10)
   })
 
   describe('matchGitEntries', () => {
