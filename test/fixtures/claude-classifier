@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Fixture: replays captured haiku classifier responses.
+# Reads stdin, looks for known reviewer-output snippets,
+# and echoes the response haiku actually gave on 2026-03-11.
+#
+# Used by: classify_verdict.integration.test.js
+# Generated from: real claude -p --model haiku calls
+
+input=$(cat)
+
+if echo "$input" | grep -q "No issues found. The code is ready to merge."; then
+  echo "PASS"
+elif echo "$input" | grep -q "validateEmail function doesn't handle unicode"; then
+  echo "FAIL"
+elif echo "$input" | grep -q "requires a database connection that isn't available"; then
+  echo "SKIP"
+elif echo "$input" | grep -q "error_max_turns"; then
+  echo "FAIL"
+elif echo "$input" | grep -q "I'm concerned about the"; then
+  echo "The review is incomplete—the verdict cuts off mid-sentence while expressing a concern about lib/init.js."
+else
+  echo "Unable to determine a verdict from this output."
+fi
