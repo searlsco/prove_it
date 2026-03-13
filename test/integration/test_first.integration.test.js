@@ -15,7 +15,7 @@ const {
   isolatedEnv
 } = require('./hook-harness')
 
-const { saveSessionState, setPhase, loadSessionState } = require('../../lib/session')
+const { saveSessionState, setPhase, loadSessionState, readCommandResults } = require('../../lib/session')
 
 function testFirstConfig (tmpDir, extra = {}) {
   return makeConfig([
@@ -30,32 +30,6 @@ function testFirstConfig (tmpDir, extra = {}) {
           command: path.join(__dirname, '..', '..', 'libexec', 'test-first'),
           quiet: true,
           params: { untestedEditLimit: 3 }
-        }
-      ]
-    },
-    {
-      type: 'claude',
-      event: 'PostToolUse',
-      matcher: 'Bash',
-      tasks: [
-        {
-          name: 'test-first',
-          type: 'script',
-          command: path.join(__dirname, '..', '..', 'libexec', 'test-first'),
-          quiet: true
-        }
-      ]
-    },
-    {
-      type: 'claude',
-      event: 'PostToolUseFailure',
-      matcher: 'Bash',
-      tasks: [
-        {
-          name: 'test-first',
-          type: 'script',
-          command: path.join(__dirname, '..', '..', 'libexec', 'test-first'),
-          quiet: true
         }
       ]
     }
@@ -153,17 +127,26 @@ describe('TDD mode state machine integration', () => {
 
   it('detects vacuous test (test-edit → test-pass without source edits)', () => {
     writeConfig(tmpDir, testFirstConfig(tmpDir))
+    createFile(tmpDir, 'src/app.js', 'hello\n')
 
     // Simulate: test-edit puts us in needs-red
     saveSessionState(SESSION_ID, 'tddState', { step: 'needs-red', editCount: 0, mode: 'tdd' })
 
-    // Test passes without any source edits
-    const result = invokeHook('claude:PostToolUse', {
+    // Dispatcher logs a test pass via PostToolUse
+    invokeHook('claude:PostToolUse', {
       hook_event_name: 'PostToolUse',
       session_id: SESSION_ID,
       tool_name: 'Bash',
       tool_input: { command: 'npm test' },
       tool_response: 'All tests passed'
+    }, { projectDir: tmpDir, env })
+
+    // Next PreToolUse picks up the command log and transitions
+    const result = invokeHook('claude:PreToolUse', {
+      hook_event_name: 'PreToolUse',
+      session_id: SESSION_ID,
+      tool_name: 'Edit',
+      tool_input: { file_path: path.join(tmpDir, 'src/app.js'), old_string: 'a', new_string: 'b' }
     }, { projectDir: tmpDir, env })
 
     assert.strictEqual(result.exitCode, 0)
@@ -188,7 +171,7 @@ describe('TDD mode state machine integration', () => {
     let state = loadSessionState(SESSION_ID, 'tddState')
     assert.strictEqual(state.step, 'needs-red', 'After test edit, should be in needs-red')
 
-    // Step 2: Run test, it fails → needs-green
+    // Step 2: Run test, it fails (dispatcher logs command result)
     invokeHook('claude:PostToolUseFailure', {
       hook_event_name: 'PostToolUseFailure',
       session_id: SESSION_ID,
@@ -197,10 +180,7 @@ describe('TDD mode state machine integration', () => {
       error: 'Test failed'
     }, { projectDir: tmpDir, env })
 
-    state = loadSessionState(SESSION_ID, 'tddState')
-    assert.strictEqual(state.step, 'needs-green', 'After test fail, should be in needs-green')
-
-    // Step 3: Write source code
+    // Step 3: Write source code — test-first reads command log and transitions through needs-green
     invokeHook('claude:PreToolUse', {
       hook_event_name: 'PreToolUse',
       session_id: SESSION_ID,
@@ -211,8 +191,8 @@ describe('TDD mode state machine integration', () => {
     state = loadSessionState(SESSION_ID, 'tddState')
     assert.strictEqual(state.step, 'needs-test', 'After source edit from needs-green, should be needs-test')
 
-    // Step 4: Run test, it passes → reset
-    const result = invokeHook('claude:PostToolUse', {
+    // Step 4: Run test, it passes (dispatcher logs command result)
+    invokeHook('claude:PostToolUse', {
       hook_event_name: 'PostToolUse',
       session_id: SESSION_ID,
       tool_name: 'Bash',
@@ -220,8 +200,16 @@ describe('TDD mode state machine integration', () => {
       tool_response: 'All tests passed'
     }, { projectDir: tmpDir, env })
 
+    // Step 5: Next PreToolUse picks up the pass, resets state
+    const result = invokeHook('claude:PreToolUse', {
+      hook_event_name: 'PreToolUse',
+      session_id: SESSION_ID,
+      tool_name: 'Edit',
+      tool_input: { file_path: path.join(tmpDir, 'src/app.js'), old_string: 'a', new_string: 'b' }
+    }, { projectDir: tmpDir, env })
+
     state = loadSessionState(SESSION_ID, 'tddState')
-    assert.strictEqual(state.editCount, 0, 'Edit count should be reset after test pass')
+    assert.strictEqual(state.editCount, 1, 'Edit count should be 1 (fresh after reset + this edit)')
     // Should not have any warning messages
     const ctx = result.output?.hookSpecificOutput?.additionalContext || ''
     assert.ok(!ctx.includes('vacuous'), 'Should not warn about vacuous test after source edit')
@@ -272,10 +260,12 @@ describe('Refactor mode integration', () => {
 
   it('test pass resets counter in refactor mode', () => {
     writeConfig(tmpDir, testFirstConfig(tmpDir))
+    createFile(tmpDir, 'src/app.js', 'hello\n')
     setPhase(SESSION_ID, 'refactor')
 
     saveSessionState(SESSION_ID, 'tddState', { step: 'idle', editCount: 5, mode: 'refactor' })
 
+    // Dispatcher logs test pass
     invokeHook('claude:PostToolUse', {
       hook_event_name: 'PostToolUse',
       session_id: SESSION_ID,
@@ -284,22 +274,40 @@ describe('Refactor mode integration', () => {
       tool_response: 'All tests passed'
     }, { projectDir: tmpDir, env })
 
+    // Next PreToolUse picks up the pass from command log
+    invokeHook('claude:PreToolUse', {
+      hook_event_name: 'PreToolUse',
+      session_id: SESSION_ID,
+      tool_name: 'Edit',
+      tool_input: { file_path: path.join(tmpDir, 'src/app.js'), old_string: 'a', new_string: 'b' }
+    }, { projectDir: tmpDir, env })
+
     const state = loadSessionState(SESSION_ID, 'tddState')
-    assert.strictEqual(state.editCount, 0, 'Edit count should reset after test pass')
+    assert.strictEqual(state.editCount, 1, 'Edit count should be 1 (reset + this edit)')
   })
 
   it('test failure warns about behavior change in refactor mode', () => {
     writeConfig(tmpDir, testFirstConfig(tmpDir))
+    createFile(tmpDir, 'src/app.js', 'hello\n')
     setPhase(SESSION_ID, 'refactor')
 
-    saveSessionState(SESSION_ID, 'tddState', { step: 'idle', editCount: 2, mode: 'refactor' })
+    saveSessionState(SESSION_ID, 'tddState', { step: 'idle', editCount: 0, mode: 'refactor' })
 
-    const result = invokeHook('claude:PostToolUseFailure', {
+    // Dispatcher logs test failure
+    invokeHook('claude:PostToolUseFailure', {
       hook_event_name: 'PostToolUseFailure',
       session_id: SESSION_ID,
       tool_name: 'Bash',
       tool_input: { command: 'npm test' },
       error: 'Tests failed'
+    }, { projectDir: tmpDir, env })
+
+    // Next PreToolUse picks up the failure from command log
+    const result = invokeHook('claude:PreToolUse', {
+      hook_event_name: 'PreToolUse',
+      session_id: SESSION_ID,
+      tool_name: 'Edit',
+      tool_input: { file_path: path.join(tmpDir, 'src/app.js'), old_string: 'a', new_string: 'b' }
     }, { projectDir: tmpDir, env })
 
     assert.strictEqual(result.exitCode, 0)
@@ -515,5 +523,82 @@ describe('TDD block injection on ExitPlanMode', () => {
     const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
     const count = (content.match(/red-green TDD/g) || []).length
     assert.strictEqual(count, 1, 'Should have exactly one TDD marker')
+  })
+})
+
+describe('Dispatcher-level command result logging', () => {
+  let tmpDir, env, origProveItDir
+  const SESSION_ID = 'test-session-cmd-log'
+
+  beforeEach(() => {
+    tmpDir = createTempDir('prove_it_cmd_log_')
+    initGitRepo(tmpDir)
+    createFile(tmpDir, '.gitkeep', '')
+    spawnSync('git', ['add', '.'], { cwd: tmpDir })
+    spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+    env = isolatedEnv(tmpDir)
+    origProveItDir = process.env.PROVE_IT_DIR
+    process.env.PROVE_IT_DIR = env.PROVE_IT_DIR
+  })
+
+  afterEach(() => {
+    if (origProveItDir === undefined) delete process.env.PROVE_IT_DIR
+    else process.env.PROVE_IT_DIR = origProveItDir
+    if (tmpDir) cleanupTempDir(tmpDir)
+  })
+
+  it('logs command result on PostToolUse for Bash', () => {
+    writeConfig(tmpDir, makeConfig([
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'placeholder', type: 'script', command: 'true' }] }
+    ]))
+
+    invokeHook('claude:PostToolUse', {
+      hook_event_name: 'PostToolUse',
+      session_id: SESSION_ID,
+      tool_name: 'Bash',
+      tool_input: { command: 'npm test' },
+      tool_response: 'All tests passed'
+    }, { projectDir: tmpDir, env })
+
+    const results = readCommandResults(SESSION_ID, 0)
+    assert.strictEqual(results.length, 1, 'Should have logged one command result')
+    assert.strictEqual(results[0].command, 'npm test')
+    assert.strictEqual(results[0].success, true)
+  })
+
+  it('logs FAIL on PostToolUseFailure for Bash', () => {
+    writeConfig(tmpDir, makeConfig([
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'placeholder', type: 'script', command: 'true' }] }
+    ]))
+
+    invokeHook('claude:PostToolUseFailure', {
+      hook_event_name: 'PostToolUseFailure',
+      session_id: SESSION_ID,
+      tool_name: 'Bash',
+      tool_input: { command: 'npm test' },
+      error: 'Tests failed'
+    }, { projectDir: tmpDir, env })
+
+    const results = readCommandResults(SESSION_ID, 0)
+    assert.strictEqual(results.length, 1, 'Should have logged one command result')
+    assert.strictEqual(results[0].command, 'npm test')
+    assert.strictEqual(results[0].success, false)
+  })
+
+  it('does not log for non-Bash tools on PostToolUse', () => {
+    writeConfig(tmpDir, makeConfig([
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'placeholder', type: 'script', command: 'true' }] }
+    ]))
+
+    invokeHook('claude:PostToolUse', {
+      hook_event_name: 'PostToolUse',
+      session_id: SESSION_ID,
+      tool_name: 'Edit',
+      tool_input: { file_path: '/tmp/foo.js' },
+      tool_response: 'ok'
+    }, { projectDir: tmpDir, env })
+
+    const results = readCommandResults(SESSION_ID, 0)
+    assert.strictEqual(results.length, 0, 'Should not log for non-Bash tools')
   })
 })

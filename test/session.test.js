@@ -6,6 +6,8 @@ const os = require('os')
 
 const {
   logReview,
+  logCommandResult,
+  readCommandResults,
   projectLogName,
   loadSessionState,
   saveSessionState,
@@ -813,6 +815,80 @@ describe('session state functions', () => {
       assert.doesNotThrow(() => pruneOldSessions(7))
 
       process.env.PROVE_IT_DIR = origDir
+    })
+  })
+
+  describe('logCommandResult', () => {
+    it('writes a JSONL entry with reviewer "command-result"', () => {
+      logCommandResult(SESSION_ID, '/project', 'Bash', 'npm test', true, 'PostToolUse')
+      const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${SESSION_ID}.jsonl`)
+      const lines = fs.readFileSync(logFile, 'utf8').trim().split('\n')
+      const entry = JSON.parse(lines[lines.length - 1])
+      assert.strictEqual(entry.reviewer, 'command-result')
+      assert.strictEqual(entry.status, 'PASS')
+      assert.strictEqual(entry.reason, 'npm test')
+      assert.strictEqual(entry.toolName, 'Bash')
+      assert.strictEqual(entry.hookEvent, 'PostToolUse')
+      assert.strictEqual(typeof entry.at, 'number')
+    })
+
+    it('records FAIL status when success is false', () => {
+      logCommandResult(SESSION_ID, '/project', 'Bash', 'npm test', false, 'PostToolUseFailure')
+      const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${SESSION_ID}.jsonl`)
+      const entry = JSON.parse(fs.readFileSync(logFile, 'utf8').trim().split('\n').pop())
+      assert.strictEqual(entry.status, 'FAIL')
+      assert.strictEqual(entry.hookEvent, 'PostToolUseFailure')
+    })
+
+    it('includes sessionId and projectDir', () => {
+      logCommandResult(SESSION_ID, '/my/project', 'Bash', 'ls', true, 'PostToolUse')
+      const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${SESSION_ID}.jsonl`)
+      const entry = JSON.parse(fs.readFileSync(logFile, 'utf8').trim().split('\n').pop())
+      assert.strictEqual(entry.sessionId, SESSION_ID)
+      assert.strictEqual(entry.projectDir, '/my/project')
+    })
+  })
+
+  describe('readCommandResults', () => {
+    it('returns empty array when no session log exists', () => {
+      const results = readCommandResults('nonexistent-session', 0)
+      assert.deepStrictEqual(results, [])
+    })
+
+    it('returns command-result entries since a given timestamp', () => {
+      // Write some entries: a regular review, then two command results
+      logReview(SESSION_ID, '/project', 'fast-tests', 'PASS', 'OK', null, 'Stop')
+      logCommandResult(SESSION_ID, '/project', 'Bash', 'npm test', true, 'PostToolUse')
+      logCommandResult(SESSION_ID, '/project', 'Bash', 'npm run lint', false, 'PostToolUseFailure')
+
+      const results = readCommandResults(SESSION_ID, 0)
+      assert.strictEqual(results.length, 2)
+      assert.strictEqual(results[0].command, 'npm test')
+      assert.strictEqual(results[0].success, true)
+      assert.strictEqual(results[1].command, 'npm run lint')
+      assert.strictEqual(results[1].success, false)
+    })
+
+    it('filters entries by sinceTimestamp', () => {
+      logCommandResult(SESSION_ID, '/project', 'Bash', 'old command', true, 'PostToolUse')
+
+      // Read the timestamp of the entry we just wrote
+      const logFile = path.join(tmpDir, 'prove_it', 'sessions', `${SESSION_ID}.jsonl`)
+      const firstEntry = JSON.parse(fs.readFileSync(logFile, 'utf8').trim().split('\n').pop())
+      const cutoff = firstEntry.at
+
+      // Write another entry (will have a >= timestamp)
+      logCommandResult(SESSION_ID, '/project', 'Bash', 'new command', false, 'PostToolUseFailure')
+
+      const results = readCommandResults(SESSION_ID, cutoff)
+      // Should only include entries with at > cutoff
+      assert.ok(results.every(r => r.at > cutoff),
+        'Should only return entries after cutoff')
+    })
+
+    it('returns null sessionId as empty array', () => {
+      const results = readCommandResults(null, 0)
+      assert.deepStrictEqual(results, [])
     })
   })
 })

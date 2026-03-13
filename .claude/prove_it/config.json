@@ -74,32 +74,6 @@
     },
     {
       "type": "claude",
-      "event": "PostToolUse",
-      "matcher": "Bash",
-      "tasks": [
-        {
-          "name": "test-first",
-          "type": "script",
-          "command": "$(prove_it prefix)/libexec/test-first",
-          "quiet": true
-        }
-      ]
-    },
-    {
-      "type": "claude",
-      "event": "PostToolUseFailure",
-      "matcher": "Bash",
-      "tasks": [
-        {
-          "name": "test-first",
-          "type": "script",
-          "command": "$(prove_it prefix)/libexec/test-first",
-          "quiet": true
-        }
-      ]
-    },
-    {
-      "type": "claude",
       "event": "Stop",
       "tasks": [
         {

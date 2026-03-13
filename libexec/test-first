@@ -15,7 +15,7 @@
  */
 const { isSourceFile, isTestFile } = require('../lib/globs')
 const { isTestCommand } = require('../lib/testing')
-const { saveSessionState, loadSessionState, getPhase } = require('../lib/session')
+const { saveSessionState, loadSessionState, getPhase, readCommandResults } = require('../lib/session')
 
 const TDD_STATE_KEY = 'tddState'
 
@@ -78,10 +78,7 @@ function classifyEvent (input, sources, tests, testCommands, rootDir) {
   const toolName = input.tool_name || ''
   const toolInput = input.tool_input || {}
 
-  if (hookEvent === 'PostToolUse') return 'test-pass'
-  if (hookEvent === 'PostToolUseFailure') return 'test-fail'
-
-  // PreToolUse events
+  // PreToolUse events only
   if (hookEvent === 'PreToolUse') {
     // Check for test command in Bash
     if (toolName === 'Bash') {
@@ -238,14 +235,32 @@ function run (input) {
   // Load state
   let tddState = loadSessionState(sessionId, TDD_STATE_KEY)
   if (!tddState || tddState.mode !== mode) {
-    tddState = { step: 'idle', editCount: 0, mode }
+    tddState = { step: 'idle', editCount: 0, mode, lastProcessedAt: 0 }
   }
 
-  // Classify event
-  const event = classifyEvent(input, sources, tests, testCommands, rootDir)
-  if (event === 'other') return null
+  // Replay command results from the session log before handling the current event
+  const cmdResults = readCommandResults(sessionId, tddState.lastProcessedAt || 0)
+  let replayMessage = null
+  for (const cr of cmdResults) {
+    if (!isTestCommand(cr.command, testCommands)) continue
+    const cmdEvent = cr.success ? 'test-pass' : 'test-fail'
+    const transition = mode === 'tdd'
+      ? tddTransition(tddState, cmdEvent, untestedEditLimit)
+      : refactorTransition(tddState, cmdEvent, untestedEditLimit)
+    tddState = transition.state
+    if (transition.message) replayMessage = transition.message
+    tddState.lastProcessedAt = cr.at
+  }
 
-  // Apply transition
+  // Classify current PreToolUse event
+  const event = classifyEvent(input, sources, tests, testCommands, rootDir)
+  if (event === 'other') {
+    // Still save state from replayed command results
+    if (cmdResults.length > 0) saveSessionState(sessionId, TDD_STATE_KEY, tddState)
+    return replayMessage
+  }
+
+  // Apply transition for current event
   let result
   if (mode === 'tdd') {
     result = tddTransition(tddState, event, untestedEditLimit)
@@ -256,7 +271,7 @@ function run (input) {
   // Save state
   saveSessionState(sessionId, TDD_STATE_KEY, result.state)
 
-  return result.message
+  return result.message || replayMessage
 }
 
 if (require.main === module) {
