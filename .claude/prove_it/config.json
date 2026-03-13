@@ -59,14 +59,47 @@
       "matcher": "ExitPlanMode",
       "tasks": [
         {
-          "name": "inject-plan",
+          "name": "inject-tdd-plan",
           "type": "script",
           "command": "$(prove_it prefix)/libexec/inject-plan",
           "quiet": true,
+          "briefing": "During implementation: follow red-green TDD--write a failing test, confirm the failure, write the minimum code to pass, confirm it passes. During refactoring: run the test suite after every few edits to confirm behavior is preserved. To switch modes, run: prove_it phase implement  or  prove_it phase refactor",
           "params": {
             "position": "after-title",
             "marker": "red-green TDD",
             "block": "## Development approach\n\nFollow red-green TDD for each change:\n\n- Write a test that expresses the behavior you're about to implement\n- Run it and verify it fails for the reason you expect\n- Write the minimum source code to make the test pass\n- Re-run the test in isolation and confirm it passes (or the failure message changes as expected) before moving on\n"
+          }
+        }
+      ]
+    },
+    {
+      "type": "claude",
+      "event": "PostToolUse",
+      "matcher": "Bash",
+      "tasks": [
+        {
+          "name": "test-first",
+          "type": "script",
+          "command": "$(prove_it prefix)/libexec/test-first",
+          "quiet": true,
+          "params": {
+            "untestedEditLimit": 3
+          }
+        }
+      ]
+    },
+    {
+      "type": "claude",
+      "event": "PostToolUseFailure",
+      "matcher": "Bash",
+      "tasks": [
+        {
+          "name": "test-first",
+          "type": "script",
+          "command": "$(prove_it prefix)/libexec/test-first",
+          "quiet": true,
+          "params": {
+            "untestedEditLimit": 3
           }
         }
       ]
@@ -146,5 +179,5 @@
       ]
     }
   ],
-  "initSeed": "9a8b35d72220"
+  "initSeed": "324d6f694037"
 }
