@@ -98,6 +98,8 @@ describe('example projects', () => {
       const expected = {
         SessionStart: [{ matcher: 'startup|resume|clear|compact', hooks: [{ type: 'command', command: 'prove_it hook claude:SessionStart' }] }],
         PreToolUse: [{ hooks: [{ type: 'command', command: 'prove_it hook claude:PreToolUse' }] }],
+        PostToolUse: [{ hooks: [{ type: 'command', command: 'prove_it hook claude:PostToolUse' }] }],
+        PostToolUseFailure: [{ hooks: [{ type: 'command', command: 'prove_it hook claude:PostToolUseFailure' }] }],
         Stop: [{ hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }] }],
         TaskCompleted: [{ hooks: [{ type: 'command', command: 'prove_it hook claude:TaskCompleted' }] }]
       }

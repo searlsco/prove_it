@@ -60,6 +60,12 @@ function correctSettings () {
     PreToolUse: [{
       hooks: [{ type: 'command', command: 'prove_it hook claude:PreToolUse' }]
     }],
+    PostToolUse: [{
+      hooks: [{ type: 'command', command: 'prove_it hook claude:PostToolUse' }]
+    }],
+    PostToolUseFailure: [{
+      hooks: [{ type: 'command', command: 'prove_it hook claude:PostToolUseFailure' }]
+    }],
     Stop: [{
       hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }]
     }],

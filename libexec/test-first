@@ -1,13 +1,263 @@
 #!/usr/bin/env node
 /**
- * test-first — Remind the agent to write tests before source code.
+ * test-first — Phase-aware TDD enforcement.
  *
- * Reads hook input JSON from stdin (session_id, params).
- * Checks the consecutiveUntestedEditCount from session state.
- * When count >= untestedEditLimit, outputs a reminder on stdout and exits 0.
- * Otherwise outputs nothing and exits 0.
+ * Reads hook input JSON from stdin. Behavior depends on session phase:
+ *   plan:              no tracking, no messages
+ *   unknown/implement: TDD state machine (red-green enforcement)
+ *   refactor:          edit-count tracking (run tests regularly)
+ *
+ * State machine (TDD mode) states: idle, needs-test, needs-red, needs-green
+ * Refactor mode: simple editsSinceTestRun counter
+ *
+ * Handles PreToolUse (before edits/commands), PostToolUse (test passed),
+ * and PostToolUseFailure (test failed).
  */
-const { getConsecutiveUntestedEditCount } = require('../lib/session')
+const { isSourceFile, isTestFile } = require('../lib/globs')
+const { isTestCommand } = require('../lib/testing')
+const { saveSessionState, loadSessionState, getPhase } = require('../lib/session')
+
+const TDD_STATE_KEY = 'tddState'
+
+// ── Message templates ──
+
+function tddNudgeMessage (count) {
+  return `prove_it: You have made ${count} source file edits without writing or running tests.
+
+Write a failing test before your next source edit. Untested code
+compounds--the longer you wait, the harder it is to verify your
+changes and the more likely you are to ship regressions.
+
+If this is actually a refactor with existing test coverage, run
+this command to switch to refactor mode:
+
+  prove_it phase refactor
+
+If you have a specific reason to continue without tests (e.g.
+configuration changes that aren't meaningfully testable), state
+that reason briefly and proceed. Otherwise, write a test now.`
+}
+
+function refactorNudgeMessage (count) {
+  return `prove_it: You have made ${count} source file edits without running your test suite.
+
+Run your tests now to confirm behavior is preserved. Refactoring
+without a safety harness compounds risk--a silent regression now
+means a painful debugging session later.
+
+If you are adding new behavior (not just restructuring), run
+this command to switch to implementation mode:
+
+  prove_it phase implement`
+}
+
+function skippedRedMessage () {
+  return 'prove_it: You edited source code without running the new test first. Run the test to confirm it fails (red step), then proceed with the implementation.'
+}
+
+function vacuousTestMessage () {
+  return 'prove_it: Your test passed without any new source code changes. This may be a vacuous test that doesn\'t actually verify new behavior. Confirm the test would fail if the implementation were reverted.'
+}
+
+function refactorTestEditMessage () {
+  return `prove_it: You are editing test files during a refactor. If you are adding new behavior, run this command to switch to implementation mode:
+
+  prove_it phase implement`
+}
+
+function refactorTestFailMessage () {
+  return `prove_it: Test failure during refactor--behavior may have changed. If this refactor introduced unintended changes, run this command to switch to implementation mode:
+
+  prove_it phase implement`
+}
+
+// ── Event classification ──
+
+function classifyEvent (input, sources, tests, testCommands, rootDir) {
+  const hookEvent = input.hook_event_name || ''
+  const toolName = input.tool_name || ''
+  const toolInput = input.tool_input || {}
+
+  if (hookEvent === 'PostToolUse') return 'test-pass'
+  if (hookEvent === 'PostToolUseFailure') return 'test-fail'
+
+  // PreToolUse events
+  if (hookEvent === 'PreToolUse') {
+    // Check for test command in Bash
+    if (toolName === 'Bash') {
+      const cmd = (toolInput.command || '').trim()
+      if (isTestCommand(cmd, testCommands)) return 'test-command'
+      return 'other'
+    }
+
+    // File edits
+    const editTools = ['Edit', 'MultiEdit', 'Write', 'NotebookEdit']
+    if (editTools.includes(toolName)) {
+      const filePath = toolInput.file_path || toolInput.notebook_path || ''
+      if (!filePath) return 'other'
+
+      const path = require('path')
+      let relativePath = filePath
+      if (path.isAbsolute(filePath)) {
+        let resolvedRoot = rootDir
+        try { resolvedRoot = require('fs').realpathSync(rootDir) } catch {}
+        let resolvedFile = filePath
+        try { resolvedFile = require('fs').realpathSync(filePath) } catch {
+          try {
+            const dir = require('fs').realpathSync(path.dirname(filePath))
+            resolvedFile = path.join(dir, path.basename(filePath))
+          } catch {}
+        }
+        relativePath = path.relative(resolvedRoot, resolvedFile)
+      }
+
+      if (relativePath.startsWith('..')) return 'other'
+      if (!isSourceFile(relativePath, rootDir, sources)) return 'other'
+
+      if (isTestFile(relativePath, rootDir, tests)) return 'test-edit'
+      return 'source-edit'
+    }
+  }
+
+  return 'other'
+}
+
+// ── TDD mode state machine ──
+
+function tddTransition (state, event, limit) {
+  const s = { ...state }
+  let message = null
+
+  switch (event) {
+    case 'source-edit':
+      if (s.step === 'idle') {
+        s.step = 'needs-test'
+        s.editCount = 1
+      } else if (s.step === 'needs-test') {
+        s.editCount++
+        if (s.editCount >= limit) message = tddNudgeMessage(s.editCount)
+      } else if (s.step === 'needs-red') {
+        message = skippedRedMessage()
+        s.step = 'needs-test'
+        s.editCount = 1
+      } else if (s.step === 'needs-green') {
+        s.step = 'needs-test'
+        s.editCount = 1
+      }
+      break
+
+    case 'test-edit':
+      if (s.step === 'idle' || s.step === 'needs-test') {
+        s.step = 'needs-red'
+        s.editCount = 0
+      }
+      // needs-red/needs-green: stay (editing more test code)
+      break
+
+    case 'test-command':
+      // Running tests — transition happens on PostToolUse/PostToolUseFailure
+      // If in needs-test, no transition (running existing tests, not new ones)
+      break
+
+    case 'test-pass':
+      if (s.step === 'needs-red') {
+        message = vacuousTestMessage()
+        s.step = 'idle'
+        s.editCount = 0
+      } else if (s.step === 'needs-green') {
+        // Green confirmed!
+        s.step = 'idle'
+        s.editCount = 0
+      } else if (s.step === 'needs-test') {
+        // Ran existing suite — good, reset edit count
+        s.editCount = 0
+      }
+      break
+
+    case 'test-fail':
+      if (s.step === 'needs-red') {
+        // Red confirmed!
+        s.step = 'needs-green'
+      }
+      // needs-green: still failing, stay
+      break
+  }
+
+  return { state: s, message }
+}
+
+// ── Refactor mode state machine ──
+
+function refactorTransition (state, event, limit) {
+  const s = { ...state }
+  let message = null
+
+  switch (event) {
+    case 'source-edit':
+      s.editCount++
+      if (s.editCount >= limit) message = refactorNudgeMessage(s.editCount)
+      break
+
+    case 'test-edit':
+      message = refactorTestEditMessage()
+      break
+
+    case 'test-pass':
+      s.editCount = 0
+      break
+
+    case 'test-fail':
+      message = refactorTestFailMessage()
+      break
+
+    case 'test-command':
+      // Wait for post result
+      break
+  }
+
+  return { state: s, message }
+}
+
+// ── Main ──
+
+function run (input) {
+  const sessionId = input.session_id || null
+  const untestedEditLimit = input.params?.untestedEditLimit || 3
+  const sources = input.sources || input.params?.sources || null
+  const tests = input.tests || input.params?.tests || null
+  const testCommands = input.testCommands || input.params?.testCommands || null
+  const rootDir = process.env.CLAUDE_PROJECT_DIR || process.cwd()
+
+  // Plan mode: no tracking, no messages
+  const phase = getPhase(sessionId)
+  if (phase === 'plan') return null
+
+  // Determine mode from phase
+  const mode = (phase === 'refactor') ? 'refactor' : 'tdd'
+
+  // Load state
+  let tddState = loadSessionState(sessionId, TDD_STATE_KEY)
+  if (!tddState || tddState.mode !== mode) {
+    tddState = { step: 'idle', editCount: 0, mode }
+  }
+
+  // Classify event
+  const event = classifyEvent(input, sources, tests, testCommands, rootDir)
+  if (event === 'other') return null
+
+  // Apply transition
+  let result
+  if (mode === 'tdd') {
+    result = tddTransition(tddState, event, untestedEditLimit)
+  } else {
+    result = refactorTransition(tddState, event, untestedEditLimit)
+  }
+
+  // Save state
+  saveSessionState(sessionId, TDD_STATE_KEY, result.state)
+
+  return result.message
+}
 
 if (require.main === module) {
   let raw = ''
@@ -17,18 +267,22 @@ if (require.main === module) {
     let input = {}
     try { input = JSON.parse(raw) } catch {}
 
-    const sessionId = input.session_id || null
-    const untestedEditLimit = input.params?.untestedEditLimit || 3
-
-    const count = getConsecutiveUntestedEditCount(sessionId)
-    if (count >= untestedEditLimit) {
-      process.stdout.write(
-        `prove_it: You've edited ${count} source files without writing or running tests. Consider writing a failing test before continuing.`
-      )
-    }
+    const message = run(input)
+    if (message) process.stdout.write(message)
     process.exit(0)
   })
   process.stdin.resume()
 } else {
-  module.exports = { getConsecutiveUntestedEditCount }
+  module.exports = {
+    run,
+    tddTransition,
+    refactorTransition,
+    classifyEvent,
+    tddNudgeMessage,
+    refactorNudgeMessage,
+    skippedRedMessage,
+    vacuousTestMessage,
+    refactorTestEditMessage,
+    refactorTestFailMessage
+  }
 }

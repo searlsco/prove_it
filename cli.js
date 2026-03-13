@@ -86,6 +86,18 @@ function buildHookGroups () {
       }
     },
     {
+      event: 'PostToolUse',
+      group: {
+        hooks: [{ type: 'command', command: 'prove_it hook claude:PostToolUse' }]
+      }
+    },
+    {
+      event: 'PostToolUseFailure',
+      group: {
+        hooks: [{ type: 'command', command: 'prove_it hook claude:PostToolUseFailure' }]
+      }
+    },
+    {
       event: 'Stop',
       group: {
         hooks: [{ type: 'command', command: 'prove_it hook claude:Stop' }]
@@ -879,6 +891,8 @@ function cmdDoctor () {
   if (settings && settings.hooks) {
     checkDispatcher(settings, 'SessionStart', 'prove_it hook claude:SessionStart', 'startup|resume|clear|compact', issues)
     checkDispatcher(settings, 'PreToolUse', 'prove_it hook claude:PreToolUse', null, issues)
+    checkDispatcher(settings, 'PostToolUse', 'prove_it hook claude:PostToolUse', null, issues)
+    checkDispatcher(settings, 'PostToolUseFailure', 'prove_it hook claude:PostToolUseFailure', null, issues)
     checkDispatcher(settings, 'Stop', 'prove_it hook claude:Stop', null, issues)
     checkDispatcher(settings, 'TaskCompleted', 'prove_it hook claude:TaskCompleted', null, issues)
   } else {

@@ -21,6 +21,26 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "../support/prove_it hook claude:PostToolUse"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "../support/prove_it hook claude:PostToolUseFailure"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

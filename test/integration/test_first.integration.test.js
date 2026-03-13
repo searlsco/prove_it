@@ -12,24 +12,73 @@ const {
   createFile,
   writeConfig,
   makeConfig,
-  assertValidPermissionDecision,
   isolatedEnv
 } = require('./hook-harness')
 
-const { saveSessionState, getConsecutiveUntestedEditCount } = require('../../lib/session')
+const { saveSessionState, setPhase, loadSessionState } = require('../../lib/session')
 
-describe('test-first counter tracking', () => {
+function testFirstConfig (tmpDir, extra = {}) {
+  return makeConfig([
+    {
+      type: 'claude',
+      event: 'PreToolUse',
+      matcher: 'Write|Edit|Bash',
+      tasks: [
+        {
+          name: 'test-first',
+          type: 'script',
+          command: path.join(__dirname, '..', '..', 'libexec', 'test-first'),
+          quiet: true,
+          params: { untestedEditLimit: 3 }
+        }
+      ]
+    },
+    {
+      type: 'claude',
+      event: 'PostToolUse',
+      matcher: 'Bash',
+      tasks: [
+        {
+          name: 'test-first',
+          type: 'script',
+          command: path.join(__dirname, '..', '..', 'libexec', 'test-first'),
+          quiet: true,
+          params: { untestedEditLimit: 3 }
+        }
+      ]
+    },
+    {
+      type: 'claude',
+      event: 'PostToolUseFailure',
+      matcher: 'Bash',
+      tasks: [
+        {
+          name: 'test-first',
+          type: 'script',
+          command: path.join(__dirname, '..', '..', 'libexec', 'test-first'),
+          quiet: true,
+          params: { untestedEditLimit: 3 }
+        }
+      ]
+    }
+  ], {
+    sources: ['src/**/*.js', 'test/**/*.test.js'],
+    tests: ['test/**/*.test.js'],
+    ...extra
+  })
+}
+
+describe('TDD mode state machine integration', () => {
   let tmpDir, env, origProveItDir
-  const SESSION_ID = 'test-session-testfirst'
+  const SESSION_ID = 'test-session-tdd-sm'
 
   beforeEach(() => {
-    tmpDir = createTempDir('prove_it_testfirst_')
+    tmpDir = createTempDir('prove_it_tdd_sm_')
     initGitRepo(tmpDir)
     createFile(tmpDir, '.gitkeep', '')
     spawnSync('git', ['add', '.'], { cwd: tmpDir })
     spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
     env = isolatedEnv(tmpDir)
-    // Align test process PROVE_IT_DIR with subprocess so reads/writes go to the same place
     origProveItDir = process.env.PROVE_IT_DIR
     process.env.PROVE_IT_DIR = env.PROVE_IT_DIR
   })
@@ -40,59 +89,97 @@ describe('test-first counter tracking', () => {
     if (tmpDir) cleanupTempDir(tmpDir)
   })
 
-  it('increments counter when editing a non-test source file', () => {
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'Write|Edit',
-        tasks: []
-      }
-    ], {
-      sources: ['src/**/*.js', 'test/**/*.test.js'],
-      tests: ['test/**/*.test.js']
-    }))
+  it('nudges after N source edits without test activity', () => {
+    writeConfig(tmpDir, testFirstConfig(tmpDir))
+    createFile(tmpDir, 'src/app.js', 'hello\n')
 
-    createFile(tmpDir, 'src/app.js', 'console.log("hello")\n')
+    // Make 3 source edits
+    for (let i = 0; i < 3; i++) {
+      invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        session_id: SESSION_ID,
+        tool_name: 'Edit',
+        tool_input: { file_path: path.join(tmpDir, 'src/app.js'), old_string: 'a', new_string: 'b' }
+      }, { projectDir: tmpDir, env })
+    }
 
-    invokeHook('claude:PreToolUse', {
-      hook_event_name: 'PreToolUse',
-      session_id: SESSION_ID,
-      tool_name: 'Edit',
-      tool_input: { file_path: path.join(tmpDir, 'src/app.js'), old_string: 'a', new_string: 'b' }
-    }, { projectDir: tmpDir, env })
-
-    const count = getConsecutiveUntestedEditCount(SESSION_ID)
-    assert.strictEqual(count, 1, 'Counter should be 1 after editing a source file')
+    // The 3rd edit should have triggered a nudge via additionalContext
+    const state = loadSessionState(SESSION_ID, 'tddState')
+    assert.strictEqual(state.step, 'needs-test')
+    assert.strictEqual(state.editCount, 3)
   })
 
-  it('resets counter when editing a test file', () => {
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'Write|Edit',
-        tasks: []
-      }
-    ], {
-      sources: ['src/**/*.js', 'test/**/*.test.js'],
-      tests: ['test/**/*.test.js']
-    }))
+  it('emits TDD nudge message with refactor escape hatch', () => {
+    writeConfig(tmpDir, testFirstConfig(tmpDir))
+    createFile(tmpDir, 'src/app.js', 'hello\n')
 
-    createFile(tmpDir, 'src/app.js', 'console.log("hello")\n')
-    createFile(tmpDir, 'test/app.test.js', 'test("it works", () => {})\n')
+    // Pre-set state to just below limit
+    saveSessionState(SESSION_ID, 'tddState', { step: 'needs-test', editCount: 2, mode: 'tdd' })
 
-    // First: edit a source file to set counter to 1
-    invokeHook('claude:PreToolUse', {
+    const result = invokeHook('claude:PreToolUse', {
       hook_event_name: 'PreToolUse',
       session_id: SESSION_ID,
       tool_name: 'Edit',
       tool_input: { file_path: path.join(tmpDir, 'src/app.js'), old_string: 'a', new_string: 'b' }
     }, { projectDir: tmpDir, env })
 
-    assert.strictEqual(getConsecutiveUntestedEditCount(SESSION_ID), 1)
+    assert.strictEqual(result.exitCode, 0)
+    const ctx = result.output?.hookSpecificOutput?.additionalContext || ''
+    assert.ok(ctx.includes('source file edits without writing or running tests'),
+      `Should have TDD nudge, got: ${ctx}`)
+    assert.ok(ctx.includes('prove_it phase refactor'),
+      `Should mention refactor escape hatch, got: ${ctx}`)
+  })
 
-    // Then: edit a test file to reset counter
+  it('warns about skipped red step (test-edit → source-edit without running)', () => {
+    writeConfig(tmpDir, testFirstConfig(tmpDir))
+    createFile(tmpDir, 'src/app.js', 'hello\n')
+    createFile(tmpDir, 'test/app.test.js', 'test("it", () => {})\n')
+
+    // Simulate: test-edit puts us in needs-red
+    saveSessionState(SESSION_ID, 'tddState', { step: 'needs-red', editCount: 0, mode: 'tdd' })
+
+    // Source edit without running test first
+    const result = invokeHook('claude:PreToolUse', {
+      hook_event_name: 'PreToolUse',
+      session_id: SESSION_ID,
+      tool_name: 'Edit',
+      tool_input: { file_path: path.join(tmpDir, 'src/app.js'), old_string: 'a', new_string: 'b' }
+    }, { projectDir: tmpDir, env })
+
+    assert.strictEqual(result.exitCode, 0)
+    const ctx = result.output?.hookSpecificOutput?.additionalContext || ''
+    assert.ok(ctx.includes('without running the new test'),
+      `Should warn about skipped red step, got: ${ctx}`)
+  })
+
+  it('detects vacuous test (test-edit → test-pass without source edits)', () => {
+    writeConfig(tmpDir, testFirstConfig(tmpDir))
+
+    // Simulate: test-edit puts us in needs-red
+    saveSessionState(SESSION_ID, 'tddState', { step: 'needs-red', editCount: 0, mode: 'tdd' })
+
+    // Test passes without any source edits
+    const result = invokeHook('claude:PostToolUse', {
+      hook_event_name: 'PostToolUse',
+      session_id: SESSION_ID,
+      tool_name: 'Bash',
+      tool_input: { command: 'npm test' },
+      tool_response: 'All tests passed'
+    }, { projectDir: tmpDir, env })
+
+    assert.strictEqual(result.exitCode, 0)
+    const ctx = result.output?.hookSpecificOutput?.additionalContext || ''
+    assert.ok(ctx.includes('vacuous'),
+      `Should warn about vacuous test, got: ${ctx}`)
+  })
+
+  it('full red-green cycle produces no warnings', () => {
+    writeConfig(tmpDir, testFirstConfig(tmpDir))
+    createFile(tmpDir, 'src/app.js', 'hello\n')
+    createFile(tmpDir, 'test/app.test.js', 'test("it", () => {})\n')
+
+    // Step 1: Write test → needs-red
     invokeHook('claude:PreToolUse', {
       hook_event_name: 'PreToolUse',
       session_id: SESSION_ID,
@@ -100,71 +187,55 @@ describe('test-first counter tracking', () => {
       tool_input: { file_path: path.join(tmpDir, 'test/app.test.js'), old_string: 'a', new_string: 'b' }
     }, { projectDir: tmpDir, env })
 
-    const count = getConsecutiveUntestedEditCount(SESSION_ID)
-    assert.strictEqual(count, 0, 'Counter should reset after editing a test file')
-  })
+    let state = loadSessionState(SESSION_ID, 'tddState')
+    assert.strictEqual(state.step, 'needs-red', 'After test edit, should be in needs-red')
 
-  it('resets counter when running a test command in Bash', () => {
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'Write|Edit|Bash',
-        tasks: []
-      }
-    ], {
-      sources: ['src/**/*.js'],
-      tests: ['test/**/*.test.js']
-    }))
+    // Step 2: Run test, it fails → needs-green
+    invokeHook('claude:PostToolUseFailure', {
+      hook_event_name: 'PostToolUseFailure',
+      session_id: SESSION_ID,
+      tool_name: 'Bash',
+      tool_input: { command: 'npm test' },
+      error: 'Test failed'
+    }, { projectDir: tmpDir, env })
 
-    // Set counter manually
-    saveSessionState(SESSION_ID, 'consecutiveUntestedEditCount', 5)
+    state = loadSessionState(SESSION_ID, 'tddState')
+    assert.strictEqual(state.step, 'needs-green', 'After test fail, should be in needs-green')
 
+    // Step 3: Write source code
     invokeHook('claude:PreToolUse', {
       hook_event_name: 'PreToolUse',
       session_id: SESSION_ID,
-      tool_name: 'Bash',
-      tool_input: { command: 'npm test' }
+      tool_name: 'Edit',
+      tool_input: { file_path: path.join(tmpDir, 'src/app.js'), old_string: 'a', new_string: 'b' }
     }, { projectDir: tmpDir, env })
 
-    const count = getConsecutiveUntestedEditCount(SESSION_ID)
-    assert.strictEqual(count, 0, 'Counter should reset after running npm test')
-  })
+    state = loadSessionState(SESSION_ID, 'tddState')
+    assert.strictEqual(state.step, 'needs-test', 'After source edit from needs-green, should be needs-test')
 
-  it('resets counter when running a user-configured test command', () => {
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'Bash',
-        tasks: []
-      }
-    ], {
-      sources: ['src/**/*.js'],
-      tests: ['test/**/*.test.js'],
-      testCommands: ['my-test-runner']
-    }))
-
-    saveSessionState(SESSION_ID, 'consecutiveUntestedEditCount', 3)
-
-    invokeHook('claude:PreToolUse', {
-      hook_event_name: 'PreToolUse',
+    // Step 4: Run test, it passes → reset
+    const result = invokeHook('claude:PostToolUse', {
+      hook_event_name: 'PostToolUse',
       session_id: SESSION_ID,
       tool_name: 'Bash',
-      tool_input: { command: 'my-test-runner --verbose' }
+      tool_input: { command: 'npm test' },
+      tool_response: 'All tests passed'
     }, { projectDir: tmpDir, env })
 
-    const count = getConsecutiveUntestedEditCount(SESSION_ID)
-    assert.strictEqual(count, 0, 'Counter should reset after running user-configured test command')
+    state = loadSessionState(SESSION_ID, 'tddState')
+    assert.strictEqual(state.editCount, 0, 'Edit count should be reset after test pass')
+    // Should not have any warning messages
+    const ctx = result.output?.hookSpecificOutput?.additionalContext || ''
+    assert.ok(!ctx.includes('vacuous'), 'Should not warn about vacuous test after source edit')
   })
 })
 
-describe('test-first reminder via additionalContext', () => {
+describe('Refactor mode integration', () => {
   let tmpDir, env, origProveItDir
-  const SESSION_ID = 'test-session-reminder'
+  const SESSION_ID = 'test-session-refactor'
 
   beforeEach(() => {
-    tmpDir = createTempDir('prove_it_reminder_')
+    tmpDir = createTempDir('prove_it_refactor_')
     initGitRepo(tmpDir)
     createFile(tmpDir, '.gitkeep', '')
     spawnSync('git', ['add', '.'], { cwd: tmpDir })
@@ -180,31 +251,13 @@ describe('test-first reminder via additionalContext', () => {
     if (tmpDir) cleanupTempDir(tmpDir)
   })
 
-  it('emits additionalContext when counter meets untestedEditLimit', () => {
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'Write|Edit',
-        tasks: [
-          {
-            name: 'test-first',
-            type: 'script',
-            command: path.join(__dirname, '..', '..', 'libexec', 'test-first'),
-            quiet: true,
-            params: { untestedEditLimit: 2 }
-          }
-        ]
-      }
-    ], {
-      sources: ['src/**/*.js'],
-      tests: ['test/**/*.test.js']
-    }))
-
+  it('nudges after N edits without test run in refactor mode', () => {
+    writeConfig(tmpDir, testFirstConfig(tmpDir))
     createFile(tmpDir, 'src/app.js', 'hello\n')
+    setPhase(SESSION_ID, 'refactor')
 
-    // Set counter above untestedEditLimit
-    saveSessionState(SESSION_ID, 'consecutiveUntestedEditCount', 3)
+    // Pre-set state to just below limit
+    saveSessionState(SESSION_ID, 'tddState', { step: 'idle', editCount: 2, mode: 'refactor' })
 
     const result = invokeHook('claude:PreToolUse', {
       hook_event_name: 'PreToolUse',
@@ -214,129 +267,154 @@ describe('test-first reminder via additionalContext', () => {
     }, { projectDir: tmpDir, env })
 
     assert.strictEqual(result.exitCode, 0)
-    assertValidPermissionDecision(result, 'test-first reminder')
-    assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow',
-      'Should allow the edit (reminder, not blocker)')
-
-    const ctx = result.output.hookSpecificOutput.additionalContext
-    assert.ok(ctx, 'Should have additionalContext')
-    assert.ok(ctx.includes('source files without writing or running tests'),
-      `additionalContext should contain reminder text, got: ${ctx}`)
+    const ctx = result.output?.hookSpecificOutput?.additionalContext || ''
+    assert.ok(ctx.includes('without running your test suite'),
+      `Should have refactor nudge, got: ${ctx}`)
   })
 
-  it('does not emit additionalContext when counter is below untestedEditLimit', () => {
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'Write|Edit',
-        tasks: [
-          {
-            name: 'test-first',
-            type: 'script',
-            command: path.join(__dirname, '..', '..', 'libexec', 'test-first'),
-            quiet: true,
-            params: { untestedEditLimit: 5 }
-          }
-        ]
-      }
-    ], {
-      sources: ['src/**/*.js'],
-      tests: ['test/**/*.test.js']
-    }))
+  it('test pass resets counter in refactor mode', () => {
+    writeConfig(tmpDir, testFirstConfig(tmpDir))
+    setPhase(SESSION_ID, 'refactor')
 
-    createFile(tmpDir, 'src/app.js', 'hello\n')
+    saveSessionState(SESSION_ID, 'tddState', { step: 'idle', editCount: 5, mode: 'refactor' })
 
-    // Set counter below untestedEditLimit
-    saveSessionState(SESSION_ID, 'consecutiveUntestedEditCount', 2)
+    invokeHook('claude:PostToolUse', {
+      hook_event_name: 'PostToolUse',
+      session_id: SESSION_ID,
+      tool_name: 'Bash',
+      tool_input: { command: 'npm test' },
+      tool_response: 'All tests passed'
+    }, { projectDir: tmpDir, env })
+
+    const state = loadSessionState(SESSION_ID, 'tddState')
+    assert.strictEqual(state.editCount, 0, 'Edit count should reset after test pass')
+  })
+
+  it('test failure warns about behavior change in refactor mode', () => {
+    writeConfig(tmpDir, testFirstConfig(tmpDir))
+    setPhase(SESSION_ID, 'refactor')
+
+    saveSessionState(SESSION_ID, 'tddState', { step: 'idle', editCount: 2, mode: 'refactor' })
+
+    const result = invokeHook('claude:PostToolUseFailure', {
+      hook_event_name: 'PostToolUseFailure',
+      session_id: SESSION_ID,
+      tool_name: 'Bash',
+      tool_input: { command: 'npm test' },
+      error: 'Tests failed'
+    }, { projectDir: tmpDir, env })
+
+    assert.strictEqual(result.exitCode, 0)
+    const ctx = result.output?.hookSpecificOutput?.additionalContext || ''
+    assert.ok(ctx.includes('Test failure during refactor'),
+      `Should warn about behavior change, got: ${ctx}`)
+  })
+
+  it('test file edit warns about mode mismatch in refactor mode', () => {
+    writeConfig(tmpDir, testFirstConfig(tmpDir))
+    createFile(tmpDir, 'test/app.test.js', 'test("it", () => {})\n')
+    setPhase(SESSION_ID, 'refactor')
+
+    saveSessionState(SESSION_ID, 'tddState', { step: 'idle', editCount: 0, mode: 'refactor' })
 
     const result = invokeHook('claude:PreToolUse', {
       hook_event_name: 'PreToolUse',
       session_id: SESSION_ID,
       tool_name: 'Edit',
-      tool_input: { file_path: path.join(tmpDir, 'src/app.js'), old_string: 'a', new_string: 'b' }
+      tool_input: { file_path: path.join(tmpDir, 'test/app.test.js'), old_string: 'a', new_string: 'b' }
     }, { projectDir: tmpDir, env })
 
     assert.strictEqual(result.exitCode, 0)
-    const ctx = result.output?.hookSpecificOutput?.additionalContext
-    assert.ok(!ctx || !ctx.includes('source files without'),
-      'Should not have reminder text when below untestedEditLimit')
+    const ctx = result.output?.hookSpecificOutput?.additionalContext || ''
+    assert.ok(ctx.includes('editing test files during a refactor'),
+      `Should warn about mode mismatch, got: ${ctx}`)
   })
 })
 
-describe('libexec/test-first script', () => {
-  let tmpDir, origProveItDir
-  const SESSION_ID = 'test-session-first'
-  const scriptPath = path.join(__dirname, '..', '..', 'libexec', 'test-first')
+describe('Plan mode integration', () => {
+  let tmpDir, env, origProveItDir
+  const SESSION_ID = 'test-session-plan'
 
   beforeEach(() => {
-    tmpDir = createTempDir('prove_it_testfirst_')
+    tmpDir = createTempDir('prove_it_plan_')
+    initGitRepo(tmpDir)
+    createFile(tmpDir, '.gitkeep', '')
+    spawnSync('git', ['add', '.'], { cwd: tmpDir })
+    spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+    env = isolatedEnv(tmpDir)
     origProveItDir = process.env.PROVE_IT_DIR
-    process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+    process.env.PROVE_IT_DIR = env.PROVE_IT_DIR
   })
 
   afterEach(() => {
-    if (origProveItDir === undefined) {
-      delete process.env.PROVE_IT_DIR
-    } else {
-      process.env.PROVE_IT_DIR = origProveItDir
-    }
+    if (origProveItDir === undefined) delete process.env.PROVE_IT_DIR
+    else process.env.PROVE_IT_DIR = origProveItDir
     if (tmpDir) cleanupTempDir(tmpDir)
   })
 
-  it('outputs nothing when count is below untestedEditLimit', () => {
-    saveSessionState(SESSION_ID, 'consecutiveUntestedEditCount', 1)
-    const result = spawnSync('node', [scriptPath], {
-      input: JSON.stringify({ session_id: SESSION_ID, params: { untestedEditLimit: 3 } }),
-      encoding: 'utf8',
-      env: { ...process.env }
-    })
-    assert.strictEqual(result.status, 0)
-    assert.strictEqual(result.stdout, '')
+  it('no tracking or messages in plan mode', () => {
+    writeConfig(tmpDir, testFirstConfig(tmpDir))
+    createFile(tmpDir, 'src/app.js', 'hello\n')
+    setPhase(SESSION_ID, 'plan')
+
+    // Many edits should produce no nudge
+    for (let i = 0; i < 5; i++) {
+      invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        session_id: SESSION_ID,
+        tool_name: 'Edit',
+        tool_input: { file_path: path.join(tmpDir, 'src/app.js'), old_string: 'a', new_string: 'b' }
+      }, { projectDir: tmpDir, env })
+    }
+
+    // No tddState should be saved in plan mode
+    const state = loadSessionState(SESSION_ID, 'tddState')
+    assert.strictEqual(state, null, 'Should not track state in plan mode')
+  })
+})
+
+describe('Phase transition resets state machine', () => {
+  let tmpDir, env, origProveItDir
+  const SESSION_ID = 'test-session-phase-reset'
+
+  beforeEach(() => {
+    tmpDir = createTempDir('prove_it_phase_reset_')
+    initGitRepo(tmpDir)
+    createFile(tmpDir, '.gitkeep', '')
+    spawnSync('git', ['add', '.'], { cwd: tmpDir })
+    spawnSync('git', ['commit', '-m', 'init'], { cwd: tmpDir })
+    env = isolatedEnv(tmpDir)
+    origProveItDir = process.env.PROVE_IT_DIR
+    process.env.PROVE_IT_DIR = env.PROVE_IT_DIR
   })
 
-  it('outputs reminder when count meets untestedEditLimit', () => {
-    saveSessionState(SESSION_ID, 'consecutiveUntestedEditCount', 3)
-    const result = spawnSync('node', [scriptPath], {
-      input: JSON.stringify({ session_id: SESSION_ID, params: { untestedEditLimit: 3 } }),
-      encoding: 'utf8',
-      env: { ...process.env }
-    })
-    assert.strictEqual(result.status, 0)
-    assert.ok(result.stdout.includes('edited 3 source files'))
-    assert.ok(result.stdout.includes('writing a failing test'))
+  afterEach(() => {
+    if (origProveItDir === undefined) delete process.env.PROVE_IT_DIR
+    else process.env.PROVE_IT_DIR = origProveItDir
+    if (tmpDir) cleanupTempDir(tmpDir)
   })
 
-  it('outputs reminder when count exceeds untestedEditLimit', () => {
-    saveSessionState(SESSION_ID, 'consecutiveUntestedEditCount', 5)
-    const result = spawnSync('node', [scriptPath], {
-      input: JSON.stringify({ session_id: SESSION_ID, params: { untestedEditLimit: 3 } }),
-      encoding: 'utf8',
-      env: { ...process.env }
-    })
-    assert.strictEqual(result.status, 0)
-    assert.ok(result.stdout.includes('edited 5 source files'))
-  })
+  it('switching from implement to refactor resets state', () => {
+    writeConfig(tmpDir, testFirstConfig(tmpDir))
+    createFile(tmpDir, 'src/app.js', 'hello\n')
 
-  it('uses default untestedEditLimit of 3 when not specified', () => {
-    saveSessionState(SESSION_ID, 'consecutiveUntestedEditCount', 3)
-    const result = spawnSync('node', [scriptPath], {
-      input: JSON.stringify({ session_id: SESSION_ID }),
-      encoding: 'utf8',
-      env: { ...process.env }
-    })
-    assert.strictEqual(result.status, 0)
-    assert.ok(result.stdout.includes('edited 3 source files'))
-  })
+    // Build up state in TDD mode
+    saveSessionState(SESSION_ID, 'tddState', { step: 'needs-test', editCount: 5, mode: 'tdd' })
 
-  it('outputs nothing when no session state exists', () => {
-    const result = spawnSync('node', [scriptPath], {
-      input: JSON.stringify({ session_id: 'nonexistent-session' }),
-      encoding: 'utf8',
-      env: { ...process.env }
-    })
-    assert.strictEqual(result.status, 0)
-    assert.strictEqual(result.stdout, '')
+    // Switch to refactor
+    setPhase(SESSION_ID, 'refactor')
+
+    // Next edit should use fresh refactor state
+    invokeHook('claude:PreToolUse', {
+      hook_event_name: 'PreToolUse',
+      session_id: SESSION_ID,
+      tool_name: 'Edit',
+      tool_input: { file_path: path.join(tmpDir, 'src/app.js'), old_string: 'a', new_string: 'b' }
+    }, { projectDir: tmpDir, env })
+
+    const state = loadSessionState(SESSION_ID, 'tddState')
+    assert.strictEqual(state.mode, 'refactor', 'Mode should be refactor after phase switch')
+    assert.strictEqual(state.editCount, 1, 'Edit count should start fresh')
   })
 })
 

@@ -239,6 +239,31 @@ describe('validateConfig', () => {
       assert.ok(invalidGit.errors.some(e => e.includes('invalid git event "post-merge"')))
     })
 
+    it('accepts PostToolUse and PostToolUseFailure as valid events', () => {
+      for (const event of ['PostToolUse', 'PostToolUseFailure']) {
+        const { errors } = validateConfig(cfgWith({
+          type: 'claude',
+          event,
+          matcher: 'Bash',
+          tasks: [{ name: 'a', type: 'script', command: 'echo ok' }]
+        }))
+        assert.strictEqual(errors.length, 0, `${event} should be accepted`)
+      }
+    })
+
+    it('allows matcher on PostToolUse and PostToolUseFailure without warning', () => {
+      for (const event of ['PostToolUse', 'PostToolUseFailure']) {
+        const { warnings } = validateConfig(cfgWith({
+          type: 'claude',
+          event,
+          matcher: 'Bash',
+          tasks: [{ name: 'a', type: 'script', command: 'echo ok' }]
+        }))
+        assert.ok(!warnings.some(w => w.includes('matcher')),
+          `${event} should not warn about matcher`)
+      }
+    })
+
     it('errors on legacy checks key and missing tasks', () => {
       const legacy = validateConfig(cfgWith({
         type: 'claude', event: 'Stop', checks: [{ name: 'a', type: 'script', command: 'x' }]
@@ -628,6 +653,23 @@ describe('validateConfig', () => {
         name: 'a', type: 'script', command: 'x', model: 'haiku'
       }))
       assert.ok(warnings.some(w => w.includes('model only applies to agent tasks')))
+    })
+
+    it('validates briefing field', () => {
+      // valid string passes
+      const valid = validateConfig(cfgWithTask({
+        name: 'a', type: 'script', command: 'x', briefing: 'Follow TDD'
+      }))
+      assert.strictEqual(valid.errors.length, 0)
+
+      // non-string errors
+      for (const [label, value] of [['number', 42], ['boolean', true], ['object', {}]]) {
+        const { errors } = validateConfig(cfgWithTask({
+          name: 'a', type: 'script', command: 'x', briefing: value
+        }))
+        assert.ok(errors.some(e => e.includes('briefing must be a string')),
+          `Expected string error for briefing: ${label}`)
+      }
     })
 
     it('validates params field', () => {

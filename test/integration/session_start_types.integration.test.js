@@ -352,6 +352,73 @@ describe('SessionStart task types', () => {
     })
   })
 
+  describe('briefing field collection', () => {
+    it('includes briefings from non-SessionStart tasks in additionalContext', () => {
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'SessionStart',
+          tasks: [
+            { name: 'hello', type: 'script', command: 'echo "session context"' }
+          ]
+        },
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'ExitPlanMode',
+          tasks: [
+            { name: 'tdd-guide', type: 'script', command: 'echo noop', quiet: true, briefing: 'Follow red-green TDD during implementation.' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:SessionStart', {
+        hook_event_name: 'SessionStart',
+        session_id: 'test-ss-briefing',
+        source: 'startup',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      const ctx = result.output?.hookSpecificOutput?.additionalContext
+      assert.ok(ctx, 'Should have additionalContext')
+      assert.ok(ctx.includes('Follow red-green TDD'),
+        `additionalContext should include briefing text, got: ${ctx}`)
+    })
+
+    it('excludes briefings from disabled tasks', () => {
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'SessionStart',
+          tasks: [
+            { name: 'hello', type: 'script', command: 'echo "session context"' }
+          ]
+        },
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'Bash',
+          tasks: [
+            { name: 'disabled-task', type: 'script', command: 'echo noop', enabled: false, briefing: 'Should not appear' }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:SessionStart', {
+        hook_event_name: 'SessionStart',
+        session_id: 'test-ss-briefing-disabled',
+        source: 'startup',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: isolatedEnv(tmpDir) })
+
+      assert.strictEqual(result.exitCode, 0)
+      const ctx = result.output?.hookSpecificOutput?.additionalContext || ''
+      assert.ok(!ctx.includes('Should not appear'),
+        'Should not include briefing from disabled task')
+    })
+  })
+
   describe('no output when no tasks match', () => {
     it('exits silently with no config', () => {
       writeConfig(tmpDir, makeConfig([]))
