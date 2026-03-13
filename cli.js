@@ -1248,6 +1248,7 @@ Commands:
   reinit      Deinit and re-init current repository
   doctor      Check installation status and report issues
   signal      Declare a lifecycle signal (done, stuck, idle)
+  phase       Set session activity phase (unknown, plan, implement, refactor)
   monitor     Tail hook results in real time (run in a separate terminal)
   hook        Run a hook dispatcher (claude:<Event> or git:<event>)
   prefix      Print install directory (for resolving libexec scripts)
@@ -1274,6 +1275,12 @@ Signal options:
   prove_it signal stuck                  Declare stuck / cycling
   prove_it signal idle                   Declare idle / between tasks
   prove_it signal done -m "Ready for review"  Include a message
+
+Phase options:
+  prove_it phase unknown                 Reset to default phase
+  prove_it phase plan                    Declare planning phase
+  prove_it phase implement               Declare implementation phase
+  prove_it phase refactor                Declare refactoring phase
 
 Record options:
   --name <name>    Check name to record (must match hook config)
