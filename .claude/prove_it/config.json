@@ -81,10 +81,7 @@
           "name": "test-first",
           "type": "script",
           "command": "$(prove_it prefix)/libexec/test-first",
-          "quiet": true,
-          "params": {
-            "untestedEditLimit": 3
-          }
+          "quiet": true
         }
       ]
     },
@@ -97,10 +94,7 @@
           "name": "test-first",
           "type": "script",
           "command": "$(prove_it prefix)/libexec/test-first",
-          "quiet": true,
-          "params": {
-            "untestedEditLimit": 3
-          }
+          "quiet": true
         }
       ]
     },

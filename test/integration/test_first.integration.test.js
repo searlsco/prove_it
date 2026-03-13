@@ -42,8 +42,7 @@ function testFirstConfig (tmpDir, extra = {}) {
           name: 'test-first',
           type: 'script',
           command: path.join(__dirname, '..', '..', 'libexec', 'test-first'),
-          quiet: true,
-          params: { untestedEditLimit: 3 }
+          quiet: true
         }
       ]
     },
@@ -56,8 +55,7 @@ function testFirstConfig (tmpDir, extra = {}) {
           name: 'test-first',
           type: 'script',
           command: path.join(__dirname, '..', '..', 'libexec', 'test-first'),
-          quiet: true,
-          params: { untestedEditLimit: 3 }
+          quiet: true
         }
       ]
     }
