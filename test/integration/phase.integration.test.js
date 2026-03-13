@@ -6,7 +6,7 @@ const {
   invokeHook, createTempDir, cleanupTempDir, initGitRepo,
   writeConfig, makeConfig, isolatedEnv, createFastTestScript
 } = require('./hook-harness')
-const { setPhase, getPhase } = require('../../lib/session')
+const { setPhase, getPhase, setSignal, getSignal } = require('../../lib/session')
 
 describe('phase integration', () => {
   let tmpDir, projectDir, env, origProveItDir, origHome
@@ -165,5 +165,51 @@ describe('phase integration', () => {
 
     assert.strictEqual(result.exitCode, 0)
     assert.ok(!result.stdout.includes('should-not-run'), 'Phase-gated task should be skipped')
+  })
+
+  it('successful Stop with done signal resets phase to unknown', () => {
+    setPhase('phase-done-reset', 'implement')
+    setSignal('phase-done-reset', 'done')
+    createFastTestScript(projectDir, true)
+
+    writeConfig(projectDir, makeConfig([
+      {
+        type: 'claude',
+        event: 'Stop',
+        tasks: [
+          { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+        ]
+      }
+    ]))
+
+    invokeHook('claude:Stop', {
+      session_id: 'phase-done-reset'
+    }, { projectDir, env, cwd: projectDir })
+
+    assert.strictEqual(getPhase('phase-done-reset'), 'unknown', 'Phase should reset to unknown after successful done signal')
+    assert.strictEqual(getSignal('phase-done-reset'), null, 'Signal should be cleared')
+  })
+
+  it('successful Stop with stuck signal does NOT reset phase', () => {
+    setPhase('phase-stuck-keep', 'implement')
+    setSignal('phase-stuck-keep', 'stuck')
+    createFastTestScript(projectDir, true)
+
+    writeConfig(projectDir, makeConfig([
+      {
+        type: 'claude',
+        event: 'Stop',
+        tasks: [
+          { name: 'fast-tests', type: 'script', command: './script/test_fast' }
+        ]
+      }
+    ]))
+
+    invokeHook('claude:Stop', {
+      session_id: 'phase-stuck-keep'
+    }, { projectDir, env, cwd: projectDir })
+
+    assert.strictEqual(getPhase('phase-stuck-keep'), 'implement', 'Phase should persist after stuck signal')
+    assert.strictEqual(getSignal('phase-stuck-keep'), null, 'Signal should be cleared')
   })
 })
