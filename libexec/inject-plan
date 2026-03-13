@@ -28,7 +28,7 @@ if (require.main === module) {
       process.exit(0)
     }
 
-    const filePath = findPlanFile(planText.trim())
+    const filePath = input.resolved_plan_path || findPlanFile(planText.trim())
     if (!filePath) process.exit(0)
 
     appendPlanBlock(filePath, { marker, block, position })

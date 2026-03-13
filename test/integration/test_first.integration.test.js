@@ -524,6 +524,57 @@ describe('TDD block injection on ExitPlanMode', () => {
     const count = (content.match(/red-green TDD/g) || []).length
     assert.strictEqual(count, 1, 'Should have exactly one TDD marker')
   })
+
+  it('injects TDD block even when injectSignalBlock modifies file first', () => {
+    const injectPlanPath = path.join(__dirname, '..', '..', 'libexec', 'inject-plan')
+    writeConfig(tmpDir, makeConfig([
+      {
+        type: 'claude',
+        event: 'PreToolUse',
+        matcher: 'ExitPlanMode',
+        tasks: [
+          {
+            name: 'inject-tdd-plan',
+            type: 'script',
+            command: injectPlanPath,
+            quiet: true,
+            params: {
+              position: 'after-title',
+              marker: 'red-green TDD',
+              block: '## Development approach\n\nFollow red-green TDD for each change:\n'
+            }
+          }
+        ]
+      },
+      {
+        type: 'claude',
+        event: 'Stop',
+        tasks: [
+          { name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
+        ]
+      }
+    ]))
+
+    const plansDir = path.join(tmpDir, '.claude', 'plans')
+    fs.mkdirSync(plansDir, { recursive: true })
+    const planText = '# My Plan\n\n## 1. Build feature\n\nDo stuff.\n\n## Verification\n\n- Run tests'
+    fs.writeFileSync(path.join(plansDir, 'test-plan.md'), planText)
+
+    invokeHook('claude:PreToolUse', {
+      hook_event_name: 'PreToolUse',
+      session_id: 'test-tdd-with-signal',
+      tool_name: 'ExitPlanMode',
+      tool_input: { plan: planText }
+    }, { projectDir: tmpDir, env })
+
+    const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
+    // Signal block should be present (from injectSignalBlock infrastructure)
+    assert.ok(content.includes('prove_it signal done'), 'Plan should contain signal block')
+    // Phase block should be present (from injectSignalBlock infrastructure)
+    assert.ok(content.includes('prove_it phase implement'), 'Plan should contain phase block')
+    // TDD block should ALSO be present (from inject-plan script task)
+    assert.ok(content.includes('red-green TDD'), 'Plan should contain TDD block after signal block modifies file')
+  })
 })
 
 describe('Dispatcher-level command result logging', () => {
