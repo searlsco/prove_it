@@ -194,6 +194,12 @@ async function cmdInstall () {
 
   writeJson(settingsPath, settings)
 
+  // TTY detection + readline (shared by global config merge and skill install)
+  const isTTY = process.stdin.isTTY && process.stdout.isTTY
+  const skillRl = isTTY
+    ? readline.createInterface({ input: process.stdin, output: process.stdout })
+    : null
+
   // Global config—seed-based 3-way merge (same pattern as project config)
   const globalCfgPath = path.join(getProveItDir(), 'config.json')
   const existingGlobal = loadJson(globalCfgPath)
@@ -210,8 +216,27 @@ async function cmdInstall () {
       fresh.initSeed = freshHash
       writeJson(globalCfgPath, fresh)
     }
+  } else if (isTTY && skillRl) {
+    // Edited or legacy—interactive merge in TTY
+    const proposed = buildGlobalConfig()
+    proposed.initSeed = configHash(proposed)
+    const result = await askConflict(skillRl, {
+      label: globalCfgPath,
+      existingPath: globalCfgPath,
+      existing: JSON.stringify(existingGlobal, null, 2) + '\n',
+      proposed: JSON.stringify(proposed, null, 2) + '\n',
+      defaultYes: true
+    })
+    if (result.answer === 'quit') {
+      log('Aborted.')
+      if (skillRl) skillRl.close()
+      process.exit(1)
+    }
+    if (result.answer === 'yes') {
+      writeJson(globalCfgPath, JSON.parse(result.content))
+    }
   } else {
-    // Edited or legacy (no initSeed)—preserve user config, ensure taskEnv defaults
+    // Edited or legacy (non-TTY)—preserve user config, ensure taskEnv defaults
     const defaults = buildGlobalConfig()
     if (existingGlobal.enabled === undefined) existingGlobal.enabled = true
     if (!existingGlobal.taskEnv) existingGlobal.taskEnv = {}
@@ -222,10 +247,6 @@ async function cmdInstall () {
   }
 
   // Install skills
-  const isTTY = process.stdin.isTTY && process.stdout.isTTY
-  const skillRl = isTTY
-    ? readline.createInterface({ input: process.stdin, output: process.stdout })
-    : null
   try {
     for (const { name, src } of SKILLS) {
       const skillDir = path.join(claudeDir, 'skills', name)

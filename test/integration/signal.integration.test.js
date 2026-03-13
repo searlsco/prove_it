@@ -34,8 +34,10 @@ describe('signal integration', () => {
   })
 
   it('PreToolUse intercepts prove_it signal done and records signal', () => {
+    createFastTestScript(projectDir, true)
     writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*', tasks: [] }
+      { type: 'claude', event: 'PreToolUse', matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*', tasks: [] },
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] }
     ]))
 
     const result = invokeHook('claude:PreToolUse', {
@@ -59,8 +61,10 @@ describe('signal integration', () => {
   })
 
   it('PreToolUse intercepts prove_it signal with --message', () => {
+    createFastTestScript(projectDir, true)
     writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] }
+      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] },
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] }
     ]))
 
     const result = invokeHook('claude:PreToolUse', {
@@ -166,8 +170,10 @@ describe('signal integration', () => {
   })
 
   it('PreToolUse falls through for unknown signal types', () => {
+    createFastTestScript(projectDir, true)
     writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] }
+      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] },
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] }
     ]))
 
     const result = invokeHook('claude:PreToolUse', {

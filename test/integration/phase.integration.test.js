@@ -33,7 +33,8 @@ describe('phase integration', () => {
 
   it('PreToolUse intercepts prove_it phase plan and records phase', () => {
     writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] }
+      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] },
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
     ]))
 
     const result = invokeHook('claude:PreToolUse', {
@@ -53,7 +54,8 @@ describe('phase integration', () => {
 
   it('PreToolUse intercepts prove_it phase implement and records phase', () => {
     writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] }
+      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] },
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
     ]))
 
     const result = invokeHook('claude:PreToolUse', {
@@ -68,7 +70,8 @@ describe('phase integration', () => {
 
   it('PreToolUse falls through for unknown phase types', () => {
     writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] }
+      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] },
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
     ]))
 
     const result = invokeHook('claude:PreToolUse', {
@@ -83,7 +86,8 @@ describe('phase integration', () => {
 
   it('EnterPlanMode sets phase to plan', () => {
     writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] }
+      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] },
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
     ]))
 
     const result = invokeHook('claude:PreToolUse', {

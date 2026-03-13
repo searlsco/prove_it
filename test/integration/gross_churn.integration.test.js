@@ -38,7 +38,8 @@ describe('gross churn accumulation via dispatcher', () => {
         event: 'PreToolUse',
         matcher: 'Write',
         tasks: []
-      }
+      },
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
     ], { sources: ['src/**/*.js'] }))
 
     assert.strictEqual(readGrossCounter(tmpDir), 0,
@@ -66,7 +67,8 @@ describe('gross churn accumulation via dispatcher', () => {
         event: 'PreToolUse',
         matcher: 'Edit',
         tasks: []
-      }
+      },
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
     ], { sources: ['src/**/*.js'] }))
 
     const oldStr = 'function old() {}'
@@ -94,7 +96,8 @@ describe('gross churn accumulation via dispatcher', () => {
         event: 'PreToolUse',
         matcher: 'Write',
         tasks: []
-      }
+      },
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
     ], { sources: ['src/**/*.js'] }))
 
     const content1 = 'line1\nline2\nline3\n'
@@ -129,7 +132,8 @@ describe('gross churn accumulation via dispatcher', () => {
         event: 'PreToolUse',
         matcher: 'Write',
         tasks: []
-      }
+      },
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
     ], { sources: ['src/**/*.js'] }))
 
     invokeHook('claude:PreToolUse', {
@@ -152,7 +156,8 @@ describe('gross churn accumulation via dispatcher', () => {
         event: 'PreToolUse',
         matcher: 'Read',
         tasks: []
-      }
+      },
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
     ], { sources: ['src/**/*.js'] }))
 
     invokeHook('claude:PreToolUse', {
@@ -175,7 +180,8 @@ describe('gross churn accumulation via dispatcher', () => {
         event: 'PreToolUse',
         matcher: 'mcp__custom_editor__write_file',
         tasks: []
-      }
+      },
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
     ], {
       sources: ['src/**/*.js'],
       fileEditingTools: ['mcp__custom_editor__write_file']
@@ -233,7 +239,8 @@ describe('gross churn accumulation via dispatcher', () => {
         event: 'PreToolUse',
         matcher: 'NotebookEdit',
         tasks: []
-      }
+      },
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
     ], { sources: ['src/**/*'] }))
 
     const newSource = 'import pandas as pd\ndf = pd.read_csv("data.csv")\ndf.head()'
