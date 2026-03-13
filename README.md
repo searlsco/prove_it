@@ -40,10 +40,13 @@ Out of the box, `prove_it init` generates the Searls-stack of configured tasks:
 
 - **Session briefing** on startup — Claude gets an orientation showing active tasks, signal instructions, and how the review process works
 - **Config lock** on every edit — silently blocks Claude from modifying your prove_it config
+- **TDD enforcement on every edit** — tracks the red-green cycle and nudges Claude to write a failing test before writing source code. Adapts behavior based on the current session phase (see [Session phases](#session-phases)).
+- **TDD guidance in plans** — injects a red-green TDD development approach section into every plan Claude creates
 - **Fast tests on every stop** — runs `./script/test_fast` and blocks until it passes
 - **Full tests on signal** — runs `./script/test` when Claude signals done (and source files were edited)
 - **Async coverage review** — a Haiku-powered `prove-coverage` subagent fires in the background after 541+ net lines of churn, enforced on the next stop
 - **Done review on signal** — an Opus-powered `prove-done` subagent runs a thorough pre-ship review when Claude signals done
+- **Approach review on signal** — a Sonnet-powered `prove-approach` subagent runs when Claude signals stuck, surfacing alternative approaches
 - **Full tests on git commit** — pre-commit hook runs `./script/test` (Claude commits only — human commits pass through)
 
 Every one of these is a config entry you can change, disable, or replace. The framework supports any combination of lifecycle events, conditions, and task types — the default config is just a starting point.
@@ -154,7 +157,7 @@ Config files merge (later overrides earlier):
 
 `sources` defines which files prove_it considers "your code" — these globs drive conditions like `sourcesModifiedSinceLastRun`, `sourceFilesEditedThisTurn`, and `linesChanged`. Test files should be included in `sources` so that edits to tests are tracked as source changes.
 
-`tests` identifies which source files are test files. This drives the `test-first` check, which counts consecutive edits to non-test files and nudges the agent to write tests. `tests` is typically a subset of `sources` — it doesn't need to be disjoint.
+`tests` identifies which source files are test files. This drives the `test-first` check, which enforces red-green TDD by tracking whether Claude writes and runs failing tests before implementing source code. See [Session phases](#session-phases) for how enforcement varies by activity. `tests` is typically a subset of `sources` — it doesn't need to be disjoint.
 
 Both `sources` and `tests` are preserved across `prove_it init` / `reinit` when customized, so you won't lose your globs on upgrade.
 
@@ -167,6 +170,8 @@ Both `sources` and `tests` are preserved across `prove_it init` / `reinit` when 
 | `SessionStart` | Environment setup, injecting context | **Non-blocking.** All tasks run. Output is injected into Claude's context. Use this to inject prompts, announce project state, set environment variables, or run setup scripts. |
 | `PreToolUse` | Guarding tool usage | **Blocking, fail-fast.** Tasks run in order; the first failure denies the tool and stops. Use this for config protection, enforcing workflows, or vetting commands. |
 | `Stop` | Verifying completed work | **Blocking, fail-fast.** Tasks run in order; the first failure sends Claude back to fix it. Put cheap tasks first (test suite), expensive ones last (AI reviewer). Async results are harvested before sync tasks run. |
+| `PostToolUse` | Observing tool results | **Non-blocking.** Fires after a tool succeeds. Used by TDD enforcement to detect test passes. Matcher filters by tool name. |
+| `PostToolUseFailure` | Observing tool failures | **Non-blocking.** Fires after a tool fails. Used by TDD enforcement to detect test failures. Matcher filters by tool name. |
 
 **Git events:**
 
@@ -214,6 +219,19 @@ Scripts read `params` from the parsed stdin JSON alongside `tool_name`, `tool_in
 ```
 
 When `params.paths` is omitted, guard-config falls back to blocking prove_it config files by default (backward compatible).
+
+### Task briefing
+
+Tasks can include a `briefing` field — a string that's injected into every SessionStart orientation. This lets infrastructure tasks (like TDD enforcement) provide persistent guidance without being SessionStart tasks themselves.
+
+```json
+{
+  "name": "my-task",
+  "type": "script",
+  "command": "./my-script",
+  "briefing": "Remember to frobnicate the widgets before shipping."
+}
+```
 
 ### Disabling individual tasks
 
@@ -631,6 +649,51 @@ On every SessionStart, the `libexec/briefing` script renders an orientation that
 
 The briefing is generated from your effective config, so it always reflects your actual setup. It filters out the briefing task itself to avoid recursion. If rendering fails, the session continues (briefing failure never blocks).
 
+## Session phases
+
+prove_it adapts its TDD enforcement based on what Claude is doing. Four phases
+control the behavior:
+
+| Phase | What Claude is doing | TDD enforcement |
+|-------|---------------------|-----------------|
+| `unknown` | Default — no phase declared | Full red-green TDD (same as `implement`) |
+| `plan` | Designing an approach, not writing code | No enforcement — planning doesn't need tests |
+| `implement` | Writing new features or fixing bugs | Full red-green TDD: write a failing test → confirm failure → write code → confirm pass |
+| `refactor` | Restructuring existing code | Run the test suite regularly — existing tests are the safety net |
+
+Claude switches phases by running:
+
+```
+prove_it phase implement
+prove_it phase refactor
+prove_it phase plan
+```
+
+### How TDD enforcement works
+
+In **implement** mode (and `unknown`), prove_it tracks a red-green cycle:
+
+1. **Write a test** — prove_it expects a test file edit before source code edits
+2. **Run the test, confirm it fails** — proves the test actually tests something
+3. **Write the code** — make the test pass
+4. **Run the test, confirm it passes** — proves the implementation works
+
+If Claude edits source files without writing tests first, prove_it nudges after
+a configurable number of edits (default: 3). If Claude writes a test that passes
+without any source changes, prove_it warns that the test may be vacuous.
+
+In **refactor** mode, the expectation is simpler: run the existing test suite
+regularly. If tests fail during a refactor, prove_it warns that behavior may have
+changed unintentionally.
+
+In **plan** mode, there's no enforcement — Claude is designing, not coding.
+
+### Phase briefing
+
+When any task has a `briefing` field, its text is included in every SessionStart
+orientation. The default `inject-tdd-plan` task uses this to remind Claude of the
+TDD workflow regardless of which phase is active.
+
 ## Monitoring
 
 ### `prove_it monitor`
@@ -807,6 +870,7 @@ prove_it reinit         Deinit and re-init current repository
 prove_it doctor         Check installation and show effective config
 prove_it monitor        Tail hook results in real time
 prove_it signal <type>  Declare a lifecycle signal (done, stuck, idle)
+prove_it phase <mode>   Set session phase (unknown, plan, implement, refactor)
 prove_it hook <spec>    Run a dispatcher directly (claude:Stop, git:pre-commit)
 prove_it prefix         Print install directory (for resolving libexec scripts)
 prove_it record         Record a test run result (--name <task> --pass|--fail|--result <N>)
