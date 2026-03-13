@@ -520,7 +520,7 @@ describe('backchannel', () => {
     // With backchannel → injected
     const bcDir = backchannelDir(tmpDir, sessionId, 'test-review')
     fs.mkdirSync(bcDir, { recursive: true })
-    fs.writeFileSync(path.join(bcDir, 'README.md'), 'I am doing planning work.\n')
+    fs.writeFileSync(path.join(bcDir, 'README.md'), 'Template header\n---\nI am doing planning work.\n')
 
     runAgentCheck(
       { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
@@ -564,11 +564,11 @@ describe('backchannel', () => {
     assert.strictEqual(entries2[0].status, 'RUNNING')
     assert.strictEqual(entries2[entries2.length - 1].status, 'FAIL')
 
-    // PLEA when backchannel exists
+    // PLEA when backchannel has actual appeal text after --- separator
     const sid3 = 'test-session-appeal'
     const bcDir3 = backchannelDir(tmpDir, sid3, 'test-review')
     fs.mkdirSync(bcDir3, { recursive: true })
-    fs.writeFileSync(path.join(bcDir3, 'README.md'), 'I am doing planning work.\n')
+    fs.writeFileSync(path.join(bcDir3, 'README.md'), 'Template header\n---\nI am doing planning work.\n')
     runAgentCheck(
       { name: 'test-review', command: passPath, prompt: 'Review this' },
       ctx(tmpDir, { sessionId: sid3 })
@@ -578,6 +578,19 @@ describe('backchannel', () => {
     const plea = entries3.find(e => e.status === 'PLEA')
     assert.ok(plea)
     assert.strictEqual(plea.reason, 'appealed via backchannel')
+
+    // No PLEA when backchannel is template-only (nothing after --- separator)
+    const sid4 = 'test-session-template-only'
+    const bcDir4 = backchannelDir(tmpDir, sid4, 'test-review')
+    fs.mkdirSync(bcDir4, { recursive: true })
+    fs.writeFileSync(path.join(bcDir4, 'README.md'), 'Template header\n---\n')
+    runAgentCheck(
+      { name: 'test-review', command: passPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId: sid4 })
+    )
+    const logFile4 = path.join(process.env.PROVE_IT_DIR, 'sessions', `${sid4}.jsonl`)
+    const entries4 = fs.readFileSync(logFile4, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    assert.strictEqual(entries4.find(e => e.status === 'PLEA'), undefined)
   })
 
   // ---------- Story: backchannel path sanitization ----------
