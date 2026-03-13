@@ -302,6 +302,18 @@ describe('parseJsonOutput', () => {
     assert.strictEqual(parseJsonOutput('{truncated'), null)
   })
 
+  it('preserves num_turns: 0 (not coerced to null)', () => {
+    const json = JSON.stringify({ result: 'PASS: ok', session_id: 's1', subtype: 'success', num_turns: 0 })
+    const parsed = parseJsonOutput(json)
+    assert.strictEqual(parsed.numTurns, 0)
+  })
+
+  it('preserves session_id: "" (not coerced to null)', () => {
+    const json = JSON.stringify({ result: 'PASS: ok', session_id: '', subtype: 'success' })
+    const parsed = parseJsonOutput(json)
+    assert.strictEqual(parsed.sessionId, '')
+  })
+
   it('handles missing fields gracefully', () => {
     const json = JSON.stringify({})
     const parsed = parseJsonOutput(json)
@@ -318,6 +330,7 @@ describe('extractReviewText', () => {
     const out = extractReviewText(result, false)
     assert.strictEqual(out.text, 'PASS: looks good')
     assert.strictEqual(out.finalTurn, null)
+    assert.ok(out.diag, 'non-json path should include diag')
   })
 
   it('falls back to stderr when stdout is empty in non-json mode', () => {
@@ -333,6 +346,7 @@ describe('extractReviewText', () => {
     const out = extractReviewText(result, true)
     assert.strictEqual(out.text, 'PASS: all tests pass')
     assert.strictEqual(out.finalTurn, null)
+    assert.ok(out.diag, 'success path should include diag')
   })
 
   it('falls back to raw text on malformed JSON', () => {
@@ -340,6 +354,7 @@ describe('extractReviewText', () => {
     const out = extractReviewText(result, true)
     assert.strictEqual(out.text, 'PASS: raw fallback')
     assert.strictEqual(out.finalTurn, null)
+    assert.ok(out.diag, 'json-parse-failed path should include diag')
   })
 
   it('falls back to raw text when JSON has no result and no subtype', () => {
@@ -349,6 +364,75 @@ describe('extractReviewText', () => {
     // Falls through to raw text since result is empty and subtype is null
     assert.strictEqual(out.text, json)
     assert.strictEqual(out.finalTurn, null)
+    assert.ok(out.diag, 'unexpected-json path should include diag')
+  })
+
+  it('final-turn resume command includes --tools "" to disable tools', () => {
+    const maxTurnsJson = JSON.stringify({
+      result: '',
+      session_id: 'sess-resume',
+      subtype: 'error_max_turns',
+      num_turns: 5
+    })
+    const result = { stdout: maxTurnsJson, stderr: '' }
+    let capturedCmd = null
+    const fakeRunner = (cmd, opts) => {
+      capturedCmd = cmd
+      return { code: 0, stdout: JSON.stringify({ result: 'PASS: ok', subtype: 'success' }), stderr: '' }
+    }
+    extractReviewText(result, true, {}, '/tmp', 'claude', 30000, fakeRunner)
+    assert.ok(capturedCmd, 'resume command should have been called')
+    assert.ok(capturedCmd.includes('--tools'), `resume command should include --tools flag: ${capturedCmd}`)
+  })
+
+  it('final turn returning error_max_turns is treated as failed', () => {
+    const maxTurnsJson = JSON.stringify({
+      result: '',
+      session_id: 'sess-1',
+      subtype: 'error_max_turns',
+      num_turns: 5
+    })
+    const result = { stdout: maxTurnsJson, stderr: '' }
+    const fakeRunner = (cmd, opts) => {
+      // Final turn also hits max turns
+      return {
+        code: 0,
+        stdout: JSON.stringify({ result: '', subtype: 'error_max_turns', num_turns: 6 }),
+        stderr: ''
+      }
+    }
+    const out = extractReviewText(result, true, {}, '/tmp', 'claude', 30000, fakeRunner)
+    assert.strictEqual(out.text, '')
+    assert.strictEqual(out.finalTurn.succeeded, false)
+    assert.ok(out.diag && out.diag.includes('final-turn-max-turns'), `diag should mention final-turn-max-turns: ${out.diag}`)
+  })
+
+  it('initial error_max_turns without sessionId returns explicit error', () => {
+    const maxTurnsJson = JSON.stringify({
+      result: '',
+      subtype: 'error_max_turns',
+      num_turns: 3
+    })
+    const result = { stdout: maxTurnsJson, stderr: '' }
+    const out = extractReviewText(result, true, {}, '/tmp', 'claude', 30000)
+    assert.strictEqual(out.text, '')
+    assert.ok(out.diag && out.diag.includes('max-turns-no-session'), `diag should mention max-turns-no-session: ${out.diag}`)
+  })
+
+  it('final-turn resume returns verdict text when tools are stripped', () => {
+    const maxTurnsJson = JSON.stringify({
+      result: '',
+      session_id: 'sess-resume',
+      subtype: 'error_max_turns',
+      num_turns: 5
+    })
+    const result = { stdout: maxTurnsJson, stderr: '' }
+    const fakeRunner = (cmd, opts) => {
+      return { code: 0, stdout: JSON.stringify({ result: 'FAIL: missing tests', subtype: 'success' }), stderr: '' }
+    }
+    const out = extractReviewText(result, true, {}, '/tmp', 'claude', 30000, fakeRunner)
+    assert.strictEqual(out.text, 'FAIL: missing tests')
+    assert.deepStrictEqual(out.finalTurn, { succeeded: true, numTurns: 5 })
   })
 })
 
