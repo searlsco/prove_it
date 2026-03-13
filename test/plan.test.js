@@ -7,6 +7,7 @@ const os = require('os')
 const {
   detectLastNumberedHeading,
   buildSignalBlock,
+  buildPhaseBlock,
   findPlanFile,
   appendPlanBlock
 } = require('../lib/plan')
@@ -45,10 +46,26 @@ describe('buildSignalBlock', () => {
     assert.ok(!block.includes('## 1.'))
   })
 
-  it('includes prove_it phase implement instruction', () => {
+  it('does not include prove_it phase implement instruction', () => {
     const block = buildSignalBlock(2, 3)
+    assert.ok(!block.includes('prove_it phase implement'),
+      'Signal block should NOT contain phase implement (moved to buildPhaseBlock)')
+  })
+})
+
+describe('buildPhaseBlock', () => {
+  it('includes prove_it phase implement command', () => {
+    const block = buildPhaseBlock()
     assert.ok(block.includes('prove_it phase implement'),
-      'Signal block should instruct agent to set phase to implement')
+      'Phase block should contain the phase implement command')
+  })
+
+  it('frames as prerequisite step', () => {
+    const block = buildPhaseBlock()
+    assert.ok(block.includes('Before making any edits'),
+      'Phase block should frame as a prerequisite before edits')
+    assert.ok(block.includes('## Enter implementation phase'),
+      'Phase block should have a heading')
   })
 })
 

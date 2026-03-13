@@ -16,6 +16,7 @@ const {
 } = require('./hook-harness')
 
 const { SIGNAL_PLAN_MARKER } = require('../../lib/dispatcher/claude')
+const { PHASE_PLAN_MARKER } = require('../../lib/plan')
 
 describe('Plan mode enforcement via PreToolUse', () => {
   let tmpDir, env
@@ -107,6 +108,11 @@ describe('Plan mode enforcement via PreToolUse', () => {
       const signalIdx = content.indexOf('### 3. Run `prove_it signal done`')
       const verifyIdx = content.indexOf('## Verification')
       assert.ok(signalIdx < verifyIdx, 'Signal step should appear before Verification')
+
+      // Phase block should appear and come before the signal block
+      assert.ok(content.includes(PHASE_PLAN_MARKER), 'Plan file should contain phase implement marker')
+      const phaseIdx = content.indexOf(PHASE_PLAN_MARKER)
+      assert.ok(phaseIdx < signalIdx, 'Phase block should appear before signal block')
     })
 
     it('inserts signal task with ## Step N: style headings', () => {
@@ -209,8 +215,10 @@ describe('Plan mode enforcement via PreToolUse', () => {
       const plansDir = path.join(tmpDir, '.claude', 'plans')
       fs.mkdirSync(plansDir, { recursive: true })
       const planText = '### 1. Implement feature\n\n### 2. Run tests'
-      // Pre-write with signal text already present
-      fs.writeFileSync(path.join(plansDir, 'test-plan.md'), planText + '\n\n### 3. Run `prove_it signal done`\n\nAlready here.\n')
+      // Pre-write with both markers already present
+      fs.writeFileSync(path.join(plansDir, 'test-plan.md'),
+        '# Plan\n\n## Enter implementation phase\n\n```bash\nprove_it phase implement\n```\n\n' +
+        planText + '\n\n### 3. Run `prove_it signal done`\n\nAlready here.\n')
 
       const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
@@ -221,10 +229,12 @@ describe('Plan mode enforcement via PreToolUse', () => {
 
       assert.strictEqual(result.exitCode, 0)
 
-      // Should still have exactly one signal marker
+      // Should still have exactly one of each marker
       const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
-      const markerCount = content.split(SIGNAL_PLAN_MARKER).length - 1
-      assert.strictEqual(markerCount, 1, `Should have exactly 1 signal marker, found ${markerCount}`)
+      const signalCount = content.split(SIGNAL_PLAN_MARKER).length - 1
+      assert.strictEqual(signalCount, 1, `Should have exactly 1 signal marker, found ${signalCount}`)
+      const phaseCount = content.split(PHASE_PLAN_MARKER).length - 1
+      assert.strictEqual(phaseCount, 1, `Should have exactly 1 phase marker, found ${phaseCount}`)
     })
 
     it('skips editing when no signal-gated tasks exist', () => {
@@ -247,6 +257,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
       // Plan file should be unchanged
       const content = fs.readFileSync(path.join(plansDir, 'test-plan.md'), 'utf8')
       assert.ok(!content.includes(SIGNAL_PLAN_MARKER), 'Plan file should not be edited when no signal-gated tasks')
+      assert.ok(!content.includes(PHASE_PLAN_MARKER), 'Plan file should not contain phase marker when no signal-gated tasks')
     })
 
     it('allows even when plan file not found', () => {
