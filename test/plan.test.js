@@ -44,6 +44,12 @@ describe('buildSignalBlock', () => {
     assert.ok(block.includes('## Run `prove_it signal done`'))
     assert.ok(!block.includes('## 1.'))
   })
+
+  it('includes prove_it phase implement instruction', () => {
+    const block = buildSignalBlock(2, 3)
+    assert.ok(block.includes('prove_it phase implement'),
+      'Signal block should instruct agent to set phase to implement')
+  })
 })
 
 describe('findPlanFile', () => {

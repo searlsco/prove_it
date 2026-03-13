@@ -12,6 +12,7 @@
  *   hook      - Run a hook dispatcher (claude:<Event> or git:<event>)
  *   prefix    - Print install directory (for resolving libexec scripts)
  *   signal    - Declare a lifecycle signal (done, stuck, idle)
+ *   phase     - Set session activity phase (unknown, plan, implement, refactor)
  *   record    - Record a test run result for run caching
  *   upgrade   - Update via Homebrew, reinstall hooks, reinit project
  */
@@ -1143,6 +1144,26 @@ function cmdSignal () {
 }
 
 // ============================================================================
+// Phase command
+// ============================================================================
+
+function cmdPhase () {
+  // Phases are intercepted by the hook dispatcher (PreToolUse + Bash),
+  // which has the session ID from Claude Code's hook input. When running
+  // inside Claude Code (CLAUDECODE=1), the dispatcher already recorded the
+  // phase before allowing the Bash call through—exit 0 so the caller
+  // doesn't see a spurious failure.
+  if (process.env.CLAUDECODE) {
+    const phase = process.argv[3] || 'unknown'
+    log(`prove_it: phase "${phase}" acknowledged`)
+    process.exit(0)
+  }
+  console.error('prove_it phase must be run by Claude, not directly.')
+  console.error('Ask Claude to run: prove_it phase <unknown|plan|implement|refactor>')
+  process.exit(1)
+}
+
+// ============================================================================
 // Monitor command
 // ============================================================================
 
@@ -1352,6 +1373,9 @@ function main () {
       break
     case 'signal':
       cmdSignal()
+      break
+    case 'phase':
+      cmdPhase()
       break
     case 'monitor':
       cmdMonitor()

@@ -311,14 +311,48 @@ describe('template', () => {
     })
   })
 
+  describe('phase variable', () => {
+    const fs = require('fs')
+    const path = require('path')
+    const os = require('os')
+
+    it('resolves phase to unknown when no phase set', () => {
+      const context = { rootDir: '.', projectDir: '.', sessionId: 'no-phase', toolInput: null }
+      const result = expandTemplate('phase: {{phase}}', context)
+      assert.strictEqual(result, 'phase: unknown')
+    })
+
+    it('resolves phase to current phase', () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_phase_tpl_'))
+      const origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+      try {
+        const { setPhase } = require('../lib/session')
+        setPhase('tpl-phase-1', 'implement')
+        const context = { rootDir: '.', projectDir: '.', sessionId: 'tpl-phase-1', toolInput: null }
+        const result = expandTemplate('phase: {{phase}}', context)
+        assert.strictEqual(result, 'phase: implement')
+      } finally {
+        if (origProveItDir === undefined) delete process.env.PROVE_IT_DIR
+        else process.env.PROVE_IT_DIR = origProveItDir
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    it('is listed in KNOWN_VARS and SESSION_VARS', () => {
+      assert.ok(KNOWN_VARS.includes('phase'), 'phase should be in KNOWN_VARS')
+      assert.ok(SESSION_VARS.includes('phase'), 'phase should be in SESSION_VARS')
+    })
+  })
+
   describe('KNOWN_VARS', () => {
-    it('has all 18 expected keys', () => {
+    it('has all 19 expected keys', () => {
       const expected = [
         'staged_diff', 'staged_files', 'working_diff', 'changed_files',
         'session_diff', 'test_output', 'tool_command', 'file_path',
         'project_dir', 'root_dir', 'session_id', 'git_head',
         'git_status', 'recent_commits', 'files_changed_since_last_run', 'sources',
-        'signal_message', 'changes_since_last_run'
+        'signal_message', 'changes_since_last_run', 'phase'
       ]
       assert.deepStrictEqual(KNOWN_VARS, expected)
     })
@@ -348,8 +382,8 @@ describe('template', () => {
   })
 
   describe('SESSION_VARS', () => {
-    it('contains session_diff, session_id, and signal_message', () => {
-      assert.deepStrictEqual(SESSION_VARS, ['session_diff', 'session_id', 'signal_message'])
+    it('contains session_diff, session_id, signal_message, and phase', () => {
+      assert.deepStrictEqual(SESSION_VARS, ['session_diff', 'session_id', 'signal_message', 'phase'])
     })
 
     it('is a subset of KNOWN_VARS', () => {

@@ -819,6 +819,46 @@ describe('validateConfig', () => {
       assert.ok(ptuWarnings.some(w => w.includes('signal') && w.includes('PreToolUse')))
     })
 
+    it('validates phase when key', () => {
+      // valid phase passes
+      const valid = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { phase: 'implement' }
+      }))
+      assert.strictEqual(valid.errors.length, 0)
+
+      // invalid phase value errors
+      const bad = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { phase: 'bogus' }
+      }))
+      assert.ok(bad.errors.some(e => e.includes('when.phase must be one of')))
+
+      // non-string errors
+      const nonString = validateConfig(cfgWithTask({
+        name: 'a',
+        type: 'script',
+        command: 'x',
+        when: { phase: true }
+      }))
+      assert.ok(nonString.errors.some(e => e.includes('when.phase must be one of')))
+    })
+
+    it('warns when phase is used on git hooks', () => {
+      const { warnings: gitWarnings } = validateConfig(validConfig({
+        hooks: [{
+          type: 'git',
+          event: 'pre-commit',
+          tasks: [{ name: 'a', type: 'script', command: 'x', when: { phase: 'implement' } }]
+        }]
+      }))
+      assert.ok(gitWarnings.some(w => w.includes('phase') && w.includes('git')))
+    })
+
     it('validates variablesPresent when key', () => {
       // valid array passes
       const valid = validateConfig(cfgWithTask({

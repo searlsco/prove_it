@@ -361,6 +361,56 @@ describe('claude dispatcher', () => {
     })
   })
 
+  describe('evaluateWhen—phase', () => {
+    let tmpDir
+    let origProveItDir
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_phase_'))
+      origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+    })
+
+    afterEach(() => {
+      if (origProveItDir === undefined) {
+        delete process.env.PROVE_IT_DIR
+      } else {
+        process.env.PROVE_IT_DIR = origProveItDir
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('passes when phase matches', () => {
+      const { setPhase } = require('../lib/session')
+      setPhase('phase-test-1', 'implement')
+      const result = evaluateWhen(
+        { phase: 'implement' },
+        { rootDir: tmpDir, sessionId: 'phase-test-1' }
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('skips when phase does not match', () => {
+      const { setPhase } = require('../lib/session')
+      setPhase('phase-test-2', 'plan')
+      const result = evaluateWhen(
+        { phase: 'implement' },
+        { rootDir: tmpDir, sessionId: 'phase-test-2' }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('phase is "plan"'))
+    })
+
+    it('skips when no phase set (defaults to unknown)', () => {
+      const result = evaluateWhen(
+        { phase: 'implement' },
+        { rootDir: tmpDir, sessionId: 'no-phase-session' }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('phase is "unknown"'))
+    })
+  })
+
   describe('evaluateWhen—toolsUsed', () => {
     let tmpDir
     let origProveItDir

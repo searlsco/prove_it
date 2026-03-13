@@ -18,6 +18,10 @@ const {
   setSignal,
   getSignal,
   clearSignal,
+  VALID_PHASES,
+  setPhase,
+  getPhase,
+  clearPhase,
   pruneOldSessions
 } = require('../lib/session')
 const { recordSessionBaseline } = require('../lib/dispatcher/claude')
@@ -586,6 +590,42 @@ describe('session state functions', () => {
 
     it('VALID_SIGNALS contains expected types', () => {
       assert.deepStrictEqual(VALID_SIGNALS, ['done', 'stuck', 'idle'])
+    })
+  })
+
+  describe('phase state', () => {
+    it('set/get round-trips a phase', () => {
+      assert.strictEqual(setPhase(SESSION_ID, 'plan'), true)
+      assert.strictEqual(getPhase(SESSION_ID), 'plan')
+    })
+
+    it('returns unknown when no phase set', () => {
+      assert.strictEqual(getPhase('no-phase-session'), 'unknown')
+    })
+
+    it('returns unknown for null sessionId', () => {
+      assert.strictEqual(getPhase(null), 'unknown')
+    })
+
+    it('rejects invalid phase', () => {
+      assert.strictEqual(setPhase(SESSION_ID, 'bogus'), false)
+    })
+
+    it('overwrite replaces previous phase', () => {
+      setPhase(SESSION_ID, 'plan')
+      setPhase(SESSION_ID, 'implement')
+      assert.strictEqual(getPhase(SESSION_ID), 'implement')
+    })
+
+    it('clearPhase resets to unknown', () => {
+      setPhase(SESSION_ID, 'refactor')
+      assert.strictEqual(getPhase(SESSION_ID), 'refactor')
+      clearPhase(SESSION_ID)
+      assert.strictEqual(getPhase(SESSION_ID), 'unknown')
+    })
+
+    it('VALID_PHASES contains expected values', () => {
+      assert.deepStrictEqual(VALID_PHASES, ['unknown', 'plan', 'implement', 'refactor'])
     })
   })
 
