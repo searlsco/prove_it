@@ -13,7 +13,7 @@ const {
   createScriptBackchannel,
   handleScriptAppeal
 } = require('../lib/checks/arbiter')
-const { backchannelDir } = require('../lib/checks/agent')
+const { backchannelDir } = require('../lib/paths')
 const { loadSessionState } = require('../lib/session')
 const reviewer = require('../lib/reviewer')
 
