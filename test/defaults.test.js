@@ -6,18 +6,23 @@ const { CONFIG_DEFAULTS, DEFAULT_MODELS, DEFAULT_ALLOWED_TOOLS, configDefaults }
 describe('CONFIG_DEFAULTS', () => {
   it('has expected shape and values', () => {
     assert.strictEqual(CONFIG_DEFAULTS.enabled, false)
-    assert.strictEqual(CONFIG_DEFAULTS.sources, null)
+    assert.deepStrictEqual(CONFIG_DEFAULTS.sources, [])
+    assert.deepStrictEqual(CONFIG_DEFAULTS.tests, [])
+    assert.deepStrictEqual(CONFIG_DEFAULTS.testCommands, [])
+    assert.strictEqual(CONFIG_DEFAULTS.model, 'sonnet')
     assert.deepStrictEqual(CONFIG_DEFAULTS.hooks, [])
     assert.strictEqual(CONFIG_DEFAULTS.maxAgentTurns, 10)
     assert.deepStrictEqual(CONFIG_DEFAULTS.format, { maxOutputChars: 12000 })
     assert.deepStrictEqual(CONFIG_DEFAULTS.taskEnv, { TURBOCOMMIT_DISABLED: '1' })
+    assert.deepStrictEqual(CONFIG_DEFAULTS.taskAllowedTools, DEFAULT_ALLOWED_TOOLS)
+    assert.strictEqual(CONFIG_DEFAULTS.taskBypassPermissions, false)
     assert.deepStrictEqual(CONFIG_DEFAULTS.fileEditingTools, [])
   })
 
-  it('includes nullable optional keys with null defaults', () => {
-    assert.strictEqual(CONFIG_DEFAULTS.model, null)
-    assert.strictEqual(CONFIG_DEFAULTS.taskAllowedTools, null)
-    assert.strictEqual(CONFIG_DEFAULTS.taskBypassPermissions, null)
+  it('has no null values', () => {
+    for (const [key, value] of Object.entries(CONFIG_DEFAULTS)) {
+      assert.notStrictEqual(value, null, `CONFIG_DEFAULTS.${key} should not be null`)
+    }
   })
 })
 
