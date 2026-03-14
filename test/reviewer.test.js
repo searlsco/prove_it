@@ -1,7 +1,7 @@
 const { describe, it } = require('node:test')
 const assert = require('node:assert')
 
-const { isCodexModel, parseVerdict, parseJsonOutput, extractReviewText, FINAL_TURN_PROMPT } = require('../lib/shared')
+const { isCodexModel, parseVerdict, parseJsonOutput, extractReviewText, extractDenialContent, resumeForVerdict, FINAL_TURN_PROMPT } = require('../lib/shared')
 
 describe('parseVerdict', () => {
   describe('PASS responses', () => {
@@ -321,6 +321,18 @@ describe('parseJsonOutput', () => {
     assert.strictEqual(parsed.sessionId, null)
     assert.strictEqual(parsed.subtype, null)
     assert.strictEqual(parsed.numTurns, null)
+    assert.strictEqual(parsed.permissionDenials, null)
+  })
+
+  it('captures permission_denials when present', () => {
+    const json = JSON.stringify({
+      result: '',
+      session_id: 'sess-1',
+      subtype: 'success',
+      permission_denials: [{ tool_name: 'ExitPlanMode', tool_input: { plan: 'my review plan' } }]
+    })
+    const parsed = parseJsonOutput(json)
+    assert.deepStrictEqual(parsed.permissionDenials, [{ tool_name: 'ExitPlanMode', tool_input: { plan: 'my review plan' } }])
   })
 })
 
@@ -329,7 +341,6 @@ describe('extractReviewText', () => {
     const result = { stdout: '  PASS: looks good  ', stderr: '' }
     const out = extractReviewText(result, false)
     assert.strictEqual(out.text, 'PASS: looks good')
-    assert.strictEqual(out.finalTurn, null)
     assert.ok(out.diag, 'non-json path should include diag')
   })
 
@@ -337,7 +348,6 @@ describe('extractReviewText', () => {
     const result = { stdout: '', stderr: 'FAIL: bad code' }
     const out = extractReviewText(result, false)
     assert.strictEqual(out.text, 'FAIL: bad code')
-    assert.strictEqual(out.finalTurn, null)
   })
 
   it('extracts result from success JSON', () => {
@@ -345,29 +355,40 @@ describe('extractReviewText', () => {
     const result = { stdout: json, stderr: '' }
     const out = extractReviewText(result, true)
     assert.strictEqual(out.text, 'PASS: all tests pass')
-    assert.strictEqual(out.finalTurn, null)
     assert.ok(out.diag, 'success path should include diag')
+  })
+
+  it('returns sessionId and permissionDenials from parsed JSON', () => {
+    const json = JSON.stringify({
+      result: '',
+      session_id: 'sess-abc',
+      subtype: 'success',
+      permission_denials: [{ tool_name: 'ExitPlanMode', tool_input: 'review content' }]
+    })
+    const result = { stdout: json, stderr: '' }
+    const out = extractReviewText(result, true)
+    assert.strictEqual(out.sessionId, 'sess-abc')
+    assert.deepStrictEqual(out.permissionDenials, [{ tool_name: 'ExitPlanMode', tool_input: 'review content' }])
+    assert.strictEqual(out.text, '')
   })
 
   it('falls back to raw text on malformed JSON', () => {
     const result = { stdout: 'PASS: raw fallback', stderr: '' }
     const out = extractReviewText(result, true)
     assert.strictEqual(out.text, 'PASS: raw fallback')
-    assert.strictEqual(out.finalTurn, null)
     assert.ok(out.diag, 'json-parse-failed path should include diag')
   })
 
-  it('falls back to raw text when JSON has no result and no subtype', () => {
+  it('returns empty text when JSON has no result and no subtype', () => {
     const json = JSON.stringify({ something_else: 'data' })
     const result = { stdout: json, stderr: '' }
     const out = extractReviewText(result, true)
-    // Falls through to raw text since result is empty and subtype is null
-    assert.strictEqual(out.text, json)
-    assert.strictEqual(out.finalTurn, null)
-    assert.ok(out.diag, 'unexpected-json path should include diag')
+    assert.strictEqual(out.text, '')
+    assert.strictEqual(out.subtype, null)
+    assert.ok(out.diag, 'should include diag')
   })
 
-  it('final-turn resume command includes --tools "" to disable tools', () => {
+  it('returns sessionId and numTurns for error_max_turns', () => {
     const maxTurnsJson = JSON.stringify({
       result: '',
       session_id: 'sess-resume',
@@ -375,64 +396,90 @@ describe('extractReviewText', () => {
       num_turns: 5
     })
     const result = { stdout: maxTurnsJson, stderr: '' }
-    let capturedCmd = null
-    const fakeRunner = (cmd, opts) => {
-      capturedCmd = cmd
-      return { code: 0, stdout: JSON.stringify({ result: 'PASS: ok', subtype: 'success' }), stderr: '' }
-    }
-    extractReviewText(result, true, {}, '/tmp', 'claude', 30000, fakeRunner)
-    assert.ok(capturedCmd, 'resume command should have been called')
-    assert.ok(capturedCmd.includes('--tools'), `resume command should include --tools flag: ${capturedCmd}`)
-  })
-
-  it('final turn returning error_max_turns is treated as failed', () => {
-    const maxTurnsJson = JSON.stringify({
-      result: '',
-      session_id: 'sess-1',
-      subtype: 'error_max_turns',
-      num_turns: 5
-    })
-    const result = { stdout: maxTurnsJson, stderr: '' }
-    const fakeRunner = (cmd, opts) => {
-      // Final turn also hits max turns
-      return {
-        code: 0,
-        stdout: JSON.stringify({ result: '', subtype: 'error_max_turns', num_turns: 6 }),
-        stderr: ''
-      }
-    }
-    const out = extractReviewText(result, true, {}, '/tmp', 'claude', 30000, fakeRunner)
+    const out = extractReviewText(result, true)
     assert.strictEqual(out.text, '')
-    assert.strictEqual(out.finalTurn.succeeded, false)
-    assert.ok(out.diag && out.diag.includes('final-turn-max-turns'), `diag should mention final-turn-max-turns: ${out.diag}`)
+    assert.strictEqual(out.sessionId, 'sess-resume')
+    assert.strictEqual(out.numTurns, 5)
+    assert.strictEqual(out.subtype, 'error_max_turns')
   })
 
-  it('initial error_max_turns without sessionId returns explicit error', () => {
+  it('returns empty text and no sessionId for error_max_turns without session_id', () => {
     const maxTurnsJson = JSON.stringify({
       result: '',
       subtype: 'error_max_turns',
       num_turns: 3
     })
     const result = { stdout: maxTurnsJson, stderr: '' }
-    const out = extractReviewText(result, true, {}, '/tmp', 'claude', 30000)
+    const out = extractReviewText(result, true)
     assert.strictEqual(out.text, '')
-    assert.ok(out.diag && out.diag.includes('max-turns-no-session'), `diag should mention max-turns-no-session: ${out.diag}`)
+    assert.strictEqual(out.sessionId, null)
+  })
+})
+
+describe('extractDenialContent', () => {
+  it('returns null for null/empty input', () => {
+    assert.strictEqual(extractDenialContent(null), null)
+    assert.strictEqual(extractDenialContent([]), null)
   })
 
-  it('final-turn resume returns verdict text when tools are stripped', () => {
-    const maxTurnsJson = JSON.stringify({
-      result: '',
-      session_id: 'sess-resume',
-      subtype: 'error_max_turns',
-      num_turns: 5
-    })
-    const result = { stdout: maxTurnsJson, stderr: '' }
+  it('extracts string tool_input directly', () => {
+    const denials = [{ tool_input: 'FAIL: missing tests for the new helper' }]
+    assert.strictEqual(extractDenialContent(denials), 'FAIL: missing tests for the new helper')
+  })
+
+  it('extracts longest string value from object tool_input', () => {
+    const denials = [{
+      tool_input: { plan: 'short', content: 'FAIL: this is a much longer review with details about issues found' }
+    }]
+    assert.strictEqual(extractDenialContent(denials), 'FAIL: this is a much longer review with details about issues found')
+  })
+
+  it('picks the longest across multiple denials', () => {
+    const denials = [
+      { tool_input: 'short' },
+      { tool_input: 'this is a longer denial content string' }
+    ]
+    assert.strictEqual(extractDenialContent(denials), 'this is a longer denial content string')
+  })
+
+  it('skips denials with no tool_input', () => {
+    const denials = [{ tool_name: 'ExitPlanMode' }, { tool_input: 'PASS: ok' }]
+    assert.strictEqual(extractDenialContent(denials), 'PASS: ok')
+  })
+})
+
+describe('resumeForVerdict', () => {
+  it('returns text on successful resume', () => {
     const fakeRunner = (cmd, opts) => {
-      return { code: 0, stdout: JSON.stringify({ result: 'FAIL: missing tests', subtype: 'success' }), stderr: '' }
+      return { code: 0, stdout: JSON.stringify({ result: 'FAIL: issues found', subtype: 'success' }), stderr: '' }
     }
-    const out = extractReviewText(result, true, {}, '/tmp', 'claude', 30000, fakeRunner)
-    assert.strictEqual(out.text, 'FAIL: missing tests')
-    assert.deepStrictEqual(out.finalTurn, { succeeded: true, numTurns: 5 })
+    const text = resumeForVerdict('sess-1', 'claude', '/tmp', 30000, {}, fakeRunner)
+    assert.strictEqual(text, 'FAIL: issues found')
+  })
+
+  it('returns null when resume exits non-zero', () => {
+    const fakeRunner = () => ({ code: 1, stdout: '', stderr: 'error' })
+    assert.strictEqual(resumeForVerdict('sess-1', 'claude', '/tmp', 30000, {}, fakeRunner), null)
+  })
+
+  it('falls back to raw stdout when JSON has no result', () => {
+    const fakeRunner = () => ({ code: 0, stdout: 'PASS: raw output', stderr: '' })
+    assert.strictEqual(resumeForVerdict('sess-1', 'claude', '/tmp', 30000, {}, fakeRunner), 'PASS: raw output')
+  })
+
+  it('returns null when resume produces no output', () => {
+    const fakeRunner = () => ({ code: 0, stdout: JSON.stringify({ result: '', subtype: 'success' }), stderr: '' })
+    assert.strictEqual(resumeForVerdict('sess-1', 'claude', '/tmp', 30000, {}, fakeRunner), null)
+  })
+
+  it('includes --tools "" in resume command', () => {
+    let capturedCmd = null
+    const fakeRunner = (cmd) => {
+      capturedCmd = cmd
+      return { code: 0, stdout: JSON.stringify({ result: 'PASS: ok', subtype: 'success' }), stderr: '' }
+    }
+    resumeForVerdict('sess-1', 'claude', '/tmp', 30000, {}, fakeRunner)
+    assert.ok(capturedCmd.includes('--tools'), `should include --tools: ${capturedCmd}`)
   })
 })
 
