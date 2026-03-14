@@ -41,7 +41,9 @@ describe('isTestCommand', () => {
     ['with leading env var', 'CI=1 npm test'],
     ['with multiple env vars', 'CI=1 VERBOSE=1 pytest'],
     ['flutter test', 'flutter test'],
-    ['mix test', 'mix test']
+    ['mix test', 'mix test'],
+    ['tldr', 'tldr'],
+    ['tldr with args', 'tldr --verbose']
   ]
 
   matchCases.forEach(([label, command]) => {
