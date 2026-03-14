@@ -6,10 +6,12 @@ const os = require('os')
 
 const {
   detectLastNumberedHeading,
+  detectPlanPhase,
   buildSignalBlock,
   buildPhaseBlock,
   findPlanFile,
-  appendPlanBlock
+  appendPlanBlock,
+  PHASE_PLAN_MARKER
 } = require('../lib/plan')
 
 describe('detectLastNumberedHeading', () => {
@@ -37,7 +39,8 @@ describe('buildSignalBlock', () => {
   it('builds block at level 2 with step number', () => {
     const block = buildSignalBlock(2, 3)
     assert.ok(block.includes('## 3. Run `prove_it signal done`'))
-    assert.ok(block.includes('prove_it signal done'))
+    assert.ok(block.includes('$ prove_it signal done'),
+      'Signal block should have $ prefix on the command')
   })
 
   it('omits step number when stepNum < 2', () => {
@@ -53,19 +56,98 @@ describe('buildSignalBlock', () => {
   })
 })
 
+describe('PHASE_PLAN_MARKER', () => {
+  it('matches both implement and refactor phase commands', () => {
+    assert.ok('prove_it phase implement'.includes(PHASE_PLAN_MARKER),
+      'Marker should match implement variant')
+    assert.ok('prove_it phase refactor'.includes(PHASE_PLAN_MARKER),
+      'Marker should match refactor variant')
+  })
+})
+
 describe('buildPhaseBlock', () => {
-  it('includes prove_it phase implement command', () => {
+  it('defaults to implement phase', () => {
     const block = buildPhaseBlock()
-    assert.ok(block.includes('prove_it phase implement'),
-      'Phase block should contain the phase implement command')
+    assert.ok(block.includes('$ prove_it phase implement'),
+      'Phase block should contain the phase implement command with $ prefix')
+    assert.ok(block.includes('## Enter implementation phase'),
+      'Phase block should have implementation heading')
   })
 
-  it('frames as prerequisite step', () => {
-    const block = buildPhaseBlock()
-    assert.ok(block.includes('Before making any edits'),
-      'Phase block should frame as a prerequisite before edits')
-    assert.ok(block.includes('## Enter implementation phase'),
-      'Phase block should have a heading')
+  it('uses implement phase when explicitly passed', () => {
+    const block = buildPhaseBlock('implement')
+    assert.ok(block.includes('$ prove_it phase implement'))
+    assert.ok(block.includes('## Enter implementation phase'))
+  })
+
+  it('uses refactor phase when passed', () => {
+    const block = buildPhaseBlock('refactor')
+    assert.ok(block.includes('$ prove_it phase refactor'),
+      'Phase block should contain the phase refactor command')
+    assert.ok(block.includes('## Enter refactor phase'),
+      'Phase block should have refactor heading')
+    assert.ok(!block.includes('implement'),
+      'Refactor block should not mention implement')
+  })
+
+  it('uses MUST wording for implement', () => {
+    const block = buildPhaseBlock('implement')
+    assert.ok(block.includes('you MUST run this command'),
+      'Phase block should use mandatory language')
+  })
+
+  it('uses MUST wording for refactor', () => {
+    const block = buildPhaseBlock('refactor')
+    assert.ok(block.includes('you MUST run this command'),
+      'Phase block should use mandatory language')
+  })
+})
+
+describe('detectPlanPhase', () => {
+  it('returns implement for a normal plan', () => {
+    const content = '# Add user authentication\n\n## 1. Create user model\n\n## 2. Add login endpoint\n'
+    assert.strictEqual(detectPlanPhase(content), 'implement')
+  })
+
+  it('detects refactor from title', () => {
+    const content = '# Refactor authentication module\n\n## 1. Extract interface\n\n## 2. Move logic\n'
+    assert.strictEqual(detectPlanPhase(content), 'refactor')
+  })
+
+  it('detects refactor from title case-insensitively', () => {
+    const content = '# REFACTOR the auth layer\n\n## 1. Step one\n'
+    assert.strictEqual(detectPlanPhase(content), 'refactor')
+  })
+
+  it('detects refactor from prominent heading', () => {
+    const content = '# Clean up auth module\n\n## Refactoring approach\n\n## 1. Extract class\n'
+    assert.strictEqual(detectPlanPhase(content), 'refactor')
+  })
+
+  it('detects refactor from phrase "no behavior change"', () => {
+    const content = '# Restructure config loading\n\nThis is a no behavior change restructuring.\n\n## 1. Move files\n'
+    assert.strictEqual(detectPlanPhase(content), 'refactor')
+  })
+
+  it('detects refactor from phrase "preserve existing behavior"', () => {
+    const content = '# Update module structure\n\nGoal: preserve existing behavior while reorganizing.\n\n## 1. Rename\n'
+    assert.strictEqual(detectPlanPhase(content), 'refactor')
+  })
+
+  it('detects refactor from phrase "refactor mode"', () => {
+    const content = '# Clean up dispatcher\n\nRefactor mode — reorganize without changing behavior.\n\n## 1. Split\n'
+    assert.strictEqual(detectPlanPhase(content), 'refactor')
+  })
+
+  it('ignores refactor mentions deep in the plan body', () => {
+    const content = '# Add new feature\n\n## 1. Build it\n\nDo stuff.\n\n' +
+      Array(30).fill('Line of detail.\n').join('') +
+      '## 15. Later we might refactor this\n'
+    assert.strictEqual(detectPlanPhase(content), 'implement')
+  })
+
+  it('returns implement for empty content', () => {
+    assert.strictEqual(detectPlanPhase(''), 'implement')
   })
 })
 
