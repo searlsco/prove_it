@@ -33,6 +33,10 @@ this command to switch to refactor mode:
 
   prove_it phase refactor
 
+If the file being edited is not actually source code, consider asking
+the user to tighten the "sources" array of globs in
+.claude/prove_it/config.json so as to exclude it.
+
 If you have a specific reason to continue without tests (e.g.
 configuration changes that aren't meaningfully testable), state
 that reason briefly and proceed. Otherwise, write a test now.`

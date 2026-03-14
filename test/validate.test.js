@@ -103,6 +103,10 @@ describe('validateConfig', () => {
       // warns when no agent tasks exist
       const { warnings } = validateConfig(validConfig({ model: 'gpt-4.1' }))
       assert.ok(warnings.some(w => w.includes('model') && w.includes('no agent tasks')))
+
+      // allows null
+      const nullModel = validateConfig(validConfig({ model: null }))
+      assert.strictEqual(nullModel.errors.length, 0)
     })
 
     it('validates top-level maxAgentTurns field', () => {
@@ -189,6 +193,10 @@ describe('validateConfig', () => {
       // non-string element errors
       const nonString = validateConfig(validConfig({ taskAllowedTools: ['Read', 42] }))
       assert.ok(nonString.errors.some(e => e.includes('taskAllowedTools[1] must be a string')))
+
+      // allows null
+      const nullTools = validateConfig(validConfig({ taskAllowedTools: null }))
+      assert.strictEqual(nullTools.errors.length, 0)
     })
 
     it('validates taskBypassPermissions field', () => {
@@ -203,6 +211,10 @@ describe('validateConfig', () => {
       // non-boolean errors
       const bad = validateConfig(validConfig({ taskBypassPermissions: 'yes' }))
       assert.ok(bad.errors.some(e => e.includes('"taskBypassPermissions" must be a boolean')))
+
+      // allows null
+      const nullBypass = validateConfig(validConfig({ taskBypassPermissions: null }))
+      assert.strictEqual(nullBypass.errors.length, 0)
     })
 
     it('validates hooks is required and must be array', () => {

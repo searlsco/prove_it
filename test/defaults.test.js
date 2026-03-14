@@ -14,10 +14,10 @@ describe('CONFIG_DEFAULTS', () => {
     assert.deepStrictEqual(CONFIG_DEFAULTS.fileEditingTools, [])
   })
 
-  it('does not include optional nullable keys that would trip the validator', () => {
-    assert.strictEqual('model' in CONFIG_DEFAULTS, false)
-    assert.strictEqual('taskAllowedTools' in CONFIG_DEFAULTS, false)
-    assert.strictEqual('taskBypassPermissions' in CONFIG_DEFAULTS, false)
+  it('includes nullable optional keys with null defaults', () => {
+    assert.strictEqual(CONFIG_DEFAULTS.model, null)
+    assert.strictEqual(CONFIG_DEFAULTS.taskAllowedTools, null)
+    assert.strictEqual(CONFIG_DEFAULTS.taskBypassPermissions, null)
   })
 })
 

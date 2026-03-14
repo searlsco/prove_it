@@ -47,6 +47,8 @@ describe('TDD state machine transitions', () => {
       assert.ok(message)
       assert.ok(message.includes('3 source file edits'))
       assert.ok(message.includes('prove_it phase refactor'))
+      assert.ok(message.includes('sources'),
+        'Nudge should mention sources config for non-source files')
     })
 
     it('test-edit → needs-red, resets editCount', () => {
