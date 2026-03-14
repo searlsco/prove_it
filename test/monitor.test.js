@@ -5,7 +5,8 @@ const path = require('path')
 const os = require('os')
 
 const { EventEmitter } = require('events')
-const { findLatestSession, listSessions, findProjectLogFiles, projectHash, formatEntry, formatVerbose, formatTime, formatDuration, useColor, stripAnsi, visualWidth, normalizeHookTag, middleTruncatePath, truncateReason, progressiveTruncate, watchFile, shouldDisplay, displayStatusOf, findProveItProject, extractAppealText, setupQuitKey } = require('../lib/monitor')
+const { findLatestSession, listSessions, findProjectLogFiles, projectHash, formatEntry, formatVerbose, formatTime, formatDuration, useColor, stripAnsi, visualWidth, normalizeHookTag, middleTruncatePath, truncateReason, progressiveTruncate, watchFile, shouldDisplay, displayStatusOf, extractAppealText, setupQuitKey } = require('../lib/monitor')
+const { findProveItProject } = require('../lib/config')
 
 describe('monitor', () => {
   let tmpDir
