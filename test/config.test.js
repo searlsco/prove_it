@@ -278,6 +278,113 @@ describe('isIgnoredPath', () => {
   })
 })
 
+describe('validateLayerTypes', () => {
+  const { validateLayerTypes } = require('../lib/config')
+
+  it('accepts valid typed values', () => {
+    // Should not throw
+    validateLayerTypes({ enabled: true, sources: ['**/*.js'], model: 'haiku' }, 'test.json')
+  })
+
+  it('throws on wrong type with file path in message', () => {
+    assert.throws(
+      () => validateLayerTypes({ model: null }, '~/.claude/prove_it/config.json'),
+      (err) => {
+        assert.ok(err.message.includes('~/.claude/prove_it/config.json'))
+        assert.ok(err.message.includes('"model" must be a string'))
+        return true
+      }
+    )
+  })
+
+  it('throws on array where boolean expected', () => {
+    assert.throws(
+      () => validateLayerTypes({ enabled: [] }, 'config.json'),
+      (err) => {
+        assert.ok(err.message.includes('"enabled" must be a boolean'))
+        return true
+      }
+    )
+  })
+
+  it('throws on null for array fields', () => {
+    for (const key of ['sources', 'tests', 'testCommands', 'taskAllowedTools', 'fileEditingTools']) {
+      assert.throws(
+        () => validateLayerTypes({ [key]: null }, 'config.json'),
+        (err) => {
+          assert.ok(err.message.includes(`"${key}" must be an array`), `Expected array error for ${key}`)
+          return true
+        }
+      )
+    }
+  })
+
+  it('ignores unknown keys (validated elsewhere)', () => {
+    // Should not throw — unknown keys are caught by validateConfig, not validateLayerTypes
+    validateLayerTypes({ unknownKey: 'whatever' }, 'config.json')
+  })
+})
+
+describe('userKeys tracking in loadEffectiveConfig', () => {
+  const { loadEffectiveConfig } = require('../lib/config')
+  const tmpBase = path.join(os.tmpdir(), 'prove_it_userkeys_' + Date.now())
+  let origProveItDir
+
+  function setup (globalCfg, projectCfg) {
+    origProveItDir = process.env.PROVE_IT_DIR
+    const globalDir = path.join(tmpBase, 'global')
+    process.env.PROVE_IT_DIR = globalDir
+    if (globalCfg) {
+      fs.mkdirSync(globalDir, { recursive: true })
+      fs.writeFileSync(path.join(globalDir, 'config.json'), JSON.stringify(globalCfg))
+    }
+    const projectDir = path.join(tmpBase, 'project')
+    if (projectCfg) {
+      fs.mkdirSync(path.join(projectDir, '.claude', 'prove_it'), { recursive: true })
+      fs.writeFileSync(
+        path.join(projectDir, '.claude', 'prove_it', 'config.json'),
+        JSON.stringify(projectCfg)
+      )
+    } else {
+      fs.mkdirSync(projectDir, { recursive: true })
+    }
+    return projectDir
+  }
+
+  function cleanup () {
+    if (origProveItDir !== undefined) process.env.PROVE_IT_DIR = origProveItDir
+    else delete process.env.PROVE_IT_DIR
+    fs.rmSync(tmpBase, { recursive: true, force: true })
+  }
+
+  it('tracks keys from user config files but not CONFIG_DEFAULTS', () => {
+    const projectDir = setup(
+      { enabled: true },
+      { hooks: [], sources: ['src/**/*.js'] }
+    )
+    try {
+      const { userKeys } = loadEffectiveConfig(projectDir, require('../lib/defaults').configDefaults)
+      assert.ok(userKeys.has('enabled'), 'enabled should be in userKeys (from global)')
+      assert.ok(userKeys.has('sources'), 'sources should be in userKeys (from project)')
+      assert.ok(userKeys.has('hooks'), 'hooks should be in userKeys (from project)')
+      assert.ok(!userKeys.has('maxAgentTurns'), 'maxAgentTurns should NOT be in userKeys (only in defaults)')
+      assert.ok(!userKeys.has('model'), 'model should NOT be in userKeys (only in defaults)')
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('returns empty userKeys when no config files exist', () => {
+    const projectDir = setup(null, null)
+    try {
+      const { userKeys } = loadEffectiveConfig(projectDir, require('../lib/defaults').configDefaults)
+      assert.strictEqual(userKeys.size, 0)
+    } finally {
+      cleanup()
+    }
+  })
+})
+
 describe('findProveItProject', () => {
   const { findProveItProject } = require('../lib/config')
   const tmpDir = path.join(os.tmpdir(), 'prove_it_findproject_' + Date.now())
