@@ -11,6 +11,8 @@ const {
   isTestFile,
   globToRegex,
   expandBraces,
+  expandGlobs,
+  matchesGlobList,
   walkDir
 } = require('../lib/globs')
 
@@ -321,5 +323,112 @@ describe('isTestFile', () => {
 
   it('returns false when tests is empty', () => {
     assert.strictEqual(isTestFile('foo.test.js', rootDir, []), false)
+  })
+})
+
+describe('matchesGlobList', () => {
+  it('matches with inclusion-only patterns (same as .some())', () => {
+    assert.strictEqual(matchesGlobList('lib/foo.js', ['**/*.js']), true)
+    assert.strictEqual(matchesGlobList('lib/foo.ts', ['**/*.js']), false)
+  })
+
+  it('excludes files matching a negated pattern', () => {
+    assert.strictEqual(matchesGlobList('README.md', ['**/*.*', '!**/*.md']), false)
+    assert.strictEqual(matchesGlobList('lib/foo.js', ['**/*.*', '!**/*.md']), true)
+  })
+
+  it('last matching pattern wins (order matters)', () => {
+    // Excluded then re-included
+    assert.strictEqual(matchesGlobList('docs/api.md', ['**/*.*', '!**/*.md', 'docs/**/*.md']), true)
+    // Included then excluded
+    assert.strictEqual(matchesGlobList('docs/api.md', ['**/*.*', 'docs/**/*.md', '!**/*.md']), false)
+  })
+
+  it('re-includes a specific file after broad exclusion', () => {
+    const globs = ['**/*.*', '!**/*.md', 'CHANGELOG.md']
+    assert.strictEqual(matchesGlobList('CHANGELOG.md', globs), true)
+    assert.strictEqual(matchesGlobList('README.md', globs), false)
+  })
+
+  it('returns false when no patterns match', () => {
+    assert.strictEqual(matchesGlobList('foo.py', ['**/*.js']), false)
+  })
+
+  it('handles brace expansion in negated patterns', () => {
+    const globs = ['**/*.*', '!**/*.{md,txt}']
+    assert.strictEqual(matchesGlobList('README.md', globs), false)
+    assert.strictEqual(matchesGlobList('notes.txt', globs), false)
+    assert.strictEqual(matchesGlobList('lib/foo.js', globs), true)
+  })
+})
+
+describe('isSourceFile with negation patterns', () => {
+  const rootDir = '/repo'
+
+  it('excludes markdown files via negation', () => {
+    const sources = ['**/*.*', '!**/*.md']
+    assert.strictEqual(isSourceFile('/repo/lib/foo.js', rootDir, sources), true)
+    assert.strictEqual(isSourceFile('/repo/README.md', rootDir, sources), false)
+  })
+
+  it('is backwards compatible with inclusion-only patterns', () => {
+    const sources = ['lib/**/*.js', 'src/**/*.js']
+    assert.strictEqual(isSourceFile('/repo/lib/foo.js', rootDir, sources), true)
+    assert.strictEqual(isSourceFile('/repo/README.md', rootDir, sources), false)
+  })
+})
+
+describe('isTestFile with negation patterns', () => {
+  const rootDir = '/repo'
+
+  it('excludes specific test files via negation', () => {
+    const tests = ['test/**/*.*', '!test/fixtures/**/*.*']
+    assert.strictEqual(isTestFile('test/foo.test.js', rootDir, tests), true)
+    assert.strictEqual(isTestFile('test/fixtures/sample.js', rootDir, tests), false)
+  })
+})
+
+describe('expandGlobs with negation', () => {
+  function createTree (base, structure) {
+    for (const [name, content] of Object.entries(structure)) {
+      const full = path.join(base, name)
+      if (typeof content === 'object') {
+        fs.mkdirSync(full, { recursive: true })
+        createTree(full, content)
+      } else {
+        fs.mkdirSync(path.dirname(full), { recursive: true })
+        fs.writeFileSync(full, content)
+      }
+    }
+  }
+
+  it('excludes files matching negated patterns', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_neg_'))
+    createTree(tmp, {
+      'app.js': '1',
+      'README.md': '2',
+      'notes.txt': '3',
+      lib: { 'util.js': '4', 'guide.md': '5' }
+    })
+
+    const files = expandGlobs(tmp, ['**/*.*', '!**/*.{md,txt}'])
+    assert.ok(files.includes('app.js'), 'should include app.js')
+    assert.ok(files.includes(path.join('lib', 'util.js')), 'should include lib/util.js')
+    assert.ok(!files.includes('README.md'), 'should exclude README.md')
+    assert.ok(!files.includes('notes.txt'), 'should exclude notes.txt')
+    assert.ok(!files.includes(path.join('lib', 'guide.md')), 'should exclude lib/guide.md')
+
+    fs.rmSync(tmp, { recursive: true, force: true })
+  })
+
+  it('fast path: no negation patterns behaves as before', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_neg_'))
+    createTree(tmp, { 'a.js': '1', 'b.ts': '2' })
+
+    const files = expandGlobs(tmp, ['**/*.js'])
+    assert.ok(files.includes('a.js'))
+    assert.ok(!files.includes('b.ts'))
+
+    fs.rmSync(tmp, { recursive: true, force: true })
   })
 })
