@@ -130,6 +130,34 @@ describe('libexec/inject-plan', () => {
     assert.strictEqual(result.status, 0)
   })
 
+  it('injects block before first numbered step when position is before-steps', () => {
+    const planPath = path.join(tmpDir, '.claude', 'plans', 'plan1.md')
+    const planText = '# My Plan\n\n## Context\n\nSome context.\n\n## 1. Build feature\n\nDo stuff.\n\n## Verification\n\n1. Test it.\n'
+    fs.writeFileSync(planPath, planText)
+
+    const result = spawnSync('node', [scriptPath], {
+      input: JSON.stringify({
+        tool_input: { plan: planText },
+        params: {
+          position: 'before-steps',
+          marker: 'CUSTOM_MARKER',
+          block: '## Development approach\n\nTDD content.\n'
+        }
+      }),
+      encoding: 'utf8',
+      env: { ...process.env }
+    })
+
+    assert.strictEqual(result.status, 0)
+    const content = fs.readFileSync(planPath, 'utf8')
+    assert.ok(content.indexOf('Development approach') < content.indexOf('## 1. Build'),
+      'Block should appear before first numbered step')
+    assert.ok(content.indexOf('Some context.') < content.indexOf('Development approach'),
+      'Block should appear after context section')
+    assert.ok(content.indexOf('## 1. Build') < content.indexOf('Verification'),
+      'Steps should still appear before verification')
+  })
+
   it('exits 0 when params are missing', () => {
     const result = spawnSync('node', [scriptPath], {
       input: JSON.stringify({

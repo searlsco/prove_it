@@ -246,4 +246,57 @@ describe('appendPlanBlock', () => {
     const content = fs.readFileSync(filePath, 'utf8')
     assert.ok(content.endsWith('Do the thing.\n'), 'Block should be appended at end')
   })
+
+  it('before-steps inserts before first numbered heading (## N.)', () => {
+    const filePath = path.join(tmpDir, 'plan.md')
+    fs.writeFileSync(filePath, '# My Plan\n\n## Context\n\nSome context.\n\n## 1. Build\n\nDo stuff.\n')
+    appendPlanBlock(filePath, {
+      marker: 'TEST_MARKER',
+      block: '## Development approach\n\nTDD content.\n',
+      position: 'before-steps'
+    })
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.ok(content.indexOf('Development approach') < content.indexOf('## 1. Build'),
+      'Block should appear before first numbered heading')
+    assert.ok(content.indexOf('Some context.') < content.indexOf('Development approach'),
+      'Block should appear after context')
+  })
+
+  it('before-steps inserts before ### N: style headings', () => {
+    const filePath = path.join(tmpDir, 'plan.md')
+    fs.writeFileSync(filePath, '# My Plan\n\n### 1: First task\n\n### 2: Second task\n')
+    appendPlanBlock(filePath, {
+      marker: 'TEST_MARKER',
+      block: '## Dev approach\n\nContent.\n',
+      position: 'before-steps'
+    })
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.ok(content.indexOf('Dev approach') < content.indexOf('### 1: First task'),
+      'Block should appear before ### N: heading')
+  })
+
+  it('before-steps falls back to before-verification when no numbered headings', () => {
+    const filePath = path.join(tmpDir, 'plan.md')
+    fs.writeFileSync(filePath, '# My Plan\n\n## Overview\n\nStuff.\n\n## Verification\n\n1. Test it.\n')
+    appendPlanBlock(filePath, {
+      marker: 'TEST_MARKER',
+      block: '## Dev approach\n\nContent.\n',
+      position: 'before-steps'
+    })
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.ok(content.indexOf('Dev approach') < content.indexOf('Verification'),
+      'Block should appear before Verification when no numbered headings')
+  })
+
+  it('before-steps falls back to end-of-file when no numbered headings and no verification', () => {
+    const filePath = path.join(tmpDir, 'plan.md')
+    fs.writeFileSync(filePath, '# My Plan\n\n## Overview\n\nStuff.\n')
+    appendPlanBlock(filePath, {
+      marker: 'TEST_MARKER',
+      block: '## Dev approach\n\nContent.\n',
+      position: 'before-steps'
+    })
+    const content = fs.readFileSync(filePath, 'utf8')
+    assert.ok(content.endsWith('Content.\n'), 'Block should be appended at end')
+  })
 })
