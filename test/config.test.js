@@ -87,7 +87,7 @@ describe('loadEffectiveConfig ancestor discovery', () => {
   const { loadEffectiveConfig } = require('../lib/config')
   const defaultTestConfig = () => ({
     enabled: false,
-    sources: null,
+    sources: [],
     hooks: []
   })
 
@@ -173,7 +173,7 @@ describe('loadEffectiveConfig ancestor discovery', () => {
       const { cfg } = loadEffectiveConfig(emptyDir, defaultTestConfig)
       assert.strictEqual(cfg.enabled, false)
       assert.strictEqual(Array.isArray(cfg.hooks), true, 'hooks should be an array')
-      assert.strictEqual(cfg.sources, null)
+      assert.deepStrictEqual(cfg.sources, [])
     } finally {
       if (origDir !== undefined) process.env.PROVE_IT_DIR = origDir
       else delete process.env.PROVE_IT_DIR

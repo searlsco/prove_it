@@ -42,9 +42,9 @@ describe('validateConfig', () => {
       const nonString = validateConfig(validConfig({ sources: ['ok', 42] }))
       assert.ok(nonString.errors.some(e => e.includes('sources[1] must be a string')))
 
-      // allows null
+      // rejects null
       const nullSources = validateConfig(validConfig({ sources: null }))
-      assert.strictEqual(nullSources.errors.length, 0)
+      assert.ok(nullSources.errors.some(e => e.includes('"sources" must be an array')))
     })
 
     it('validates format field', () => {
@@ -104,9 +104,9 @@ describe('validateConfig', () => {
       const { warnings } = validateConfig(validConfig({ model: 'gpt-4.1' }))
       assert.ok(warnings.some(w => w.includes('model') && w.includes('no agent tasks')))
 
-      // allows null
+      // rejects null
       const nullModel = validateConfig(validConfig({ model: null }))
-      assert.strictEqual(nullModel.errors.length, 0)
+      assert.ok(nullModel.errors.some(e => e.includes('"model" must be a non-empty string')))
     })
 
     it('validates top-level maxAgentTurns field', () => {
@@ -158,9 +158,9 @@ describe('validateConfig', () => {
       const nonString = validateConfig(validConfig({ tests: ['ok', 42] }))
       assert.ok(nonString.errors.some(e => e.includes('tests[1] must be a string')))
 
-      // allows null
+      // rejects null
       const nullTests = validateConfig(validConfig({ tests: null }))
-      assert.strictEqual(nullTests.errors.length, 0)
+      assert.ok(nullTests.errors.some(e => e.includes('"tests" must be an array')))
     })
 
     it('validates testCommands field', () => {
@@ -176,9 +176,9 @@ describe('validateConfig', () => {
       const nonString = validateConfig(validConfig({ testCommands: ['ok', 42] }))
       assert.ok(nonString.errors.some(e => e.includes('testCommands[1] must be a string')))
 
-      // allows null
+      // rejects null
       const nullCmds = validateConfig(validConfig({ testCommands: null }))
-      assert.strictEqual(nullCmds.errors.length, 0)
+      assert.ok(nullCmds.errors.some(e => e.includes('"testCommands" must be an array')))
     })
 
     it('validates taskAllowedTools field', () => {
@@ -194,9 +194,9 @@ describe('validateConfig', () => {
       const nonString = validateConfig(validConfig({ taskAllowedTools: ['Read', 42] }))
       assert.ok(nonString.errors.some(e => e.includes('taskAllowedTools[1] must be a string')))
 
-      // allows null
+      // rejects null
       const nullTools = validateConfig(validConfig({ taskAllowedTools: null }))
-      assert.strictEqual(nullTools.errors.length, 0)
+      assert.ok(nullTools.errors.some(e => e.includes('"taskAllowedTools" must be an array')))
     })
 
     it('validates taskBypassPermissions field', () => {
@@ -212,9 +212,9 @@ describe('validateConfig', () => {
       const bad = validateConfig(validConfig({ taskBypassPermissions: 'yes' }))
       assert.ok(bad.errors.some(e => e.includes('"taskBypassPermissions" must be a boolean')))
 
-      // allows null
+      // rejects null
       const nullBypass = validateConfig(validConfig({ taskBypassPermissions: null }))
-      assert.strictEqual(nullBypass.errors.length, 0)
+      assert.ok(nullBypass.errors.some(e => e.includes('"taskBypassPermissions" must be a boolean')))
     })
 
     it('validates hooks is required and must be array', () => {

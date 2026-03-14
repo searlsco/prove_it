@@ -13,7 +13,7 @@ describe('git dispatcher', () => {
     const cfg = configDefaults()
     assert.strictEqual(cfg.enabled, false)
     assert.deepStrictEqual(cfg.hooks, [])
-    assert.strictEqual(cfg.sources, null)
+    assert.deepStrictEqual(cfg.sources, [])
     assert.deepStrictEqual(cfg.format, { maxOutputChars: 12000 })
     assert.strictEqual(cfg.maxAgentTurns, 10)
   })
@@ -77,7 +77,7 @@ describe('git dispatcher', () => {
         sessionId: null,
         hookEvent: 'pre-commit',
         localCfgPath: null,
-        sources: null,
+        sources: [],
         maxChars: 12000,
         testOutput: '',
         ...overrides

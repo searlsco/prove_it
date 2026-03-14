@@ -24,7 +24,8 @@ function writeCaptureReviewer (dir, captureName) {
 }
 
 function ctx (tmpDir, overrides) {
-  return { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '', ...overrides }
+  const { DEFAULT_ALLOWED_TOOLS } = require('../../lib/defaults')
+  return { rootDir: tmpDir, projectDir: tmpDir, sessionId: null, toolInput: null, testOutput: '', taskAllowedTools: DEFAULT_ALLOWED_TOOLS, ...overrides }
 }
 
 describe('agent check', () => {
