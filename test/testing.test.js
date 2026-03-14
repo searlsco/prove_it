@@ -43,7 +43,9 @@ describe('isTestCommand', () => {
     ['flutter test', 'flutter test'],
     ['mix test', 'mix test'],
     ['tldr', 'tldr'],
-    ['tldr with args', 'tldr --verbose']
+    ['tldr with args', 'tldr --verbose'],
+    ['bundle exec tldr', 'bundle exec tldr'],
+    ['bundle exec tldr with args', 'bundle exec tldr --verbose']
   ]
 
   matchCases.forEach(([label, command]) => {
