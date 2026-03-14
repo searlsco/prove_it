@@ -860,8 +860,8 @@ describe('claude dispatcher', () => {
         configEnv: null,
         configModel: null,
         configMaxAgentTurns: 10,
-        taskAllowedTools: null,
-        taskBypassPermissions: null,
+        taskAllowedTools: ['Read', 'Glob', 'Grep', 'Bash', 'WebFetch', 'WebSearch', 'Task'],
+        taskBypassPermissions: false,
         maxChars: 12000,
         testOutput: ''
       }
