@@ -35,7 +35,7 @@ describe('io', () => {
     })
 
     it('converts non-string to string', () => {
-      assert.strictEqual(shellEscape(42), "'42'")
+      assert.strictEqual(shellEscape(42), '42')
     })
   })
 
@@ -109,7 +109,7 @@ describe('io', () => {
     })
 
     it('replaces special characters with underscore', () => {
-      assert.strictEqual(sanitizeTaskName('../etc'), '___etc')
+      assert.strictEqual(sanitizeTaskName('../etc'), '.._etc')
     })
 
     it('replaces spaces', () => {

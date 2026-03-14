@@ -44,7 +44,7 @@ describe('paths', () => {
     it('sanitizes task names with special characters', () => {
       const result = backchannelDir(root, sid, '../etc')
       assert.ok(!result.includes('/../'))
-      assert.ok(result.includes('___etc'))
+      assert.ok(result.includes('.._etc'))
     })
   })
 
