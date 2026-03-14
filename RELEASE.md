@@ -37,12 +37,10 @@ gh run list --repo searlsco/homebrew-tap --limit 3
 
 Wait for both to show `completed success`.
 
-### 4. Verify the release
+### 4. Upgrade and verify
 
 ```bash
-brew update
-brew reinstall searlsco/tap/prove_it
-prove_it install    # Re-register hooks (picks up any changes)
+prove_it upgrade    # brew upgrade + reinstall hooks + reinit project
 prove_it doctor     # Should show new version and all checks passed
 ```
 
