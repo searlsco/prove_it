@@ -98,6 +98,34 @@ describe('agent check', () => {
     assert.strictEqual(result.skipped, undefined, 'Should not be marked as skipped')
   })
 
+  it('includes raw output in verbose log when reviewer crashes', () => {
+    const origDir = process.env.PROVE_IT_DIR
+    process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
+    const SID = 'test-session-raw-output'
+
+    try {
+      const crashPath = path.join(tmpDir, 'crash_verbose.sh')
+      fs.writeFileSync(crashPath, '#!/usr/bin/env bash\ncat > /dev/null\necho "some stderr output" >&2\nexit 1\n')
+      fs.chmodSync(crashPath, 0o755)
+
+      runAgentCheck(
+        { name: 'raw-output-crash', command: crashPath, prompt: 'Review this', model: 'opus' },
+        ctx(tmpDir, { sessionId: SID, hookEvent: 'Stop' })
+      )
+
+      const logFile = path.join(tmpDir, 'prove_it_state', 'sessions', `${SID}.jsonl`)
+      const entries = fs.readFileSync(logFile, 'utf8').trim().split('\n').map(l => JSON.parse(l))
+      const failEntry = entries.find(e => e.status === 'FAIL')
+      assert.ok(failEntry, 'should have FAIL entry')
+      assert.ok(failEntry.verbose, 'FAIL entry should have verbose data')
+      assert.strictEqual(typeof failEntry.verbose.rawStdout, 'string', 'verbose should include rawStdout')
+      assert.strictEqual(typeof failEntry.verbose.rawStderr, 'string', 'verbose should include rawStderr')
+    } finally {
+      if (origDir === undefined) delete process.env.PROVE_IT_DIR
+      else process.env.PROVE_IT_DIR = origDir
+    }
+  })
+
   it('soft-skips crash when no explicit model', () => {
     const fix = reviewerFixtures()
     const result = runAgentCheck(
@@ -705,16 +733,33 @@ describe('notepad', () => {
   })
 
   // ---------- Story: notepad lifecycle ----------
-  // FAIL without reviewer-written notepad → no notepad, PASS → cleaned, SKIP → cleaned
-  it('lifecycle: no fallback on FAIL, cleaned on PASS/SKIP', () => {
-    // FAIL → notepad NOT created (no fallback)
-    const failPath = writeReviewer(tmpDir, 'fail.sh', 'echo "FAIL: missing tests"')
+  // FAIL → dispatcher writes notepad, PASS → cleaned, SKIP → cleaned
+  it('lifecycle: dispatcher writes notepad on FAIL, cleaned on PASS/SKIP', () => {
+    // FAIL with body → notepad written by dispatcher with body content
+    const bodyReviewer = path.join(tmpDir, 'fail_body.sh')
+    fs.writeFileSync(bodyReviewer, '#!/usr/bin/env bash\ncat > /dev/null\nprintf "FAIL: missing tests\\n\\n### Details\\nFunction foo has no tests\\n"\n')
+    fs.chmodSync(bodyReviewer, 0o755)
     runAgentCheck(
-      { name: 'test-review', command: failPath, prompt: 'Review this' },
+      { name: 'test-review', command: bodyReviewer, prompt: 'Review this' },
       ctx(tmpDir, { sessionId })
     )
     const npPath = notepadFilePath(tmpDir, sessionId, 'test-review')
-    assert.ok(!fs.existsSync(npPath), 'notepad should NOT be created on FAIL without reviewer writing')
+    assert.ok(fs.existsSync(npPath), 'notepad should be created on FAIL')
+    const content = fs.readFileSync(npPath, 'utf8')
+    assert.ok(content.includes('test-review Continuation Note'), 'notepad should have header')
+    assert.ok(content.includes('### Details'), 'notepad should include body content')
+    assert.ok(content.includes('Function foo has no tests'), 'notepad should include body detail')
+
+    // FAIL without body → notepad written with reason
+    const failPath = writeReviewer(tmpDir, 'fail_reason.sh', 'echo "FAIL: missing tests"')
+    runAgentCheck(
+      { name: 'reason-only', command: failPath, prompt: 'Review this' },
+      ctx(tmpDir, { sessionId })
+    )
+    const npPath2 = notepadFilePath(tmpDir, sessionId, 'reason-only')
+    assert.ok(fs.existsSync(npPath2), 'notepad created for reason-only FAIL')
+    const content2 = fs.readFileSync(npPath2, 'utf8')
+    assert.ok(content2.includes('missing tests'), 'notepad should include reason')
 
     // PASS → notepad cleaned (pre-create to verify cleanup)
     writeNotepad(tmpDir, sessionId, 'test-review', 'leftover notes')
@@ -766,16 +811,19 @@ describe('notepad', () => {
     assert.ok(!captured.includes('spot-check'), 'should not contain old weak language')
   })
 
-  it('includes FAIL instruction when sessionId present, omits when null', () => {
+  it('includes inline continuation instruction when sessionId present, omits when null', () => {
     const { reviewerPath, capturePath } = writeCaptureReviewer(tmpDir, 'fail_instr.txt')
 
-    // With sessionId → FAIL instruction present
+    // With sessionId → inline continuation instruction present
     runAgentCheck(
       { name: 'test-review', command: reviewerPath, prompt: 'Review this' },
       ctx(tmpDir, { sessionId })
     )
     const withSession = fs.readFileSync(capturePath, 'utf8')
-    assert.ok(withSession.includes('When you FAIL this review, you MUST silently write'))
+    assert.ok(withSession.includes('When you FAIL this review'), 'should have FAIL instruction')
+    assert.ok(withSession.includes('include a structured continuation note'), 'should tell reviewer to include notes inline')
+    assert.ok(!withSession.includes('silently write'), 'should NOT tell reviewer to write files')
+    assert.ok(!withSession.includes(notepadFilePath(tmpDir, sessionId, 'test-review')), 'should NOT include notepad file path')
 
     // Without sessionId → no FAIL instruction
     runAgentCheck(
@@ -830,9 +878,10 @@ describe('notepad', () => {
     assert.strictEqual(loadSessionState(sessionId, 'notepadRounds')?.['test-review'], 0)
   })
 
-  // ---------- Story: reviewer-written notepad takes precedence ----------
-  it('preserves reviewer-written notepad instead of overwriting with fallback', () => {
-    // Create a reviewer that writes to notepad AND returns FAIL
+  // ---------- Story: dispatcher owns notepad on FAIL ----------
+  it('dispatcher writes notepad on FAIL regardless of reviewer file writes', () => {
+    // Even if the reviewer writes its own notepad, the dispatcher overwrites
+    // with its own version based on the verdict output
     const npPath = notepadFilePath(tmpDir, sessionId, 'test-review')
     const npDir = notepadDir(tmpDir, sessionId, 'test-review')
     const reviewerPath = path.join(tmpDir, 'write_notepad_reviewer.sh')
@@ -852,10 +901,10 @@ describe('notepad', () => {
 
     assert.ok(fs.existsSync(npPath), 'notepad should exist')
     const content = fs.readFileSync(npPath, 'utf8')
-    assert.ok(content.includes('Reviewer-written: check function bar'),
-      'should preserve reviewer-written notepad')
-    assert.ok(!content.includes('needs work'),
-      'should not overwrite with fallback')
+    assert.ok(content.includes('test-review Continuation Note'),
+      'dispatcher should write its own notepad header')
+    assert.ok(content.includes('needs work'),
+      'dispatcher notepad should contain the verdict reason')
   })
 
   // ---------- Story: orphaned notepad from crashed reviewer ----------

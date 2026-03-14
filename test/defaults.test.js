@@ -35,7 +35,13 @@ describe('DEFAULT_ALLOWED_TOOLS', () => {
     assert.ok(DEFAULT_ALLOWED_TOOLS.includes('Read'))
     assert.ok(DEFAULT_ALLOWED_TOOLS.includes('Bash'))
     assert.ok(DEFAULT_ALLOWED_TOOLS.includes('WebSearch'))
-    assert.strictEqual(DEFAULT_ALLOWED_TOOLS.length, 10)
+    assert.strictEqual(DEFAULT_ALLOWED_TOOLS.length, 7)
+  })
+
+  it('excludes file-writing tools (reviewers should only read)', () => {
+    assert.ok(!DEFAULT_ALLOWED_TOOLS.includes('Write'), 'Write should not be in DEFAULT_ALLOWED_TOOLS')
+    assert.ok(!DEFAULT_ALLOWED_TOOLS.includes('Edit'), 'Edit should not be in DEFAULT_ALLOWED_TOOLS')
+    assert.ok(!DEFAULT_ALLOWED_TOOLS.includes('NotebookEdit'), 'NotebookEdit should not be in DEFAULT_ALLOWED_TOOLS')
   })
 })
 
