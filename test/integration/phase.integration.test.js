@@ -52,6 +52,26 @@ describe('phase integration', () => {
     assert.strictEqual(getPhase('phase-int-1'), 'plan')
   })
 
+  it('phase change emits systemMessage telling Claude to continue', () => {
+    writeConfig(projectDir, makeConfig([
+      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] },
+      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
+    ]))
+
+    const result = invokeHook('claude:PreToolUse', {
+      session_id: 'phase-sysmsg',
+      tool_name: 'Bash',
+      tool_input: { command: 'prove_it phase refactor' }
+    }, { projectDir, env })
+
+    assert.strictEqual(result.exitCode, 0)
+    const sysMsg = result.output.systemMessage || ''
+    assert.ok(
+      sysMsg.includes('continue'),
+      `Expected systemMessage telling Claude to continue, got: ${JSON.stringify(sysMsg)}`
+    )
+  })
+
   it('PreToolUse intercepts prove_it phase implement and records phase', () => {
     writeConfig(projectDir, makeConfig([
       { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] },
