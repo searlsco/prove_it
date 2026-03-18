@@ -90,6 +90,40 @@ describe('record command – CLI argument validation', () => {
   })
 })
 
+describe('record command – project root resolution', () => {
+  let tmpDir
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_record_'))
+    // Create project-level config so findProveItProject can locate the root
+    fs.mkdirSync(path.join(tmpDir, '.claude', 'prove_it'), { recursive: true })
+    fs.writeFileSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json'), '{}')
+    // Create a subdirectory to run from
+    fs.mkdirSync(path.join(tmpDir, 'sub', 'deep'), { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('writes config.local.json at project root when run from a subdirectory', () => {
+    const subDir = path.join(tmpDir, 'sub', 'deep')
+    const result = runCli(['record', '--pass', '--name', 'subdir_test'], { cwd: subDir })
+    assert.strictEqual(result.exitCode, 0)
+    assert.match(result.stderr, /recorded subdir_test pass/)
+
+    // config.local.json should be at project root, not in the subdirectory
+    const rootCfg = path.join(tmpDir, '.claude', 'prove_it', 'config.local.json')
+    const subCfg = path.join(subDir, '.claude', 'prove_it', 'config.local.json')
+
+    assert.ok(fs.existsSync(rootCfg), 'config.local.json should exist at project root')
+    assert.ok(!fs.existsSync(subCfg), 'config.local.json should NOT exist in subdirectory')
+
+    const data = JSON.parse(fs.readFileSync(rootCfg, 'utf8'))
+    assert.strictEqual(data.runs.subdir_test.result, 'pass')
+  })
+})
+
 describe('record command – trap integration', () => {
   let tmpDir
 
