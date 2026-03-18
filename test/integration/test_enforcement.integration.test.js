@@ -73,8 +73,8 @@ describe('v2 dispatcher: test enforcement', () => {
       assert.ok(result.output, 'Should produce JSON output')
       assert.strictEqual(
         result.output.hookSpecificOutput.permissionDecision,
-        'allow',
-        'Must allow when tests pass'
+        undefined,
+        'Passing PreToolUse must not emit permissionDecision'
       )
     })
 
@@ -205,8 +205,8 @@ describe('v2 dispatcher: test enforcement', () => {
       const output = JSON.parse(result.stdout)
       assert.strictEqual(
         output.hookSpecificOutput.permissionDecision,
-        'allow',
-        'Should allow on invalid input (circuit breaker prevents death spiral)'
+        undefined,
+        'Circuit breaker must not emit permissionDecision (non-blocking pass)'
       )
       assert.ok(
         output.hookSpecificOutput.permissionDecisionReason.includes('Failed to parse'),
@@ -238,7 +238,7 @@ describe('v2 dispatcher: test enforcement', () => {
       assert.ok(result.output, 'Should produce output')
       assert.strictEqual(
         result.output.hookSpecificOutput.permissionDecision,
-        'allow',
+        undefined,
         'Should handle special-character paths without crashing'
       )
     })
@@ -270,8 +270,8 @@ describe('v2 dispatcher: test enforcement', () => {
       assert.ok(result.output, 'Hook should produce output for git push trigger')
       assert.strictEqual(
         result.output.hookSpecificOutput.permissionDecision,
-        'allow',
-        'Should allow when tests pass for custom trigger'
+        undefined,
+        'Passing PreToolUse must not emit permissionDecision for custom trigger'
       )
     })
   })

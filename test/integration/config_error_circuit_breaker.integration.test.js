@@ -11,8 +11,7 @@ const {
   initGitRepo,
   createFile,
   writeConfig,
-  isolatedEnv,
-  assertValidPermissionDecision
+  isolatedEnv
 } = require('./hook-harness')
 
 /**
@@ -61,11 +60,10 @@ describe('Config error circuit breaker', () => {
 
       assert.strictEqual(result.exitCode, 0)
       assert.ok(result.output, 'Should produce output on first config error')
-      assertValidPermissionDecision(result, 'config-error-ptu')
       assert.strictEqual(
         result.output.hookSpecificOutput.permissionDecision,
-        'allow',
-        'Config error should allow (not deny) to avoid death spiral'
+        undefined,
+        'Config error must not emit permissionDecision (non-blocking pass)'
       )
     })
 
@@ -271,8 +269,8 @@ describe('Config error circuit breaker', () => {
       const output = JSON.parse(result.stdout)
       assert.strictEqual(
         output.hookSpecificOutput.permissionDecision,
-        'allow',
-        'JSON parse error should allow (not deny)'
+        undefined,
+        'JSON parse error must not emit permissionDecision (non-blocking pass)'
       )
     })
 

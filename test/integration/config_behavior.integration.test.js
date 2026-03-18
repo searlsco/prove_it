@@ -68,8 +68,8 @@ describe('Config-driven hook behavior (v2)', () => {
       assert.ok(result.output, 'Hook should produce JSON output')
       assert.strictEqual(
         result.output.hookSpecificOutput.permissionDecision,
-        'allow',
-        'Should allow when custom test command passes'
+        undefined,
+        'Passing PreToolUse must not emit permissionDecision'
       )
     })
 

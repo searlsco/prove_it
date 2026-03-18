@@ -153,11 +153,11 @@ describe('v2 dispatcher: core hook behaviors', () => {
       assert.ok(result.output, 'Hook should produce JSON output')
       assert.strictEqual(
         result.output.hookSpecificOutput.permissionDecision,
-        'allow',
-        'Must allow when tests pass'
+        undefined,
+        'Passing PreToolUse must not emit permissionDecision (let normal permission system handle it)'
       )
       assert.strictEqual(result.output.systemMessage, undefined,
-        'allowed PreToolUse should not include systemMessage')
+        'passing PreToolUse should not include systemMessage')
     })
 
     it('ignores non-matching Bash commands', async () => {
@@ -557,8 +557,8 @@ describe('v2 dispatcher: core hook behaviors', () => {
       assert.ok(result.output, 'Hook should produce JSON output')
       assert.strictEqual(
         result.output.hookSpecificOutput.permissionDecision,
-        'allow',
-        'Quiet passing task should allow'
+        undefined,
+        'Quiet passing task must not emit permissionDecision'
       )
       // The summary should be "all checks passed", not the task's individual reason
       assert.ok(

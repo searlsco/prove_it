@@ -1,6 +1,6 @@
 const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
-const { passDecision, failDecision, emitPreToolUse, emitPostToolUse, emitPostToolUseFailure, emitStop, emitSessionStart } = require('../lib/dispatcher/protocol')
+const { passDecision, failDecision, emitPreToolUse, emitPreToolUseContext, emitPostToolUse, emitPostToolUseFailure, emitStop, emitSessionStart } = require('../lib/dispatcher/protocol')
 
 describe('protocol', () => {
   describe('passDecision', () => {
@@ -83,6 +83,48 @@ describe('protocol', () => {
       const output = JSON.parse(captured)
       assert.strictEqual(output.hookSpecificOutput.additionalContext, undefined)
       assert.strictEqual(output.systemMessage, undefined)
+    })
+  })
+
+  describe('emitPreToolUseContext', () => {
+    let captured
+    const origWrite = process.stdout.write
+
+    beforeEach(() => {
+      captured = ''
+      process.stdout.write = (chunk) => { captured += chunk }
+    })
+
+    afterEach(() => {
+      process.stdout.write = origWrite
+    })
+
+    it('emits reason without permissionDecision', () => {
+      emitPreToolUseContext('prove_it: all checks passed')
+      const output = JSON.parse(captured)
+      assert.strictEqual(output.hookSpecificOutput.hookEventName, 'PreToolUse')
+      assert.strictEqual(output.hookSpecificOutput.permissionDecisionReason, 'prove_it: all checks passed')
+      assert.strictEqual(output.hookSpecificOutput.permissionDecision, undefined)
+    })
+
+    it('includes additionalContext when provided', () => {
+      emitPreToolUseContext('reason', { additionalContext: 'extra context' })
+      const output = JSON.parse(captured)
+      assert.strictEqual(output.hookSpecificOutput.additionalContext, 'extra context')
+      assert.strictEqual(output.hookSpecificOutput.permissionDecision, undefined)
+    })
+
+    it('includes systemMessage at top level when provided', () => {
+      emitPreToolUseContext('reason', { systemMessage: 'sys msg' })
+      const output = JSON.parse(captured)
+      assert.strictEqual(output.systemMessage, 'sys msg')
+      assert.strictEqual(output.hookSpecificOutput.permissionDecision, undefined)
+    })
+
+    it('defaults reason to empty string when falsy', () => {
+      emitPreToolUseContext('')
+      const output = JSON.parse(captured)
+      assert.strictEqual(output.hookSpecificOutput.permissionDecisionReason, '')
     })
   })
 
