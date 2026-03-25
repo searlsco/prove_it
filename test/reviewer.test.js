@@ -1,7 +1,10 @@
 const { describe, it } = require('node:test')
 const assert = require('node:assert')
+const fs = require('fs')
+const os = require('os')
+const path = require('path')
 
-const { isCodexModel, parseVerdict, parseJsonOutput, extractReviewText, extractDenialContent, resumeForVerdict, FINAL_TURN_PROMPT } = require('../lib/shared')
+const { isCodexModel, parseVerdict, parseJsonOutput, extractReviewText, extractDenialContent, resumeForVerdict, scrapeSessionVerdict, FINAL_TURN_PROMPT } = require('../lib/shared')
 
 describe('parseVerdict', () => {
   describe('PASS responses', () => {
@@ -486,6 +489,28 @@ describe('resumeForVerdict', () => {
     assert.strictEqual(resumeForVerdict('sess-1', 'claude', '/tmp', 30000, {}, fakeRunner), null)
   })
 
+  it('falls back to scrapeSessionVerdict when result and denials are empty', () => {
+    // Set up a fake session JSONL that scrapeSessionVerdict can find
+    const sessionId = 'scrape-fallback-test'
+    const scrapeDir = path.join(os.tmpdir(), 'prove-it-resume-scrape-' + process.pid)
+    const projectDir = path.join(scrapeDir, '.claude', 'projects', 'test-project')
+    fs.mkdirSync(projectDir, { recursive: true })
+    const sessionFile = path.join(projectDir, `${sessionId}.jsonl`)
+    fs.writeFileSync(sessionFile, JSON.stringify({
+      type: 'assistant',
+      message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'PASS\n\nAll good.' }] }
+    }) + '\n')
+
+    const fakeRunner = () => ({
+      code: 0,
+      stdout: JSON.stringify({ result: '', subtype: 'success', session_id: sessionId, permission_denials: [] }),
+      stderr: ''
+    })
+    const result = resumeForVerdict(sessionId, 'claude', '/tmp', 30000, {}, fakeRunner, scrapeDir)
+    assert.strictEqual(result, 'PASS\n\nAll good.')
+    fs.rmSync(scrapeDir, { recursive: true, force: true })
+  })
+
   it('extracts review text from permission denials when result is empty', () => {
     const fakeRunner = () => ({
       code: 0,
@@ -530,5 +555,75 @@ describe('FINAL_TURN_PROMPT', () => {
     assert.ok(FINAL_TURN_PROMPT.includes('PASS'))
     assert.ok(FINAL_TURN_PROMPT.includes('FAIL'))
     assert.ok(FINAL_TURN_PROMPT.includes('SKIP'))
+  })
+})
+
+describe('scrapeSessionVerdict', () => {
+  const tmpDir = path.join(os.tmpdir(), 'prove-it-scrape-test-' + process.pid)
+  const sessionId = 'test-session-abc123'
+
+  function setup () {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  }
+
+  function cleanup () {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  }
+
+  it('extracts last assistant text from session JSONL', () => {
+    setup()
+    const projectDir = path.join(tmpDir, '.claude', 'projects', 'test-project')
+    fs.mkdirSync(projectDir, { recursive: true })
+    const sessionFile = path.join(projectDir, `${sessionId}.jsonl`)
+    const lines = [
+      JSON.stringify({ type: 'user', message: { content: 'review this' } }),
+      JSON.stringify({ type: 'assistant', message: { stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'Read', id: '1' }] } }),
+      JSON.stringify({ type: 'assistant', message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'PASS\n\nLooks good.' }] } })
+    ]
+    fs.writeFileSync(sessionFile, lines.join('\n') + '\n')
+
+    const result = scrapeSessionVerdict(sessionId, tmpDir)
+    assert.strictEqual(result, 'PASS\n\nLooks good.')
+    cleanup()
+  })
+
+  it('returns null when session file does not exist', () => {
+    setup()
+    const result = scrapeSessionVerdict('nonexistent-session', tmpDir)
+    assert.strictEqual(result, null)
+    cleanup()
+  })
+
+  it('returns null when last assistant message has no text', () => {
+    setup()
+    const projectDir = path.join(tmpDir, '.claude', 'projects', 'test-project')
+    fs.mkdirSync(projectDir, { recursive: true })
+    const sessionFile = path.join(projectDir, `${sessionId}.jsonl`)
+    const lines = [
+      JSON.stringify({ type: 'assistant', message: { stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'Read', id: '1' }] } })
+    ]
+    fs.writeFileSync(sessionFile, lines.join('\n') + '\n')
+
+    const result = scrapeSessionVerdict(sessionId, tmpDir)
+    assert.strictEqual(result, null)
+    cleanup()
+  })
+
+  it('skips tool_use entries and finds the text entry', () => {
+    setup()
+    const projectDir = path.join(tmpDir, '.claude', 'projects', 'test-project')
+    fs.mkdirSync(projectDir, { recursive: true })
+    const sessionFile = path.join(projectDir, `${sessionId}.jsonl`)
+    const lines = [
+      JSON.stringify({ type: 'assistant', message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'FAIL: missing error handling' }] } }),
+      JSON.stringify({ type: 'user', message: { content: 'Produce your verdict now.' } }),
+      JSON.stringify({ type: 'assistant', message: { stop_reason: 'tool_use', content: [{ type: 'tool_use', name: 'Bash', id: '2' }] } })
+    ]
+    fs.writeFileSync(sessionFile, lines.join('\n') + '\n')
+
+    // Last assistant is tool_use only, so it should find the previous one with text
+    const result = scrapeSessionVerdict(sessionId, tmpDir)
+    assert.strictEqual(result, 'FAIL: missing error handling')
+    cleanup()
   })
 })
