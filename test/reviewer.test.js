@@ -481,9 +481,22 @@ describe('resumeForVerdict', () => {
     assert.strictEqual(resumeForVerdict('sess-1', 'claude', '/tmp', 30000, {}, fakeRunner), 'PASS: raw output')
   })
 
-  it('returns null when resume produces no output', () => {
+  it('returns null when resume produces no output and no denials', () => {
     const fakeRunner = () => ({ code: 0, stdout: JSON.stringify({ result: '', subtype: 'success' }), stderr: '' })
     assert.strictEqual(resumeForVerdict('sess-1', 'claude', '/tmp', 30000, {}, fakeRunner), null)
+  })
+
+  it('extracts review text from permission denials when result is empty', () => {
+    const fakeRunner = () => ({
+      code: 0,
+      stdout: JSON.stringify({
+        result: '',
+        subtype: 'success',
+        permission_denials: [{ tool_name: 'Write', tool_input: 'FAIL: missing error handling in auth module' }]
+      }),
+      stderr: ''
+    })
+    assert.strictEqual(resumeForVerdict('sess-1', 'claude', '/tmp', 30000, {}, fakeRunner), 'FAIL: missing error handling in auth module')
   })
 
   it('includes --tools "" in resume command', () => {
@@ -494,6 +507,16 @@ describe('resumeForVerdict', () => {
     }
     resumeForVerdict('sess-1', 'claude', '/tmp', 30000, {}, fakeRunner)
     assert.ok(capturedCmd.includes('--tools'), `should include --tools: ${capturedCmd}`)
+  })
+
+  it('includes --setting-sources project in resume command', () => {
+    let capturedCmd = null
+    const fakeRunner = (cmd) => {
+      capturedCmd = cmd
+      return { code: 0, stdout: JSON.stringify({ result: 'PASS: ok', subtype: 'success' }), stderr: '' }
+    }
+    resumeForVerdict('sess-1', 'claude', '/tmp', 30000, {}, fakeRunner)
+    assert.ok(capturedCmd.includes('--setting-sources project'), `should include --setting-sources project: ${capturedCmd}`)
   })
 })
 
