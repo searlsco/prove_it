@@ -403,6 +403,20 @@ describe('extractReviewText', () => {
     assert.strictEqual(out.subtype, 'error_max_turns')
   })
 
+  it('includes numTurns in diag when present', () => {
+    const json = JSON.stringify({ result: '', session_id: 'sess-1', subtype: 'success', num_turns: 7 })
+    const result = { stdout: json, stderr: '' }
+    const out = extractReviewText(result, true)
+    assert.ok(out.diag.includes('turns=7'), `diag should include turns count: ${out.diag}`)
+  })
+
+  it('omits turns from diag when numTurns is null', () => {
+    const json = JSON.stringify({ result: 'PASS: ok', subtype: 'success' })
+    const result = { stdout: json, stderr: '' }
+    const out = extractReviewText(result, true)
+    assert.ok(!out.diag.includes('turns='), `diag should not include turns when null: ${out.diag}`)
+  })
+
   it('returns empty text and no sessionId for error_max_turns without session_id', () => {
     const maxTurnsJson = JSON.stringify({
       result: '',

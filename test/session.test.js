@@ -343,6 +343,40 @@ describe('session state functions', () => {
       assert.strictEqual(diffs[0].file, path.join(projectDir, 'hello.js'))
       assert.strictEqual(diffs[0].diff.includes('hello world'), true, 'Diff should show the new content')
     })
+
+    it('truncates output when maxChars is exceeded', () => {
+      const projectDir = path.join(tmpDir, 'project')
+      fs.mkdirSync(projectDir, { recursive: true })
+
+      // Create a large file change to exceed the budget
+      const bigContent = 'x'.repeat(500) + '\n'
+      fs.writeFileSync(path.join(projectDir, 'big.js'), bigContent)
+
+      const fileHistoryDir = path.join(tmpDir, '.claude', 'file-history', SESSION_ID)
+      fs.mkdirSync(fileHistoryDir, { recursive: true })
+      fs.writeFileSync(path.join(fileHistoryDir, 'big.js.bak'), 'small\n')
+
+      const encoded = projectDir.replace(/[^a-zA-Z0-9-]/g, '-')
+      const jsonlDir = path.join(tmpDir, '.claude', 'projects', encoded)
+      fs.mkdirSync(jsonlDir, { recursive: true })
+
+      const snapshot = {
+        messageId: 'msg-trunc',
+        trackedFileBackups: {
+          [path.join(projectDir, 'big.js')]: { version: 1, backupFileName: 'big.js.bak' }
+        }
+      }
+
+      fs.writeFileSync(
+        path.join(jsonlDir, `${SESSION_ID}.jsonl`),
+        JSON.stringify({ type: 'file-history-snapshot', snapshot }) + '\n'
+      )
+
+      // Budget larger than 100 (the min-remaining guard) but smaller than the diff
+      const diffs = generateDiffsSince(SESSION_ID, projectDir, null, 200)
+      assert.strictEqual(diffs.length, 1)
+      assert.ok(diffs[0].diff.includes('(truncated)'), 'Diff should be truncated when maxChars is small')
+    })
   })
 
   describe('generateUnifiedDiff', () => {
