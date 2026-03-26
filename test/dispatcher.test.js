@@ -667,7 +667,7 @@ describe('claude dispatcher', () => {
       const config = configDefaults()
       assert.strictEqual(config.enabled, false)
       assert.deepStrictEqual(config.hooks, [])
-      assert.strictEqual(config.maxAgentTurns, 10)
+      assert.strictEqual(config.maxAgentTurns, 20)
       assert.deepStrictEqual(config.format, { maxOutputChars: 12000 })
       assert.deepStrictEqual(config.taskEnv, { TURBOCOMMIT_DISABLED: '1' })
       assert.deepStrictEqual(config.fileEditingTools, [])

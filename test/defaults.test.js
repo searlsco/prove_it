@@ -11,7 +11,7 @@ describe('CONFIG_DEFAULTS', () => {
     assert.deepStrictEqual(CONFIG_DEFAULTS.testCommands, [])
     assert.strictEqual(CONFIG_DEFAULTS.model, 'sonnet')
     assert.deepStrictEqual(CONFIG_DEFAULTS.hooks, [])
-    assert.strictEqual(CONFIG_DEFAULTS.maxAgentTurns, 10)
+    assert.strictEqual(CONFIG_DEFAULTS.maxAgentTurns, 20)
     assert.deepStrictEqual(CONFIG_DEFAULTS.format, { maxOutputChars: 12000 })
     assert.deepStrictEqual(CONFIG_DEFAULTS.taskEnv, { TURBOCOMMIT_DISABLED: '1' })
     assert.deepStrictEqual(CONFIG_DEFAULTS.taskAllowedTools, DEFAULT_ALLOWED_TOOLS)
@@ -73,7 +73,7 @@ describe('configDefaults', () => {
     a.maxAgentTurns = 99
     a.format.maxOutputChars = 1
     const b = configDefaults()
-    assert.strictEqual(b.maxAgentTurns, 10)
+    assert.strictEqual(b.maxAgentTurns, 20)
     assert.strictEqual(b.format.maxOutputChars, 12000)
   })
 })

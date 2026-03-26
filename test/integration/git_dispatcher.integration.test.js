@@ -15,7 +15,7 @@ describe('git dispatcher', () => {
     assert.deepStrictEqual(cfg.hooks, [])
     assert.deepStrictEqual(cfg.sources, [])
     assert.deepStrictEqual(cfg.format, { maxOutputChars: 12000 })
-    assert.strictEqual(cfg.maxAgentTurns, 10)
+    assert.strictEqual(cfg.maxAgentTurns, 20)
   })
 
   describe('matchGitEntries', () => {
