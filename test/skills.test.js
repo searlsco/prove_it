@@ -143,6 +143,35 @@ describe('skills', () => {
       const expectedVars = extractTemplateVars(internal)
       assert.deepStrictEqual(vars, expectedVars)
     })
+
+    it('restores conditional markers around vars that had them in internal template', () => {
+      const internal = [
+        '{{changes_since_last_run}}',
+        '{{#session_diff}}',
+        'Diff:',
+        '{{session_diff}}',
+        '{{/session_diff}}',
+        '{{#signal_message}}',
+        'Signal: {{signal_message}}',
+        '{{/signal_message}}',
+        '{{git_status}}'
+      ].join('\n')
+
+      const standalone = generateStandaloneBody(internal)
+      // Standalone has no conditional markers
+      assert.ok(!standalone.includes('{{#'), 'standalone should not have opening markers')
+      assert.ok(!standalone.includes('{{/'), 'standalone should not have closing markers')
+
+      const restored = restoreTemplateVars(standalone, internal)
+      // Restored should have conditional markers back
+      assert.ok(restored.includes('{{#session_diff}}'), 'should restore session_diff opening marker')
+      assert.ok(restored.includes('{{/session_diff}}'), 'should restore session_diff closing marker')
+      assert.ok(restored.includes('{{#signal_message}}'), 'should restore signal_message opening marker')
+      assert.ok(restored.includes('{{/signal_message}}'), 'should restore signal_message closing marker')
+      // Non-conditional vars should NOT get markers
+      assert.ok(!restored.includes('{{#changes_since_last_run}}'))
+      assert.ok(!restored.includes('{{#git_status}}'))
+    })
   })
 
   describe('generateStandaloneSkill', () => {
