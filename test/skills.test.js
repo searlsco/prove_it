@@ -144,7 +144,7 @@ describe('skills', () => {
       assert.deepStrictEqual(vars, expectedVars)
     })
 
-    it('restores conditional markers around vars that had them in internal template', () => {
+    it('restores conditional markers with correct nesting for adjacent blocks', () => {
       const internal = [
         '{{changes_since_last_run}}',
         '{{#session_diff}}',
@@ -158,19 +158,34 @@ describe('skills', () => {
       ].join('\n')
 
       const standalone = generateStandaloneBody(internal)
-      // Standalone has no conditional markers
       assert.ok(!standalone.includes('{{#'), 'standalone should not have opening markers')
       assert.ok(!standalone.includes('{{/'), 'standalone should not have closing markers')
 
       const restored = restoreTemplateVars(standalone, internal)
-      // Restored should have conditional markers back
-      assert.ok(restored.includes('{{#session_diff}}'), 'should restore session_diff opening marker')
-      assert.ok(restored.includes('{{/session_diff}}'), 'should restore session_diff closing marker')
-      assert.ok(restored.includes('{{#signal_message}}'), 'should restore signal_message opening marker')
-      assert.ok(restored.includes('{{/signal_message}}'), 'should restore signal_message closing marker')
+
+      // Verify structural correctness: extract conditional blocks via regex
+      // (same approach expandTemplate uses) and verify each one
+      const blocks = []
+      restored.replace(/\{\{#(\w+)\}\}\n([\s\S]*?)\n\{\{\/(\w+)\}\}/g, (m, open, content, close) => {
+        blocks.push({ open, close, content })
+      })
+      assert.strictEqual(blocks.length, 2, 'should have exactly 2 conditional blocks')
+      // First block: session_diff
+      assert.strictEqual(blocks[0].open, 'session_diff')
+      assert.strictEqual(blocks[0].close, 'session_diff', 'opening and closing tags must match')
+      assert.ok(blocks[0].content.includes('{{session_diff}}'), 'block should contain its var')
+      // Second block: signal_message
+      assert.strictEqual(blocks[1].open, 'signal_message')
+      assert.strictEqual(blocks[1].close, 'signal_message', 'opening and closing tags must match')
+      assert.ok(blocks[1].content.includes('{{signal_message}}'), 'block should contain its var')
+
       // Non-conditional vars should NOT get markers
       assert.ok(!restored.includes('{{#changes_since_last_run}}'))
       assert.ok(!restored.includes('{{#git_status}}'))
+
+      // Verify no block contains another block's markers (no nesting corruption)
+      assert.ok(!blocks[0].content.includes('{{#signal_message}}'), 'session_diff block should not contain signal_message marker')
+      assert.ok(!blocks[1].content.includes('{{/session_diff}}'), 'signal_message block should not contain session_diff closing marker')
     })
   })
 
