@@ -268,6 +268,36 @@ describe('askConflict', () => {
       assert.ok(capture.lines.some(l => l.includes('Agent merge failed')))
     })
 
+    it('strips ```json fences from merged output', async () => {
+      const capture = captureLog()
+      const spawn = mockSpawnSync({
+        claude: { status: 0, stdout: '```json\n{"merged": true}\n```', stderr: '' },
+        diff: { status: 1, stdout: 'diff\n', stderr: '' }
+      })
+      const rl = mockRl(['a', 'y'])
+      const result = await askConflict(rl, {
+        ...baseOpts(),
+        _log: capture.log,
+        _spawnSync: spawn.fn
+      })
+      assert.strictEqual(result.content, '{"merged": true}')
+    })
+
+    it('strips plain ``` fences from merged output', async () => {
+      const capture = captureLog()
+      const spawn = mockSpawnSync({
+        claude: { status: 0, stdout: '```\n{"merged": true}\n```', stderr: '' },
+        diff: { status: 1, stdout: 'diff\n', stderr: '' }
+      })
+      const rl = mockRl(['a', 'y'])
+      const result = await askConflict(rl, {
+        ...baseOpts(),
+        _log: capture.log,
+        _spawnSync: spawn.fn
+      })
+      assert.strictEqual(result.content, '{"merged": true}')
+    })
+
     it('rejected merge still carries original proposed content', async () => {
       const capture = captureLog()
       const spawn = mockSpawnSync({
