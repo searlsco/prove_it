@@ -70,6 +70,32 @@ describe('Plan mode enforcement via PreToolUse', () => {
       assert.strictEqual(result.exitCode, 0)
       assert.strictEqual(result.output, null, 'Should produce no output when no signal-gated tasks')
     })
+
+    it('runs user-configured tasks matched on EnterPlanMode', () => {
+      writeConfig(tmpDir, makeConfig([
+        {
+          type: 'claude',
+          event: 'PreToolUse',
+          matcher: 'EnterPlanMode',
+          tasks: [
+            { name: 'plan-entry-hook', type: 'script', command: 'echo "plan mode activated"', quiet: true }
+          ]
+        }
+      ]))
+
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        session_id: 'test-enter-plan-user-task',
+        tool_name: 'EnterPlanMode',
+        tool_input: {}
+      }, { projectDir: tmpDir, env })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, 'Should produce output when user tasks match EnterPlanMode')
+      const context = result.output.hookSpecificOutput?.additionalContext || ''
+      assert.ok(context.includes('plan mode activated'),
+        `Should include user task output in additionalContext, got: ${JSON.stringify(result.output)}`)
+    })
   })
 
   describe('ExitPlanMode — plan file editing', () => {
