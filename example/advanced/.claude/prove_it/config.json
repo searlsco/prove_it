@@ -7,35 +7,25 @@
   "format": {
     "maxOutputChars": 16000
   },
-  "hooks": [
-    {
-      "type": "claude",
-      "event": "SessionStart",
-      "tasks": [
+  "hooks": {
+    "claude": {
+      "SessionStart": [
         {
           "name": "session-briefing",
           "type": "script",
           "command": "$(prove_it prefix)/libexec/briefing"
         }
-      ]
-    },
-    {
-      "type": "claude",
-      "event": "PreToolUse",
-      "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*",
-      "tasks": [
+      ],
+      "PreToolUse": [
         {
           "name": "lock-config",
           "type": "script",
           "command": "$(prove_it prefix)/libexec/guard-config",
+          "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*",
           "quiet": true
         }
-      ]
-    },
-    {
-      "type": "claude",
-      "event": "Stop",
-      "tasks": [
+      ],
+      "Stop": [
         {
           "name": "fast-tests",
           "type": "script",
@@ -53,10 +43,8 @@
         }
       ]
     },
-    {
-      "type": "git",
-      "event": "pre-commit",
-      "tasks": [
+    "git": {
+      "pre-commit": [
         {
           "name": "lint",
           "type": "script",
@@ -88,5 +76,5 @@
         }
       ]
     }
-  ]
+  }
 }

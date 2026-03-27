@@ -96,7 +96,7 @@ describe('init/deinit', () => {
     assert.ok(fs.existsSync(path.join(tmpDir, 'script', 'test_fast')))
     assert.ok(fs.statSync(path.join(tmpDir, 'script', 'test')).mode & fs.constants.S_IXUSR)
     const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.claude', 'prove_it', 'config.json'), 'utf8'))
-    assert.ok(Array.isArray(cfg.hooks))
+    assert.ok(typeof cfg.hooks === 'object' && !Array.isArray(cfg.hooks))
 
     // Re-init → up to date
     assert.match(runCli(['init'], { cwd: tmpDir }).stdout, /up to date/)
@@ -143,13 +143,13 @@ describe('init/deinit', () => {
 
     // --overwrite respects other flags (sources still preserved)
     const cfg5 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
-    cfg5.hooks = []
+    cfg5.hooks = {}
     cfg5.sources = ['src/**/*.js']
     fs.writeFileSync(cfgPath, JSON.stringify(cfg5, null, 2) + '\n')
     runCli(['init', '--overwrite', '--no-default-checks'], { cwd: tmpDir })
     const cfg6 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
-    const allTasks = cfg6.hooks.flatMap(h => h.tasks || [])
-    assert.ok(!allTasks.some(t => t.name === 'coverage-review'))
+    const tasks = Object.values(cfg6.hooks).flatMap(events => Object.values(events).flat())
+    assert.ok(!tasks.some(t => t.name === 'coverage-review'))
   })
 
   it('is non-destructive for legacy configs without hash', () => {

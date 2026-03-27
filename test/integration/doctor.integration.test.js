@@ -229,7 +229,7 @@ describe('doctor', () => {
     writeTeamConfig(tmpRepo, {
       enabled: true,
       sources: ['**/*.js'],
-      hooks: []
+      hooks: {}
     })
     spawnSync('git', ['add', '.claude/prove_it/config.json'], { cwd: tmpRepo, stdio: 'ignore' })
     spawnSync('git', ['commit', '-m', 'add config'], { cwd: tmpRepo, stdio: 'ignore' })
@@ -245,7 +245,7 @@ describe('doctor', () => {
     writeTeamConfig(tmpRepo, {
       enabled: true,
       sources: ['**/*.js'],
-      hooks: []
+      hooks: {}
     })
 
     result = run()
@@ -261,7 +261,7 @@ describe('doctor', () => {
     writeTeamConfig(tmpRepo, {
       enabled: true,
       sources: ['**/*.*', 'replace/these/with/globs/of/your/source/and/test/files.*'],
-      hooks: []
+      hooks: {}
     })
 
     let result = run()
@@ -272,7 +272,7 @@ describe('doctor', () => {
     writeTeamConfig(tmpRepo, {
       enabled: true,
       sources: ['src/**/*.js', 'test/**/*.js'],
-      hooks: []
+      hooks: {}
     })
 
     result = run()
@@ -288,9 +288,9 @@ describe('doctor', () => {
     writeTeamConfig(tmpRepo, {
       enabled: true,
       sources: ['**/*.js'],
-      hooks: [
-        { type: 'git', event: 'pre-commit', tasks: [{ name: 'tests', type: 'script', command: './test' }] }
-      ]
+      hooks: {
+        git: { 'pre-commit': [{ name: 'tests', type: 'script', command: './test' }] }
+      }
     })
     fs.writeFileSync(
       path.join(hooksDir, 'pre-commit'),
@@ -311,9 +311,9 @@ describe('doctor', () => {
     writeTeamConfig(tmpRepo, {
       enabled: true,
       sources: ['**/*.js'],
-      hooks: [
-        { type: 'git', event: 'pre-push', tasks: [{ name: 'tests', type: 'script', command: './test' }] }
-      ]
+      hooks: {
+        git: { 'pre-push': [{ name: 'tests', type: 'script', command: './test' }] }
+      }
     })
     fs.writeFileSync(
       path.join(hooksDir, 'pre-push'),
@@ -327,10 +327,12 @@ describe('doctor', () => {
     writeTeamConfig(tmpRepo, {
       enabled: true,
       sources: ['**/*.js'],
-      hooks: [
-        { type: 'git', event: 'pre-commit', tasks: [{ name: 'lint', type: 'script', command: './lint' }] },
-        { type: 'git', event: 'pre-push', tasks: [{ name: 'tests', type: 'script', command: './test' }] }
-      ]
+      hooks: {
+        git: {
+          'pre-commit': [{ name: 'lint', type: 'script', command: './lint' }],
+          'pre-push': [{ name: 'tests', type: 'script', command: './test' }]
+        }
+      }
     })
     fs.rmSync(path.join(hooksDir, 'pre-push'), { force: true })
     fs.writeFileSync(
@@ -352,9 +354,9 @@ describe('doctor', () => {
     writeTeamConfig(tmpRepo, {
       enabled: true,
       sources: ['**/*.js'],
-      hooks: [
-        { type: 'git', event: 'pre-commit', tasks: [{ name: 'tests', type: 'script', command: './test' }] }
-      ]
+      hooks: {
+        git: { 'pre-commit': [{ name: 'tests', type: 'script', command: './test' }] }
+      }
     })
     fs.writeFileSync(
       path.join(hooksDir, 'pre-commit'),
@@ -370,9 +372,9 @@ describe('doctor', () => {
     writeTeamConfig(tmpRepo, {
       enabled: true,
       sources: ['**/*.js'],
-      hooks: [
-        { type: 'claude', event: 'Stop', tasks: [{ name: 'tests', type: 'script', command: './test' }] }
-      ]
+      hooks: {
+        claude: { Stop: [{ name: 'tests', type: 'script', command: './test' }] }
+      }
     })
 
     result = run()
@@ -381,18 +383,15 @@ describe('doctor', () => {
 
   it('config validation warnings', () => {
     writeSettings(tmpHome, correctSettings())
-    // matcher on a Stop event triggers a warning
+    // matcher on a Stop task triggers a warning
     writeTeamConfig(tmpRepo, {
       enabled: true,
       sources: ['**/*.js'],
-      hooks: [
-        {
-          type: 'claude',
-          event: 'Stop',
-          matcher: 'Bash',
-          tasks: [{ name: 'tests', type: 'script', command: './test' }]
+      hooks: {
+        claude: {
+          Stop: [{ name: 'tests', type: 'script', command: './test', matcher: 'Bash' }]
         }
-      ]
+      }
     })
 
     const result = run()
@@ -406,7 +405,7 @@ describe('doctor', () => {
     writeTeamConfig(tmpRepo, {
       enabled: true,
       sources: ['src/**/*.js'],
-      hooks: []
+      hooks: {}
     })
     spawnSync('git', ['add', '.claude/prove_it/config.json'], { cwd: tmpRepo, stdio: 'ignore' })
     spawnSync('git', ['commit', '-m', 'add config'], { cwd: tmpRepo, stdio: 'ignore' })

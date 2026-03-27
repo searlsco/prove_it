@@ -79,7 +79,7 @@ describe('buildConfig includes approach-review', () => {
 
   it('adds approach-review task to Stop hook', () => {
     const cfg = buildConfig()
-    const stopHook = cfg.hooks.find(h => h.type === 'claude' && h.event === 'Stop')
+    const stopHook = { tasks: cfg.hooks.claude && cfg.hooks.claude.Stop }
     assert.ok(stopHook, 'should have a Stop hook')
 
     const approachTask = stopHook.tasks.find(t => t.name === 'approach-review')
@@ -93,14 +93,14 @@ describe('buildConfig includes approach-review', () => {
 
   it('gates approach-review on stuck signal', () => {
     const cfg = buildConfig()
-    const stopHook = cfg.hooks.find(h => h.type === 'claude' && h.event === 'Stop')
+    const stopHook = { tasks: cfg.hooks.claude && cfg.hooks.claude.Stop }
     const approachTask = stopHook.tasks.find(t => t.name === 'approach-review')
     assert.deepStrictEqual(approachTask.when, { signal: 'stuck' })
   })
 
   it('does not include approach-review when defaultChecks is false', () => {
     const cfg = buildConfig({ defaultChecks: false })
-    const stopHook = cfg.hooks.find(h => h.type === 'claude' && h.event === 'Stop')
+    const stopHook = { tasks: cfg.hooks.claude && cfg.hooks.claude.Stop }
     const approachTask = stopHook.tasks.find(t => t.name === 'approach-review')
     assert.strictEqual(approachTask, undefined, 'should not have approach-review without defaultChecks')
   })

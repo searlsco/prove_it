@@ -37,16 +37,14 @@ describe('async task lifecycle', () => {
     createFile(projectDir, 'script/fast-check', '#!/usr/bin/env bash\nexit 0\n')
     makeExecutable(syncScript)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
+    writeConfig(projectDir, makeConfig({
+      claude: {
+        Stop: [
           { name: 'fast-check', type: 'script', command: './script/fast-check' },
           { name: 'slow-check', type: 'script', async: true, command: './script/slow-check' }
         ]
       }
-    ]))
+    }))
 
     const sessionId = 'test-async-' + Date.now()
 
@@ -100,15 +98,7 @@ describe('async task lifecycle', () => {
     createFile(projectDir, 'script/failing-check', '#!/usr/bin/env bash\necho "FAIL: something bad" >&2\nexit 1\n')
     makeExecutable(asyncScript)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
-          { name: 'failing-check', type: 'script', async: true, command: './script/failing-check' }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { Stop: [{ name: 'failing-check', type: 'script', async: true, command: './script/failing-check' }] } }))
 
     const sessionId = 'test-async-fail-' + Date.now()
 
@@ -148,15 +138,7 @@ describe('async task lifecycle', () => {
     fs.mkdirSync(asyncDir, { recursive: true })
     fs.writeFileSync(path.join(asyncDir, 'stale.json'), '{}')
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'SessionStart',
-        tasks: [
-          { name: 'briefing', type: 'script', command: 'echo ok' }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { SessionStart: [{ name: 'briefing', type: 'script', command: 'echo ok' }] } }))
 
     invokeHook('claude:SessionStart', {
       hook_event_name: 'SessionStart',
@@ -175,16 +157,14 @@ describe('async task lifecycle', () => {
       makeExecutable(scriptPath)
     }
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
+    writeConfig(projectDir, makeConfig({
+      claude: {
+        Stop: [
           { name: 'check-a', type: 'script', async: true, command: './script/check-a' },
           { name: 'check-b', type: 'script', async: true, command: './script/check-b' }
         ]
       }
-    ]))
+    }))
 
     const sessionId = 'test-async-multi-fail-' + Date.now()
     const asyncDir = path.join(env.PROVE_IT_DIR, 'sessions', sessionId, 'async')
@@ -232,15 +212,7 @@ describe('async task lifecycle', () => {
   })
 
   it('async: true on SessionStart tasks is ignored (runs synchronously)', () => {
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'SessionStart',
-        tasks: [
-          { name: 'sync-briefing', type: 'script', command: 'echo hello', async: true }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { SessionStart: [{ name: 'sync-briefing', type: 'script', command: 'echo hello', async: true }] } }))
 
     const sessionId = 'test-async-ss-' + Date.now()
     const r = invokeHook('claude:SessionStart', {

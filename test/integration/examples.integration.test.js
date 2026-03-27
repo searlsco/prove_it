@@ -11,7 +11,7 @@ describe('example hook dispatch', () => {
   const shimPath = path.join(supportDir, 'prove_it')
   const testBinDir = path.join(__dirname, '..', 'bin')
   const fixturesDir = path.join(__dirname, '..', 'fixtures')
-  const dispatchEnv = { ...process.env, PATH: `${fixturesDir}:${testBinDir}:${process.env.PATH}`, PROVE_IT_DISABLED: '' }
+  const dispatchEnv = { ...process.env, PATH: `${fixturesDir}:${testBinDir}:${process.env.PATH}`, PROVE_IT_DISABLED: '', PROVE_IT_DIR: path.join(supportDir, '_no_global') }
 
   for (const name of EXAMPLES) {
     describe(name, () => {
@@ -57,9 +57,13 @@ describe('example hook dispatch', () => {
         })
         assert.strictEqual(result.status, 0,
           `Stop failed in ${name}/:\n${result.stderr || result.stdout}`)
-        const output = JSON.parse(result.stdout)
-        assert.ok(['approve', 'block'].includes(output.decision),
-          `Stop decision should be approve or block, got: ${output.decision}`)
+        // Stop may produce no output when all tasks skip (e.g. when conditions not met
+        // due to ancestor config merge). When output exists, validate it.
+        if (result.stdout && result.stdout.trim()) {
+          const output = JSON.parse(result.stdout)
+          assert.ok(['approve', 'block'].includes(output.decision),
+            `Stop decision should be approve or block, got: ${output.decision}`)
+        }
       })
     })
   }

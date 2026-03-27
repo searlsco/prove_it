@@ -1,19 +1,9 @@
 const { describe, it } = require('node:test')
 const assert = require('node:assert')
-const { matchesHookEntry } = require('../lib/dispatcher/claude')
-
-function makeTriggerEntry (triggers) {
-  return {
-    type: 'claude',
-    event: 'PreToolUse',
-    matcher: 'Bash',
-    triggers,
-    tasks: []
-  }
-}
+const { taskMatchesInput } = require('../lib/dispatcher/claude')
 
 function matchesTriggers (command, triggers) {
-  return matchesHookEntry(makeTriggerEntry(triggers), 'PreToolUse', {
+  return taskMatchesInput({ matcher: 'Bash', triggers }, 'PreToolUse', {
     tool_name: 'Bash',
     tool_input: { command }
   })

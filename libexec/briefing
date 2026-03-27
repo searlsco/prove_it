@@ -12,7 +12,7 @@ function runBriefing (projectDir) {
   const { loadRunData } = require('../lib/testing')
   const { renderBriefing } = require('../lib/briefing')
 
-  const defaultFn = () => ({ enabled: false, sources: null, hooks: [] })
+  const defaultFn = () => ({ enabled: false, sources: null, hooks: {} })
   const { cfg } = loadEffectiveConfig(projectDir, defaultFn)
   const localCfgPath = path.join(projectDir, '.claude', 'prove_it', 'config.local.json')
   const runs = loadRunData(localCfgPath)

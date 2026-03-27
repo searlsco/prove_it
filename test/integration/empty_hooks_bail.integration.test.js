@@ -37,7 +37,7 @@ describe('Early bail for empty hooks', () => {
   })
 
   it('exits silently with enabled: true and hooks: []', async () => {
-    writeConfig(tmpDir, makeConfig([]))
+    writeConfig(tmpDir, makeConfig({}))
 
     const result = await invokeDispatcher('claude:Stop', {
       hook_event_name: 'Stop',
@@ -51,10 +51,7 @@ describe('Early bail for empty hooks', () => {
   })
 
   it('exits silently when all hook entries have empty tasks arrays', async () => {
-    writeConfig(tmpDir, makeConfig([
-      { type: 'claude', event: 'Stop', tasks: [] },
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] }
-    ]))
+    writeConfig(tmpDir, makeConfig({ claude: { Stop: [], PreToolUse: [] } }))
 
     const result = await invokeDispatcher('claude:Stop', {
       hook_event_name: 'Stop',
@@ -68,9 +65,7 @@ describe('Early bail for empty hooks', () => {
   })
 
   it('does not intercept prove_it signal done when no tasks exist', async () => {
-    writeConfig(tmpDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] }
-    ]))
+    writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [] } }))
 
     const result = await invokeDispatcher('claude:PreToolUse', {
       hook_event_name: 'PreToolUse',
@@ -87,9 +82,7 @@ describe('Early bail for empty hooks', () => {
   })
 
   it('does not track file edits when no tasks exist', async () => {
-    writeConfig(tmpDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Edit|Write', tasks: [] }
-    ]))
+    writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [] } }))
 
     const env = isolatedEnv(tmpDir)
     const result = await invokeDispatcher('claude:PreToolUse', {

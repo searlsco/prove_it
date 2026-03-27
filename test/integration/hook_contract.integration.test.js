@@ -38,16 +38,7 @@ describe('Claude Code hook output contract', () => {
 
   describe('PreToolUse config:lock decisions', () => {
     beforeEach(() => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*',
-          tasks: [
-            { name: 'lock-config', type: 'script', command: '$(prove_it prefix)/libexec/guard-config' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [{ name: 'lock-config', matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*', type: 'script', command: '$(prove_it prefix)/libexec/guard-config' }] } }))
     })
 
     it('uses valid permissionDecision when denying config Edit', () => {
@@ -98,17 +89,7 @@ describe('Claude Code hook output contract', () => {
   describe('PreToolUse test-gate decisions', () => {
     it('uses valid permissionDecision when wrapping git commit', () => {
       createTestScript(tmpDir, true)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Bash',
-          triggers: ['(^|\\s)git\\s+commit\\b'],
-          tasks: [
-            { name: 'full-tests', type: 'script', command: './script/test' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [{ name: 'full-tests', triggers: ['(^|\\s)git\\s+commit\\b'], matcher: 'Bash', type: 'script', command: './script/test' }] } }))
 
       const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
@@ -121,17 +102,7 @@ describe('Claude Code hook output contract', () => {
     })
 
     it('uses deny when test script is missing', () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Bash',
-          triggers: ['(^|\\s)git\\s+commit\\b'],
-          tasks: [
-            { name: 'full-tests', type: 'script', command: './script/test' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [{ name: 'full-tests', triggers: ['(^|\\s)git\\s+commit\\b'], matcher: 'Bash', type: 'script', command: './script/test' }] } }))
 
       const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
@@ -152,15 +123,7 @@ describe('Claude Code hook output contract', () => {
   describe('Stop decisions', () => {
     it('uses block when tests fail', () => {
       createFastTestScript(tmpDir, false)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
       const result = invokeHook('claude:Stop', {
         hook_event_name: 'Stop',
@@ -175,15 +138,7 @@ describe('Claude Code hook output contract', () => {
 
     it('uses approve when tests pass', () => {
       createFastTestScript(tmpDir, true)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
       const result = invokeHook('claude:Stop', {
         hook_event_name: 'Stop',

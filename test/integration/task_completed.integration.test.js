@@ -35,15 +35,7 @@ describe('TaskCompleted auto-signaling', () => {
   })
 
   it('sets signal when task_subject matches signal pattern', () => {
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
-          { name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { Stop: [{ name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }] } }))
 
     const result = invokeHook('claude:TaskCompleted', {
       hook_event_name: 'TaskCompleted',
@@ -59,15 +51,7 @@ describe('TaskCompleted auto-signaling', () => {
   })
 
   it('does not set signal when subject does not match', () => {
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
-          { name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { Stop: [{ name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }] } }))
 
     const result = invokeHook('claude:TaskCompleted', {
       hook_event_name: 'TaskCompleted',
@@ -83,15 +67,7 @@ describe('TaskCompleted auto-signaling', () => {
   it('no-op when signal already set', () => {
     setSignal('tc-already', 'done', null)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
-          { name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { Stop: [{ name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }] } }))
 
     const result = invokeHook('claude:TaskCompleted', {
       hook_event_name: 'TaskCompleted',
@@ -108,15 +84,7 @@ describe('TaskCompleted auto-signaling', () => {
   })
 
   it('does nothing when no signal-gated tasks in config', () => {
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
-          { name: 'ungated-task', type: 'script', command: 'echo ok' }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { Stop: [{ name: 'ungated-task', type: 'script', command: 'echo ok' }] } }))
 
     const result = invokeHook('claude:TaskCompleted', {
       hook_event_name: 'TaskCompleted',
@@ -132,15 +100,7 @@ describe('TaskCompleted auto-signaling', () => {
   it('end-to-end: ExitPlanMode edits plan, TaskCompleted sets signal, Stop fires gated task', () => {
     // 1. Set up config with a signal-gated Stop task
     createFastTestScript(projectDir, true)
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
-          { name: 'signal-gated', type: 'script', command: 'echo signal-task-ran', when: { signal: 'done' } }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { Stop: [{ name: 'signal-gated', type: 'script', command: 'echo signal-task-ran', when: { signal: 'done' } }] } }))
 
     // 2. Create a plan file with numbered headings
     const plansDir = path.join(tmpDir, '.claude', 'plans')

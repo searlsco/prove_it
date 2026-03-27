@@ -36,15 +36,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
   describe('Stop hook', () => {
     it('blocks when fast tests fail', async () => {
       createFastTestScript(tmpDir, false)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
       const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
@@ -66,15 +58,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
     it('approves when fast tests pass', async () => {
       createFastTestScript(tmpDir, true)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
       const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
@@ -94,17 +78,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
   describe('Pre-commit hook (PreToolUse)', () => {
     it('blocks commit when tests fail', async () => {
       createTestScript(tmpDir, false)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Bash',
-          triggers: ['(^|\\s)git\\s+commit\\b'],
-          tasks: [
-            { name: 'full-tests', type: 'script', command: './script/test' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [{ name: 'full-tests', triggers: ['(^|\\s)git\\s+commit\\b'], matcher: 'Bash', type: 'script', command: './script/test' }] } }))
 
       const result = await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
@@ -130,17 +104,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
     it('allows commit when tests pass', async () => {
       createTestScript(tmpDir, true)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Bash',
-          triggers: ['(^|\\s)git\\s+commit\\b'],
-          tasks: [
-            { name: 'full-tests', type: 'script', command: './script/test' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [{ name: 'full-tests', triggers: ['(^|\\s)git\\s+commit\\b'], matcher: 'Bash', type: 'script', command: './script/test' }] } }))
 
       const result = await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
@@ -161,17 +125,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
     })
 
     it('ignores non-matching Bash commands', async () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Bash',
-          triggers: ['(^|\\s)git\\s+commit\\b'],
-          tasks: [
-            { name: 'full-tests', type: 'script', command: './script/test' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [{ name: 'full-tests', triggers: ['(^|\\s)git\\s+commit\\b'], matcher: 'Bash', type: 'script', command: './script/test' }] } }))
 
       const result = await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
@@ -193,15 +147,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
       const path = require('path')
       fs.chmodSync(path.join(tmpDir, 'hello_check.sh'), 0o755)
 
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
-            { name: 'hello-check', type: 'script', command: './hello_check.sh' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { SessionStart: [{ name: 'hello-check', type: 'script', command: './hello_check.sh' }] } }))
 
       const result = await invokeDispatcher('claude:SessionStart', {
         hook_event_name: 'SessionStart',
@@ -224,16 +170,14 @@ describe('v2 dispatcher: core hook behaviors', () => {
       fs.chmodSync(path.join(tmpDir, 'fail_check.sh'), 0o755)
       fs.chmodSync(path.join(tmpDir, 'pass_check.sh'), 0o755)
 
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
+      writeConfig(tmpDir, makeConfig({
+        claude: {
+          SessionStart: [
             { name: 'fail-check', type: 'script', command: './fail_check.sh' },
             { name: 'pass-check', type: 'script', command: './pass_check.sh' }
           ]
         }
-      ]))
+      }))
 
       const result = await invokeDispatcher('claude:SessionStart', {
         hook_event_name: 'SessionStart',
@@ -260,15 +204,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
   describe('git hook CLAUDECODE guard', () => {
     it('exits 0 immediately when CLAUDECODE is absent', () => {
       createTestScript(tmpDir, false) // would fail if checks ran
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'git',
-          event: 'pre-commit',
-          tasks: [
-            { name: 'full-tests', type: 'script', command: './script/test' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ git: { 'pre-commit': [{ name: 'full-tests', type: 'script', command: './script/test' }] } }))
 
       const result = invokeHook('git:pre-commit', {}, {
         projectDir: tmpDir,
@@ -283,15 +219,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
     it('runs checks when CLAUDECODE is set', () => {
       createTestScript(tmpDir, false)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'git',
-          event: 'pre-commit',
-          tasks: [
-            { name: 'full-tests', type: 'script', command: './script/test' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ git: { 'pre-commit': [{ name: 'full-tests', type: 'script', command: './script/test' }] } }))
 
       const result = invokeHook('git:pre-commit', {}, {
         projectDir: tmpDir,
@@ -308,15 +236,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
     it('exits 0 when CLAUDECODE is set and checks pass', () => {
       createTestScript(tmpDir, true)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'git',
-          event: 'pre-commit',
-          tasks: [
-            { name: 'full-tests', type: 'script', command: './script/test' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ git: { 'pre-commit': [{ name: 'full-tests', type: 'script', command: './script/test' }] } }))
 
       const result = invokeHook('git:pre-commit', {}, {
         projectDir: tmpDir,
@@ -347,15 +267,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
       ].join('\n'))
       fs.chmodSync(path.join(tmpDir, 'script', 'test'), 0o755)
 
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'git',
-          event: 'pre-commit',
-          tasks: [
-            { name: 'full-tests', type: 'script', command: './script/test' }
-          ]
-        }
-      ], { taskEnv: { TURBOCOMMIT_DISABLED: '1' } }))
+      writeConfig(tmpDir, makeConfig({ git: { 'pre-commit': [{ name: 'full-tests', type: 'script', command: './script/test' }] } }, { taskEnv: { TURBOCOMMIT_DISABLED: '1' } }))
 
       const result = invokeHook('git:pre-commit', {}, {
         projectDir: tmpDir,
@@ -373,7 +285,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
   describe('disabled hooks', () => {
     it('exits silently when enabled: false', async () => {
-      writeConfig(tmpDir, makeConfig([], { enabled: false }))
+      writeConfig(tmpDir, makeConfig({}, { enabled: false }))
 
       const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
@@ -386,15 +298,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
     })
 
     it('exits silently when PROVE_IT_DISABLED is set', async () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
       const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
@@ -417,15 +321,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
     it('logs durationMs for passing claude Stop task', async () => {
       createFastTestScript(tmpDir, true)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
       const sessionId = 'test-duration-pass'
       await invokeDispatcher('claude:Stop', {
@@ -445,15 +341,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
     it('logs durationMs for failing claude Stop task', async () => {
       createFastTestScript(tmpDir, false)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
       const sessionId = 'test-duration-fail'
       await invokeDispatcher('claude:Stop', {
@@ -473,15 +361,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
     it('logs durationMs for git hook tasks', () => {
       createTestScript(tmpDir, true)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'git',
-          event: 'pre-commit',
-          tasks: [
-            { name: 'full-tests', type: 'script', command: './script/test' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ git: { 'pre-commit': [{ name: 'full-tests', type: 'script', command: './script/test' }] } }))
 
       // Git hooks use project-level logs (no session_id), so read from PROVE_IT_DIR
       const proveItDir = path.join(tmpDir, '.prove_it_test')
@@ -508,15 +388,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
     })
 
     it('does not log durationMs for skipped tasks', async () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'disabled-task', type: 'script', command: 'true', enabled: false }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'disabled-task', type: 'script', command: 'true', enabled: false }] } }))
 
       const sessionId = 'test-duration-skip'
       await invokeDispatcher('claude:Stop', {
@@ -535,16 +407,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
   describe('quiet task output suppression', () => {
     it('quiet task pass reason is excluded from PreToolUse output', async () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Edit|Write',
-          tasks: [
-            { name: 'lock-config', type: 'script', command: '$(prove_it prefix)/libexec/guard-config', quiet: true }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [{ name: 'lock-config', matcher: 'Edit|Write', type: 'script', command: '$(prove_it prefix)/libexec/guard-config', quiet: true }] } }))
 
       const result = await invokeDispatcher('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
@@ -573,15 +436,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
     it('quiet task pass reason is excluded from Stop output', async () => {
       createFastTestScript(tmpDir, true)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'quiet-check', type: 'script', command: './script/test_fast', quiet: true }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'quiet-check', type: 'script', command: './script/test_fast', quiet: true }] } }))
 
       const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
@@ -605,16 +460,14 @@ describe('v2 dispatcher: core hook behaviors', () => {
     it('non-quiet task output appears alongside quiet task', async () => {
       createFastTestScript(tmpDir, true)
       createTestScript(tmpDir, true)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
+      writeConfig(tmpDir, makeConfig({
+        claude: {
+          Stop: [
             { name: 'quiet-check', type: 'script', command: './script/test_fast', quiet: true },
             { name: 'loud-check', type: 'script', command: './script/test' }
           ]
         }
-      ]))
+      }))
 
       const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',
@@ -646,23 +499,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
     it('quiet task suppresses session log for PASS but not for FAIL', async () => {
       createFastTestScript(tmpDir, false)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Edit|Write',
-          tasks: [
-            { name: 'lock-config', type: 'script', command: '$(prove_it prefix)/libexec/guard-config', quiet: true }
-          ]
-        },
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'failing-quiet', type: 'script', command: './script/test_fast', quiet: true }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [{ name: 'lock-config', matcher: 'Edit|Write', type: 'script', command: '$(prove_it prefix)/libexec/guard-config', quiet: true }], Stop: [{ name: 'failing-quiet', type: 'script', command: './script/test_fast', quiet: true }] } }))
 
       // First: PreToolUse pass—quiet task should not log
       const sid = 'test-quiet-log'
@@ -701,13 +538,13 @@ describe('v2 dispatcher: core hook behaviors', () => {
       fs.mkdirSync(env.PROVE_IT_DIR, { recursive: true })
       fs.writeFileSync(path.join(env.PROVE_IT_DIR, 'config.json'), JSON.stringify({
         enabled: true,
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'crash-task', type: 'script', command: null }
-          ]
-        }]
+        hooks: {
+          claude: {
+            Stop: [
+              { name: 'crash-task', type: 'script', command: null }
+            ]
+          }
+        }
       }, null, 2))
 
       const result = await invokeDispatcher('claude:Stop', {
@@ -735,15 +572,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
     it('runs hooks in non-git directory when config exists', async () => {
       const nonGitDir = createTempDir('prove_it_nongit_')
       createFastTestScript(nonGitDir, true)
-      writeConfig(nonGitDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'fast-tests', type: 'script', command: './script/test_fast' }
-          ]
-        }
-      ]))
+      writeConfig(nonGitDir, makeConfig({ claude: { Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
       const result = await invokeDispatcher('claude:Stop', {
         hook_event_name: 'Stop',

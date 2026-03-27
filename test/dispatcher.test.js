@@ -3,91 +3,86 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
-const { matchesHookEntry, evaluateWhen, settleTaskResult, spawnAsyncTask, harvestAsyncResults, cleanAsyncDir, hasSignalGatedTasks, forkParallelTask, killParallelBatch, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
+const { taskMatchesInput, evaluateWhen, settleTaskResult, spawnAsyncTask, harvestAsyncResults, cleanAsyncDir, hasSignalGatedTasks, forkParallelTask, killParallelBatch, BUILTIN_EDIT_TOOLS } = require('../lib/dispatcher/claude')
 const { configDefaults } = require('../lib/defaults')
 const { whenHasKey } = require('../lib/git')
 const { recordFileEdit, resetTurnTracking, getAsyncDir } = require('../lib/session')
 
 describe('claude dispatcher', () => {
-  describe('matchesHookEntry', () => {
-    ;[
-      ['matches type and event', { type: 'claude', event: 'Stop', tasks: [] }, 'Stop', {}, true],
-      ['rejects wrong type', { type: 'git', event: 'Stop', tasks: [] }, 'Stop', {}, false],
-      ['rejects wrong event', { type: 'claude', event: 'PreToolUse', tasks: [] }, 'Stop', {}, false]
-    ].forEach(([label, entry, event, hookInput, expected]) => {
-      it(label, () => {
-        assert.strictEqual(matchesHookEntry(entry, event, hookInput), expected)
-      })
+  describe('taskMatchesInput', () => {
+    it('matches task with no filters', () => {
+      const task = { name: 'plain', type: 'script', command: 'echo ok' }
+      assert.strictEqual(taskMatchesInput(task, 'Stop', {}), true)
     })
 
-    it('matches tool name via matcher', () => {
-      const entry = { type: 'claude', event: 'PreToolUse', matcher: 'Edit|Write', tasks: [] }
-      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Edit' }), true)
+    it('matches tool name via matcher on task', () => {
+      const task = { name: 'guard', type: 'script', matcher: 'Edit|Write', command: 'echo ok' }
+      assert.strictEqual(taskMatchesInput(task, 'PreToolUse', { tool_name: 'Edit' }), true)
     })
 
     it('rejects non-matching tool name', () => {
-      const entry = { type: 'claude', event: 'PreToolUse', matcher: 'Edit|Write', tasks: [] }
-      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Read' }), false)
+      const task = { name: 'guard', type: 'script', matcher: 'Edit|Write', command: 'echo ok' }
+      assert.strictEqual(taskMatchesInput(task, 'PreToolUse', { tool_name: 'Read' }), false)
     })
 
     it('matches when no matcher specified', () => {
-      const entry = { type: 'claude', event: 'PreToolUse', tasks: [] }
-      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Read' }), true)
+      const task = { name: 'plain', type: 'script', command: 'echo ok' }
+      assert.strictEqual(taskMatchesInput(task, 'PreToolUse', { tool_name: 'Read' }), true)
     })
 
     it('matches triggers for Bash commands', () => {
-      const entry = {
-        type: 'claude',
-        event: 'PreToolUse',
+      const task = {
+        name: 'commit-guard',
+        type: 'script',
         matcher: 'Bash',
         triggers: ['(^|\\s)git\\s+commit\\b'],
-        tasks: []
+        command: 'echo ok'
       }
-      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', {
+      assert.strictEqual(taskMatchesInput(task, 'PreToolUse', {
         tool_name: 'Bash',
         tool_input: { command: 'git commit -m "test"' }
       }), true)
     })
 
     it('rejects non-matching triggers', () => {
-      const entry = {
-        type: 'claude',
-        event: 'PreToolUse',
+      const task = {
+        name: 'commit-guard',
+        type: 'script',
         matcher: 'Bash',
         triggers: ['(^|\\s)git\\s+commit\\b'],
-        tasks: []
+        command: 'echo ok'
       }
-      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', {
+      assert.strictEqual(taskMatchesInput(task, 'PreToolUse', {
         tool_name: 'Bash',
         tool_input: { command: 'git status' }
       }), false)
     })
 
     it('matches MCP tools via regex pattern in matcher', () => {
-      const entry = { type: 'claude', event: 'PreToolUse', matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*', tasks: [] }
-      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'mcp__xcode__editFile' }), true)
-      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'mcp__memory__create_entities' }), true)
+      const task = { name: 'guard', type: 'script', matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*', command: 'echo ok' }
+      assert.strictEqual(taskMatchesInput(task, 'PreToolUse', { tool_name: 'mcp__xcode__editFile' }), true)
+      assert.strictEqual(taskMatchesInput(task, 'PreToolUse', { tool_name: 'mcp__memory__create_entities' }), true)
     })
 
     it('regex matcher does not partial-match', () => {
-      const entry = { type: 'claude', event: 'PreToolUse', matcher: 'Edit|Write', tasks: [] }
+      const task = { name: 'guard', type: 'script', matcher: 'Edit|Write', command: 'echo ok' }
       // 'Edit' as regex should NOT match 'MultiEdit' (anchored)
-      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'MultiEdit' }), false)
+      assert.strictEqual(taskMatchesInput(task, 'PreToolUse', { tool_name: 'MultiEdit' }), false)
     })
 
     it('matches SessionStart source', () => {
-      const entry = { type: 'claude', event: 'SessionStart', source: 'startup|resume', tasks: [] }
-      assert.strictEqual(matchesHookEntry(entry, 'SessionStart', { source: 'startup' }), true)
+      const task = { name: 'briefing', type: 'script', source: 'startup|resume', command: 'echo ok' }
+      assert.strictEqual(taskMatchesInput(task, 'SessionStart', { source: 'startup' }), true)
     })
 
     it('rejects non-matching SessionStart source', () => {
-      const entry = { type: 'claude', event: 'SessionStart', source: 'startup|resume', tasks: [] }
-      assert.strictEqual(matchesHookEntry(entry, 'SessionStart', { source: 'clear' }), false)
+      const task = { name: 'briefing', type: 'script', source: 'startup|resume', command: 'echo ok' }
+      assert.strictEqual(taskMatchesInput(task, 'SessionStart', { source: 'clear' }), false)
     })
 
     it('matches SessionStart with no source filter', () => {
-      const entry = { type: 'claude', event: 'SessionStart', tasks: [] }
-      assert.strictEqual(matchesHookEntry(entry, 'SessionStart', { source: 'anything' }), true)
+      const task = { name: 'briefing', type: 'script', command: 'echo ok' }
+      assert.strictEqual(taskMatchesInput(task, 'SessionStart', { source: 'anything' }), true)
     })
   })
 
@@ -666,7 +661,7 @@ describe('claude dispatcher', () => {
     it('returns fully-qualified config with all defaults populated', () => {
       const config = configDefaults()
       assert.strictEqual(config.enabled, false)
-      assert.deepStrictEqual(config.hooks, [])
+      assert.deepStrictEqual(config.hooks, {})
       assert.strictEqual(config.maxAgentTurns, 20)
       assert.deepStrictEqual(config.format, { maxOutputChars: 12000 })
       assert.deepStrictEqual(config.taskEnv, { TURBOCOMMIT_DISABLED: '1' })
@@ -992,97 +987,103 @@ describe('claude dispatcher', () => {
   })
 
   describe('hasSignalGatedTasks', () => {
-    it('returns false for empty hooks array', () => {
-      assert.strictEqual(hasSignalGatedTasks([]), false)
+    it('returns false for empty hooks object', () => {
+      assert.strictEqual(hasSignalGatedTasks({}), false)
     })
 
-    it('returns false when hooks have no tasks key', () => {
-      assert.strictEqual(hasSignalGatedTasks([{ type: 'claude', event: 'Stop' }]), false)
+    it('returns false when claude events have no tasks', () => {
+      assert.strictEqual(hasSignalGatedTasks({ claude: { Stop: [] } }), false)
     })
 
     it('returns false when tasks have no when clause', () => {
-      const hooks = [{ tasks: [{ name: 'plain', type: 'script', command: 'echo ok' }] }]
+      const hooks = { claude: { Stop: [{ name: 'plain', type: 'script', command: 'echo ok' }] } }
       assert.strictEqual(hasSignalGatedTasks(hooks), false)
     })
 
     it('returns true for object when with signal: done', () => {
-      const hooks = [{
-        tasks: [{ name: 'gated', type: 'script', command: 'echo ok', when: { signal: 'done' } }]
-      }]
+      const hooks = {
+        claude: { Stop: [{ name: 'gated', type: 'script', command: 'echo ok', when: { signal: 'done' } }] }
+      }
       assert.strictEqual(hasSignalGatedTasks(hooks), true)
     })
 
     it('returns true for array when containing signal: done clause', () => {
-      const hooks = [{
-        tasks: [{
-          name: 'gated',
-          type: 'script',
-          command: 'echo ok',
-          when: [{ linesChanged: 500 }, { signal: 'done' }]
-        }]
-      }]
+      const hooks = {
+        claude: {
+          Stop: [{
+            name: 'gated',
+            type: 'script',
+            command: 'echo ok',
+            when: [{ linesChanged: 500 }, { signal: 'done' }]
+          }]
+        }
+      }
       assert.strictEqual(hasSignalGatedTasks(hooks), true)
     })
 
     it('returns false for array when with no signal: done clause', () => {
-      const hooks = [{
-        tasks: [{
-          name: 'not-gated',
-          type: 'script',
-          command: 'echo ok',
-          when: [{ linesChanged: 500 }, { envSet: 'CI' }]
-        }]
-      }]
+      const hooks = {
+        claude: {
+          Stop: [{
+            name: 'not-gated',
+            type: 'script',
+            command: 'echo ok',
+            when: [{ linesChanged: 500 }, { envSet: 'CI' }]
+          }]
+        }
+      }
       assert.strictEqual(hasSignalGatedTasks(hooks), false)
     })
 
     it('returns false when signal is not done', () => {
-      const hooks = [{
-        tasks: [{ name: 'other', type: 'script', command: 'echo ok', when: { signal: 'other' } }]
-      }]
+      const hooks = {
+        claude: { Stop: [{ name: 'other', type: 'script', command: 'echo ok', when: { signal: 'other' } }] }
+      }
       assert.strictEqual(hasSignalGatedTasks(hooks), false)
     })
 
-    it('finds signal-gated task across multiple hooks', () => {
-      const hooks = [
-        { tasks: [{ name: 'plain', type: 'script', command: 'echo 1' }] },
-        { tasks: [{ name: 'gated', type: 'script', command: 'echo 2', when: { signal: 'done' } }] }
-      ]
+    it('finds signal-gated task across multiple events', () => {
+      const hooks = {
+        claude: {
+          PreToolUse: [{ name: 'plain', type: 'script', command: 'echo 1' }],
+          Stop: [{ name: 'gated', type: 'script', command: 'echo 2', when: { signal: 'done' } }]
+        }
+      }
       assert.strictEqual(hasSignalGatedTasks(hooks), true)
     })
   })
 
   describe('plan mode matcher coverage', () => {
     it('PreToolUse matcher matches EnterPlanMode', () => {
-      const entry = {
-        type: 'claude',
-        event: 'PreToolUse',
+      const task = {
+        name: 'guard',
+        type: 'script',
         matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*|EnterPlanMode|ExitPlanMode',
-        tasks: []
+        command: 'echo ok'
       }
-      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'EnterPlanMode' }), true)
+      assert.strictEqual(taskMatchesInput(task, 'PreToolUse', { tool_name: 'EnterPlanMode' }), true)
     })
 
     it('PreToolUse matcher matches ExitPlanMode', () => {
-      const entry = {
-        type: 'claude',
-        event: 'PreToolUse',
+      const task = {
+        name: 'guard',
+        type: 'script',
         matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*|EnterPlanMode|ExitPlanMode',
-        tasks: []
+        command: 'echo ok'
       }
-      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'ExitPlanMode' }), true)
+      assert.strictEqual(taskMatchesInput(task, 'PreToolUse', { tool_name: 'ExitPlanMode' }), true)
     })
 
     it('PreToolUse matcher still matches existing tools', () => {
-      const entry = {
-        type: 'claude',
-        event: 'PreToolUse',
+      const task = {
+        name: 'guard',
+        type: 'script',
         matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*|EnterPlanMode|ExitPlanMode',
-        tasks: []
+        command: 'echo ok'
       }
-      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Edit' }), true)
-      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'Bash' }), true)
-      assert.strictEqual(matchesHookEntry(entry, 'PreToolUse', { tool_name: 'mcp__xcode__build' }), true)
+      assert.strictEqual(taskMatchesInput(task, 'PreToolUse', { tool_name: 'Edit' }), true)
+      assert.strictEqual(taskMatchesInput(task, 'PreToolUse', { tool_name: 'Bash' }), true)
+      assert.strictEqual(taskMatchesInput(task, 'PreToolUse', { tool_name: 'mcp__xcode__build' }), true)
     })
 
     it('SIGNAL_PLAN_MARKER is the exact command string', () => {

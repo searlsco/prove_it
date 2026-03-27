@@ -36,15 +36,7 @@ describe('SessionStart task types', () => {
       createFile(tmpDir, 'hello.sh', '#!/usr/bin/env bash\necho "hello from session"\nexit 0\n')
       makeExecutable(path.join(tmpDir, 'hello.sh'))
 
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
-            { name: 'hello', type: 'script', command: './hello.sh' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { SessionStart: [{ name: 'hello', type: 'script', command: './hello.sh' }] } }))
 
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',
@@ -70,15 +62,7 @@ describe('SessionStart task types', () => {
       createFile(tmpDir, 'fail.sh', '#!/usr/bin/env bash\necho "setup problem" >&2\nexit 1\n')
       makeExecutable(path.join(tmpDir, 'fail.sh'))
 
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
-            { name: 'fail-check', type: 'script', command: './fail.sh' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { SessionStart: [{ name: 'fail-check', type: 'script', command: './fail.sh' }] } }))
 
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',
@@ -101,16 +85,14 @@ describe('SessionStart task types', () => {
       makeExecutable(path.join(tmpDir, 'fail.sh'))
       makeExecutable(path.join(tmpDir, 'pass.sh'))
 
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
+      writeConfig(tmpDir, makeConfig({
+        claude: {
+          SessionStart: [
             { name: 'fail-first', type: 'script', command: './fail.sh' },
             { name: 'pass-second', type: 'script', command: './pass.sh' }
           ]
         }
-      ]))
+      }))
 
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',
@@ -131,15 +113,7 @@ describe('SessionStart task types', () => {
       createFile(tmpDir, 'env.sh', '#!/usr/bin/env bash\necho "MY_VAR=hello"\necho "OTHER=world"\n')
       makeExecutable(path.join(tmpDir, 'env.sh'))
 
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
-            { name: 'setup-env', type: 'env', command: './env.sh' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { SessionStart: [{ name: 'setup-env', type: 'env', command: './env.sh' }] } }))
 
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',
@@ -160,15 +134,7 @@ describe('SessionStart task types', () => {
       createFile(tmpDir, 'env.sh', '#!/usr/bin/env bash\necho "MY_VAR=hello"\n')
       makeExecutable(path.join(tmpDir, 'env.sh'))
 
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
-            { name: 'setup-env', type: 'env', command: './env.sh' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { SessionStart: [{ name: 'setup-env', type: 'env', command: './env.sh' }] } }))
 
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',
@@ -188,15 +154,7 @@ describe('SessionStart task types', () => {
       createFile(tmpDir, 'bad_env.sh', '#!/usr/bin/env bash\necho "env error" >&2\nexit 1\n')
       makeExecutable(path.join(tmpDir, 'bad_env.sh'))
 
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
-            { name: 'bad-env', type: 'env', command: './bad_env.sh' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { SessionStart: [{ name: 'bad-env', type: 'env', command: './bad_env.sh' }] } }))
 
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',
@@ -218,15 +176,7 @@ describe('SessionStart task types', () => {
       createFile(tmpDir, 'env.sh', '#!/usr/bin/env bash\necho "MY_VAR=hello"\n')
       makeExecutable(path.join(tmpDir, 'env.sh'))
 
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
-            { name: 'setup-env', type: 'env', command: './env.sh' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { SessionStart: [{ name: 'setup-env', type: 'env', command: './env.sh' }] } }))
 
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',
@@ -244,15 +194,7 @@ describe('SessionStart task types', () => {
       createFile(tmpDir, 'env.sh', '#!/usr/bin/env bash\necho "MY_VAR=hello"\n')
       makeExecutable(path.join(tmpDir, 'env.sh'))
 
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
-            { name: 'setup-env', type: 'env', command: './env.sh' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { SessionStart: [{ name: 'setup-env', type: 'env', command: './env.sh' }] } }))
 
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',
@@ -270,15 +212,7 @@ describe('SessionStart task types', () => {
       createFile(tmpDir, 'env.sh', '#!/usr/bin/env bash\necho "MY_VAR=hello"\n')
       makeExecutable(path.join(tmpDir, 'env.sh'))
 
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
-            { name: 'setup-env', type: 'env', command: './env.sh' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { SessionStart: [{ name: 'setup-env', type: 'env', command: './env.sh' }] } }))
 
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',
@@ -298,16 +232,14 @@ describe('SessionStart task types', () => {
       makeExecutable(path.join(tmpDir, 'env1.sh'))
       makeExecutable(path.join(tmpDir, 'env2.sh'))
 
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
+      writeConfig(tmpDir, makeConfig({
+        claude: {
+          SessionStart: [
             { name: 'env1', type: 'env', command: './env1.sh' },
             { name: 'env2', type: 'env', command: './env2.sh' }
           ]
         }
-      ]))
+      }))
 
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',
@@ -328,15 +260,7 @@ describe('SessionStart task types', () => {
       createFile(tmpDir, 'env.sh', '#!/usr/bin/env bash\necho \'{"API_KEY": "abc123", "DEBUG": "true"}\'\n')
       makeExecutable(path.join(tmpDir, 'env.sh'))
 
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
-            { name: 'json-env', type: 'env', command: './env.sh' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { SessionStart: [{ name: 'json-env', type: 'env', command: './env.sh' }] } }))
 
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',
@@ -354,23 +278,7 @@ describe('SessionStart task types', () => {
 
   describe('briefing field collection', () => {
     it('includes briefings from non-SessionStart tasks in additionalContext', () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
-            { name: 'hello', type: 'script', command: 'echo "session context"' }
-          ]
-        },
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'ExitPlanMode',
-          tasks: [
-            { name: 'tdd-guide', type: 'script', command: 'echo noop', quiet: true, briefing: 'Follow red-green TDD during implementation.' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { SessionStart: [{ name: 'hello', type: 'script', command: 'echo "session context"' }], PreToolUse: [{ name: 'tdd-guide', matcher: 'ExitPlanMode', type: 'script', command: 'echo noop', quiet: true, briefing: 'Follow red-green TDD during implementation.' }] } }))
 
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',
@@ -387,23 +295,7 @@ describe('SessionStart task types', () => {
     })
 
     it('excludes briefings from disabled tasks', () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
-            { name: 'hello', type: 'script', command: 'echo "session context"' }
-          ]
-        },
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Bash',
-          tasks: [
-            { name: 'disabled-task', type: 'script', command: 'echo noop', enabled: false, briefing: 'Should not appear' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { SessionStart: [{ name: 'hello', type: 'script', command: 'echo "session context"' }], PreToolUse: [{ name: 'disabled-task', matcher: 'Bash', type: 'script', command: 'echo noop', enabled: false, briefing: 'Should not appear' }] } }))
 
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',
@@ -421,7 +313,7 @@ describe('SessionStart task types', () => {
 
   describe('no output when no tasks match', () => {
     it('exits silently with no config', () => {
-      writeConfig(tmpDir, makeConfig([]))
+      writeConfig(tmpDir, makeConfig({}))
 
       const result = invokeHook('claude:SessionStart', {
         hook_event_name: 'SessionStart',

@@ -18,14 +18,12 @@ const {
 const { saveSessionState, setPhase, loadSessionState, readCommandResults } = require('../../lib/session')
 
 function testFirstConfig (tmpDir, extra = {}) {
-  return makeConfig([
-    {
-      type: 'claude',
-      event: 'PreToolUse',
-      matcher: 'Write|Edit|Bash',
-      tasks: [
+  return makeConfig({
+    claude: {
+      PreToolUse: [
         {
           name: 'test-first',
+          matcher: 'Write|Edit|Bash',
           type: 'script',
           command: path.join(__dirname, '..', '..', 'libexec', 'test-first'),
           quiet: true,
@@ -33,7 +31,7 @@ function testFirstConfig (tmpDir, extra = {}) {
         }
       ]
     }
-  ], {
+  }, {
     sources: ['src/**/*.js', 'test/**/*.test.js'],
     tests: ['test/**/*.test.js'],
     ...extra
@@ -442,14 +440,12 @@ describe('TDD block injection on ExitPlanMode', () => {
 
   it('injects TDD block after title on ExitPlanMode', () => {
     const injectPlanPath = path.join(__dirname, '..', '..', 'libexec', 'inject-plan')
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'ExitPlanMode',
-        tasks: [
+    writeConfig(tmpDir, makeConfig({
+      claude: {
+        PreToolUse: [
           {
             name: 'inject-tdd-plan',
+            matcher: 'ExitPlanMode',
             type: 'script',
             command: injectPlanPath,
             quiet: true,
@@ -461,7 +457,7 @@ describe('TDD block injection on ExitPlanMode', () => {
           }
         ]
       }
-    ]))
+    }))
 
     const plansDir = path.join(tmpDir, '.claude', 'plans')
     fs.mkdirSync(plansDir, { recursive: true })
@@ -487,14 +483,12 @@ describe('TDD block injection on ExitPlanMode', () => {
 
   it('does not double-inject TDD block', () => {
     const injectPlanPath = path.join(__dirname, '..', '..', 'libexec', 'inject-plan')
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'ExitPlanMode',
-        tasks: [
+    writeConfig(tmpDir, makeConfig({
+      claude: {
+        PreToolUse: [
           {
             name: 'inject-tdd-plan',
+            matcher: 'ExitPlanMode',
             type: 'script',
             command: injectPlanPath,
             quiet: true,
@@ -506,7 +500,7 @@ describe('TDD block injection on ExitPlanMode', () => {
           }
         ]
       }
-    ]))
+    }))
 
     const plansDir = path.join(tmpDir, '.claude', 'plans')
     fs.mkdirSync(plansDir, { recursive: true })
@@ -527,14 +521,12 @@ describe('TDD block injection on ExitPlanMode', () => {
 
   it('injects TDD block even when injectSignalBlock modifies file first', () => {
     const injectPlanPath = path.join(__dirname, '..', '..', 'libexec', 'inject-plan')
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'ExitPlanMode',
-        tasks: [
+    writeConfig(tmpDir, makeConfig({
+      claude: {
+        PreToolUse: [
           {
             name: 'inject-tdd-plan',
+            matcher: 'ExitPlanMode',
             type: 'script',
             command: injectPlanPath,
             quiet: true,
@@ -544,16 +536,10 @@ describe('TDD block injection on ExitPlanMode', () => {
               block: '## Development approach\n\nFollow red-green TDD for each change:\n'
             }
           }
-        ]
-      },
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
-          { name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
-        ]
+        ],
+        Stop: [{ name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }]
       }
-    ]))
+    }))
 
     const plansDir = path.join(tmpDir, '.claude', 'plans')
     fs.mkdirSync(plansDir, { recursive: true })
@@ -599,9 +585,7 @@ describe('Dispatcher-level command result logging', () => {
   })
 
   it('logs command result on PostToolUse for Bash', () => {
-    writeConfig(tmpDir, makeConfig([
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'placeholder', type: 'script', command: 'true' }] }
-    ]))
+    writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'placeholder', type: 'script', command: 'true' }] } }))
 
     invokeHook('claude:PostToolUse', {
       hook_event_name: 'PostToolUse',
@@ -618,9 +602,7 @@ describe('Dispatcher-level command result logging', () => {
   })
 
   it('logs FAIL on PostToolUseFailure for Bash', () => {
-    writeConfig(tmpDir, makeConfig([
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'placeholder', type: 'script', command: 'true' }] }
-    ]))
+    writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'placeholder', type: 'script', command: 'true' }] } }))
 
     invokeHook('claude:PostToolUseFailure', {
       hook_event_name: 'PostToolUseFailure',
@@ -637,9 +619,7 @@ describe('Dispatcher-level command result logging', () => {
   })
 
   it('does not log for non-Bash tools on PostToolUse', () => {
-    writeConfig(tmpDir, makeConfig([
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'placeholder', type: 'script', command: 'true' }] }
-    ]))
+    writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'placeholder', type: 'script', command: 'true' }] } }))
 
     invokeHook('claude:PostToolUse', {
       hook_event_name: 'PostToolUse',

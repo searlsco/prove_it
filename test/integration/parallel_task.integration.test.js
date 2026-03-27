@@ -34,16 +34,14 @@ describe('parallel task execution', () => {
       makeExecutable(scriptPath)
     }
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
+    writeConfig(projectDir, makeConfig({
+      claude: {
+        Stop: [
           { name: 'check-a', type: 'script', parallel: true, command: './script/check-a' },
           { name: 'check-b', type: 'script', parallel: true, command: './script/check-b' }
         ]
       }
-    ]))
+    }))
 
     const sessionId = 'test-parallel-pass-' + Date.now()
     const r = invokeHook('claude:Stop', {
@@ -65,16 +63,14 @@ describe('parallel task execution', () => {
     createFile(projectDir, 'script/fail-check', '#!/usr/bin/env bash\necho "FAIL: something bad" >&2\nexit 1\n')
     makeExecutable(failScript)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
+    writeConfig(projectDir, makeConfig({
+      claude: {
+        Stop: [
           { name: 'pass-check', type: 'script', parallel: true, command: './script/pass-check' },
           { name: 'fail-check', type: 'script', parallel: true, command: './script/fail-check' }
         ]
       }
-    ]))
+    }))
 
     const sessionId = 'test-parallel-fail-' + Date.now()
     const r = invokeHook('claude:Stop', {
@@ -98,16 +94,14 @@ describe('parallel task execution', () => {
     createFile(projectDir, 'script/parallel-check', '#!/usr/bin/env bash\nexit 0\n')
     makeExecutable(parallelScript)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
+    writeConfig(projectDir, makeConfig({
+      claude: {
+        Stop: [
           { name: 'serial-check', type: 'script', command: './script/serial-check' },
           { name: 'parallel-check', type: 'script', parallel: true, command: './script/parallel-check' }
         ]
       }
-    ]))
+    }))
 
     const sessionId = 'test-parallel-mixed-' + Date.now()
     const r = invokeHook('claude:Stop', {
@@ -130,16 +124,14 @@ describe('parallel task execution', () => {
     createFile(projectDir, 'script/slow-parallel', '#!/usr/bin/env bash\nsleep 30\nexit 0\n')
     makeExecutable(sleepScript)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
+    writeConfig(projectDir, makeConfig({
+      claude: {
+        Stop: [
           { name: 'slow-parallel', type: 'script', parallel: true, command: './script/slow-parallel' },
           { name: 'serial-fail', type: 'script', command: './script/serial-fail' }
         ]
       }
-    ]))
+    }))
 
     const sessionId = 'test-parallel-serial-fail-' + Date.now()
     const r = invokeHook('claude:Stop', {
@@ -163,16 +155,14 @@ describe('parallel task execution', () => {
     createFile(projectDir, 'script/slow-serial-fail', '#!/usr/bin/env bash\nsleep 0.5\necho "FAIL" >&2\nexit 1\n')
     makeExecutable(failScript)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
+    writeConfig(projectDir, makeConfig({
+      claude: {
+        Stop: [
           { name: 'fast-parallel', type: 'script', parallel: true, command: './script/fast-parallel' },
           { name: 'slow-serial-fail', type: 'script', command: './script/slow-serial-fail' }
         ]
       }
-    ]))
+    }))
 
     const sessionId = 'test-parallel-fast-orphan-' + Date.now()
     const r = invokeHook('claude:Stop', {
@@ -200,16 +190,14 @@ describe('parallel task execution', () => {
       makeExecutable(scriptPath)
     }
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
+    writeConfig(projectDir, makeConfig({
+      claude: {
+        Stop: [
           { name: 'fail-a', type: 'script', parallel: true, command: './script/fail-a' },
           { name: 'fail-b', type: 'script', parallel: true, command: './script/fail-b' }
         ]
       }
-    ]))
+    }))
 
     const sessionId = 'test-parallel-both-fail-' + Date.now()
 
@@ -243,16 +231,14 @@ describe('parallel task execution', () => {
     createFile(projectDir, 'script/slow-pass', '#!/usr/bin/env bash\nsleep 30\nexit 0\n')
     makeExecutable(slowScript)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
+    writeConfig(projectDir, makeConfig({
+      claude: {
+        Stop: [
           { name: 'fast-fail', type: 'script', parallel: true, command: './script/fast-fail' },
           { name: 'slow-pass', type: 'script', parallel: true, command: './script/slow-pass' }
         ]
       }
-    ]))
+    }))
 
     const sessionId = 'test-parallel-failfast-' + Date.now()
     const start = Date.now()
@@ -267,15 +253,7 @@ describe('parallel task execution', () => {
   })
 
   it('parallel: true on SessionStart is ignored (runs synchronously)', () => {
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'SessionStart',
-        tasks: [
-          { name: 'sync-task', type: 'script', command: 'echo hello', parallel: true }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { SessionStart: [{ name: 'sync-task', type: 'script', command: 'echo hello', parallel: true }] } }))
 
     const sessionId = 'test-parallel-ss-' + Date.now()
     const r = invokeHook('claude:SessionStart', {

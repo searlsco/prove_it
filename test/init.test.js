@@ -8,20 +8,30 @@ const {
   PROVE_IT_SHIM_MARKER
 } = require('../lib/init')
 
+function allTasks (hooks) {
+  const tasks = []
+  for (const events of Object.values(hooks || {})) {
+    for (const arr of Object.values(events || {})) {
+      if (Array.isArray(arr)) tasks.push(...arr)
+    }
+  }
+  return tasks
+}
+
 describe('init', () => {
   describe('buildConfig', () => {
     it('returns full config with defaults (all features)', () => {
       const cfg = buildConfig()
       assert.ok(cfg.enabled)
-      assert.ok(Array.isArray(cfg.hooks))
+      assert.ok(typeof cfg.hooks === 'object' && !Array.isArray(cfg.hooks))
       // Should have SessionStart hook
-      assert.ok(cfg.hooks.some(h => h.type === 'claude' && h.event === 'SessionStart'),
-        'Should have SessionStart hook entry')
+      assert.ok(cfg.hooks.claude && cfg.hooks.claude.SessionStart,
+        'Should have SessionStart tasks')
       // Should have git hooks
-      assert.ok(cfg.hooks.some(h => h.type === 'git' && h.event === 'pre-commit'))
-      assert.ok(!cfg.hooks.some(h => h.type === 'git' && h.event === 'pre-push'))
+      assert.ok(cfg.hooks.git && cfg.hooks.git['pre-commit'])
+      assert.ok(!cfg.hooks.git['pre-push'])
       // Should have default checks
-      const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
+      const allChecks = allTasks(cfg.hooks)
       assert.ok(allChecks.some(c => c.name === 'session-briefing'),
         'Should have session-briefing task')
       assert.ok(allChecks.some(c => c.name === 'coverage-review'))
@@ -31,44 +41,44 @@ describe('init', () => {
       assert.ok(!allChecks.some(c => c.name === 'ensure-tests'))
     })
 
-    it('SessionStart entry is first in hooks array', () => {
+    it('SessionStart has session-briefing task', () => {
       const cfg = buildConfig()
-      assert.strictEqual(cfg.hooks[0].event, 'SessionStart',
-        'SessionStart should be the first hook entry')
-      assert.strictEqual(cfg.hooks[0].tasks[0].name, 'session-briefing')
-      assert.strictEqual(cfg.hooks[0].tasks[0].command, '$(prove_it prefix)/libexec/briefing')
+      const tasks = cfg.hooks.claude.SessionStart
+      assert.ok(tasks.length > 0)
+      assert.strictEqual(tasks[0].name, 'session-briefing')
+      assert.strictEqual(tasks[0].command, '$(prove_it prefix)/libexec/briefing')
     })
 
     it('omits git hooks when gitHooks is false', () => {
       const cfg = buildConfig({ gitHooks: false })
       assert.ok(cfg.enabled)
-      assert.ok(!cfg.hooks.some(h => h.type === 'git'))
+      assert.ok(!cfg.hooks.git)
     })
 
     it('omits default checks when defaultChecks is false', () => {
       const cfg = buildConfig({ defaultChecks: false })
       assert.ok(cfg.enabled)
-      const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
-      assert.ok(!allChecks.some(c => c.name === 'coverage-review'))
-      assert.ok(!allChecks.some(c => c.name === 'done-review'))
+      const checks = allTasks(cfg.hooks)
+      assert.ok(!checks.some(c => c.name === 'coverage-review'))
+      assert.ok(!checks.some(c => c.name === 'done-review'))
     })
 
     it('returns base-only config with both features off', () => {
       const cfg = buildConfig({ gitHooks: false, defaultChecks: false })
       assert.ok(cfg.enabled)
-      assert.ok(!cfg.hooks.some(h => h.type === 'git'))
-      const allChecks = cfg.hooks.flatMap(h => h.tasks || [])
-      assert.ok(!allChecks.some(c => c.name === 'coverage-review'))
-      assert.ok(!allChecks.some(c => c.name === 'done-review'))
+      assert.ok(!cfg.hooks.git)
+      const checks = allTasks(cfg.hooks)
+      assert.ok(!checks.some(c => c.name === 'coverage-review'))
+      assert.ok(!checks.some(c => c.name === 'done-review'))
       // Should still have base checks
-      assert.ok(allChecks.some(c => c.name === 'lock-config'))
-      assert.ok(allChecks.some(c => c.name === 'fast-tests'))
+      assert.ok(checks.some(c => c.name === 'lock-config'))
+      assert.ok(checks.some(c => c.name === 'fast-tests'))
     })
 
     it('coverage-review uses type agent with promptType skill, async, and net churn threshold', () => {
       const cfg = buildConfig()
-      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
-      const coverageReview = allTasks.find(t => t.name === 'coverage-review')
+      const tasks = allTasks(cfg.hooks)
+      const coverageReview = tasks.find(t => t.name === 'coverage-review')
       assert.ok(coverageReview, 'Should have coverage-review task')
       assert.strictEqual(coverageReview.type, 'agent')
       assert.strictEqual(coverageReview.async, true)
@@ -79,7 +89,7 @@ describe('init', () => {
 
     it('all default agent tasks are in Stop entry', () => {
       const cfg = buildConfig()
-      const stopEntry = cfg.hooks.find(h => h.type === 'claude' && h.event === 'Stop')
+      const stopEntry = { tasks: cfg.hooks.claude && cfg.hooks.claude.Stop }
       assert.ok(stopEntry, 'Should have Stop entry')
       assert.ok(stopEntry.tasks.some(t => t.name === 'coverage-review'),
         'coverage-review should be in Stop entry')
@@ -89,8 +99,8 @@ describe('init', () => {
 
     it('done-review uses signal when condition, opus model, and is synchronous', () => {
       const cfg = buildConfig()
-      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
-      const signalReview = allTasks.find(t => t.name === 'done-review')
+      const tasks = allTasks(cfg.hooks)
+      const signalReview = tasks.find(t => t.name === 'done-review')
       assert.ok(signalReview, 'Should have done-review task')
       assert.strictEqual(signalReview.type, 'agent')
       assert.strictEqual(signalReview.promptType, 'skill')
@@ -103,37 +113,37 @@ describe('init', () => {
 
     it('done-review uses done.md ruleFile', () => {
       const cfg = buildConfig()
-      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
-      const doneReview = allTasks.find(t => t.name === 'done-review')
+      const tasks = allTasks(cfg.hooks)
+      const doneReview = tasks.find(t => t.name === 'done-review')
       assert.strictEqual(doneReview.ruleFile, '.claude/rules/done.md')
     })
 
     it('coverage-review uses testing.md ruleFile', () => {
       const cfg = buildConfig()
-      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
-      const task = allTasks.find(t => t.name === 'coverage-review')
+      const tasks = allTasks(cfg.hooks)
+      const task = tasks.find(t => t.name === 'coverage-review')
       assert.strictEqual(task.ruleFile, '.claude/rules/testing.md')
     })
 
     it('approach-review has no ruleFile', () => {
       const cfg = buildConfig()
-      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
-      const task = allTasks.find(t => t.name === 'approach-review')
+      const tasks = allTasks(cfg.hooks)
+      const task = tasks.find(t => t.name === 'approach-review')
       assert.strictEqual(task.ruleFile, undefined)
     })
 
     it('lock-config task has quiet: true', () => {
       const cfg = buildConfig()
-      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
-      const lockConfig = allTasks.find(t => t.name === 'lock-config')
+      const tasks = allTasks(cfg.hooks)
+      const lockConfig = tasks.find(t => t.name === 'lock-config')
       assert.ok(lockConfig, 'Should have lock-config task')
       assert.strictEqual(lockConfig.quiet, true, 'lock-config should have quiet: true')
     })
 
     it('session-briefing task has quiet: true', () => {
       const cfg = buildConfig()
-      const allTasks = cfg.hooks.flatMap(h => h.tasks || [])
-      const briefing = allTasks.find(t => t.name === 'session-briefing')
+      const tasks = allTasks(cfg.hooks)
+      const briefing = tasks.find(t => t.name === 'session-briefing')
       assert.ok(briefing, 'Should have session-briefing task')
       assert.strictEqual(briefing.quiet, true, 'session-briefing should have quiet: true')
     })

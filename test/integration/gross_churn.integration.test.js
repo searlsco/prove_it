@@ -32,15 +32,7 @@ describe('gross churn accumulation via dispatcher', () => {
 
   it('increments gross counter on Write to a source file', () => {
     createFile(tmpDir, 'src/app.js', 'module.exports = {}')
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'Write',
-        tasks: []
-      },
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
-    ], { sources: ['src/**/*.js'] }))
+    writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [], Stop: [{ name: 'noop', type: 'script', command: 'true' }] } }, { sources: ['src/**/*.js'] }))
 
     assert.strictEqual(readGrossCounter(tmpDir), 0,
       'Gross counter should start at 0')
@@ -61,15 +53,7 @@ describe('gross churn accumulation via dispatcher', () => {
 
   it('increments gross counter on Edit to a source file', () => {
     createFile(tmpDir, 'src/utils.js', 'function old() {}')
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'Edit',
-        tasks: []
-      },
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
-    ], { sources: ['src/**/*.js'] }))
+    writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [], Stop: [{ name: 'noop', type: 'script', command: 'true' }] } }, { sources: ['src/**/*.js'] }))
 
     const oldStr = 'function old() {}'
     const newStr = 'function updated() {\n  return true\n}'
@@ -90,15 +74,7 @@ describe('gross churn accumulation via dispatcher', () => {
   it('accumulates across multiple PreToolUse invocations', () => {
     createFile(tmpDir, 'src/a.js', '')
     createFile(tmpDir, 'src/b.js', '')
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'Write',
-        tasks: []
-      },
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
-    ], { sources: ['src/**/*.js'] }))
+    writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [], Stop: [{ name: 'noop', type: 'script', command: 'true' }] } }, { sources: ['src/**/*.js'] }))
 
     const content1 = 'line1\nline2\nline3\n'
     invokeHook('claude:PreToolUse', {
@@ -126,15 +102,7 @@ describe('gross churn accumulation via dispatcher', () => {
 
   it('does NOT increment for files outside sources', () => {
     createFile(tmpDir, 'docs/readme.txt', 'hello')
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'Write',
-        tasks: []
-      },
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
-    ], { sources: ['src/**/*.js'] }))
+    writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [], Stop: [{ name: 'noop', type: 'script', command: 'true' }] } }, { sources: ['src/**/*.js'] }))
 
     invokeHook('claude:PreToolUse', {
       hook_event_name: 'PreToolUse',
@@ -150,15 +118,7 @@ describe('gross churn accumulation via dispatcher', () => {
 
   it('does NOT increment for non-edit tools', () => {
     createFile(tmpDir, 'src/app.js', 'code')
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'Read',
-        tasks: []
-      },
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
-    ], { sources: ['src/**/*.js'] }))
+    writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [], Stop: [{ name: 'noop', type: 'script', command: 'true' }] } }, { sources: ['src/**/*.js'] }))
 
     invokeHook('claude:PreToolUse', {
       hook_event_name: 'PreToolUse',
@@ -174,15 +134,7 @@ describe('gross churn accumulation via dispatcher', () => {
 
   it('accumulates gross churn for custom fileEditingTools', () => {
     createFile(tmpDir, 'src/app.js', 'code')
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'mcp__custom_editor__write_file',
-        tasks: []
-      },
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
-    ], {
+    writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [], Stop: [{ name: 'noop', type: 'script', command: 'true' }] } }, {
       sources: ['src/**/*.js'],
       fileEditingTools: ['mcp__custom_editor__write_file']
     }))
@@ -207,15 +159,7 @@ describe('gross churn accumulation via dispatcher', () => {
     // A config with no PreToolUse hooks at all—the accumulation is infrastructure,
     // not task-dependent. It runs before task matching.
     createFile(tmpDir, 'src/app.js', 'code')
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
-          { name: 'check', type: 'script', command: 'true' }
-        ]
-      }
-    ], { sources: ['src/**/*.js'] }))
+    writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'check', type: 'script', command: 'true' }] } }, { sources: ['src/**/*.js'] }))
 
     const content = 'function main() {\n  console.log("hi")\n}\n'
     invokeHook('claude:PreToolUse', {
@@ -233,15 +177,7 @@ describe('gross churn accumulation via dispatcher', () => {
 
   it('increments for NotebookEdit on source files', () => {
     createFile(tmpDir, 'src/analysis.ipynb', '{}')
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        matcher: 'NotebookEdit',
-        tasks: []
-      },
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
-    ], { sources: ['src/**/*'] }))
+    writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [], Stop: [{ name: 'noop', type: 'script', command: 'true' }] } }, { sources: ['src/**/*'] }))
 
     const newSource = 'import pandas as pd\ndf = pd.read_csv("data.csv")\ndf.head()'
     invokeHook('claude:PreToolUse', {

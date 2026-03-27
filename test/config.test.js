@@ -63,23 +63,14 @@ describe('config merging', () => {
     assert.deepStrictEqual(result, { name: '' })
   })
 
-  it('array override replaces object base (v1→v2 hooks migration)', () => {
-    const base = { hooks: { done: { enabled: true }, stop: { enabled: true } } }
-    const override = { hooks: [{ type: 'claude', event: 'Stop', tasks: [] }] }
+  it('mergeDeep does not touch hooks (handled by mergeHooks)', () => {
+    // hooks is excluded from mergeDeep in loadEffectiveConfig via mergeLayer,
+    // but mergeDeep itself still works generically on objects
+    const base = { hooks: { claude: { Stop: [{ name: 'a' }] } } }
+    const override = { hooks: { claude: { Stop: [{ name: 'b' }] } } }
     const result = mergeDeep(base, override)
-
-    assert.strictEqual(Array.isArray(result.hooks), true, 'hooks should be an array')
-    assert.strictEqual(result.hooks.length, 1)
-    assert.strictEqual(result.hooks[0].event, 'Stop')
-  })
-
-  it('object override replaces array base', () => {
-    const base = { hooks: [{ type: 'claude' }] }
-    const override = { hooks: { done: { enabled: true } } }
-    const result = mergeDeep(base, override)
-
-    assert.strictEqual(Array.isArray(result.hooks), false, 'hooks should be an object')
-    assert.strictEqual(result.hooks.done.enabled, true)
+    // mergeDeep treats hooks as nested objects—mergeLayer uses mergeHooks instead
+    assert.ok(result.hooks.claude.Stop, 'hooks structure preserved by mergeDeep')
   })
 })
 
@@ -88,7 +79,7 @@ describe('loadEffectiveConfig ancestor discovery', () => {
   const defaultTestConfig = () => ({
     enabled: false,
     sources: [],
-    hooks: []
+    hooks: {}
   })
 
   const tmpBase = path.join(os.tmpdir(), 'prove_it_config_test_' + Date.now())
@@ -103,11 +94,11 @@ describe('loadEffectiveConfig ancestor discovery', () => {
 
     fs.writeFileSync(
       path.join(tmpBase, '.claude', 'prove_it', 'config.json'),
-      JSON.stringify({ hooks: [], sources: ['root/**/*.js'] })
+      JSON.stringify({ hooks: {}, sources: ['root/**/*.js'] })
     )
     fs.writeFileSync(
       path.join(tmpBase, 'child', '.claude', 'prove_it', 'config.json'),
-      JSON.stringify({ hooks: [], sources: ['child/**/*.js'] })
+      JSON.stringify({ hooks: {}, sources: ['child/**/*.js'] })
     )
   }
 
@@ -154,7 +145,7 @@ describe('loadEffectiveConfig ancestor discovery', () => {
     fs.mkdirSync(path.join(tmpBase, 'child', 'grandchild', '.claude', 'prove_it'), { recursive: true })
     fs.writeFileSync(
       path.join(tmpBase, 'child', 'grandchild', '.claude', 'prove_it', 'config.json'),
-      JSON.stringify({ hooks: [], sources: ['grandchild/**/*.js'] })
+      JSON.stringify({ hooks: {}, sources: ['grandchild/**/*.js'] })
     )
     try {
       const { cfg } = loadEffectiveConfig(path.join(tmpBase, 'child', 'grandchild'), defaultTestConfig)
@@ -172,13 +163,111 @@ describe('loadEffectiveConfig ancestor discovery', () => {
     try {
       const { cfg } = loadEffectiveConfig(emptyDir, defaultTestConfig)
       assert.strictEqual(cfg.enabled, false)
-      assert.strictEqual(Array.isArray(cfg.hooks), true, 'hooks should be an array')
+      assert.strictEqual(typeof cfg.hooks, 'object', 'hooks should be an object')
+      assert.strictEqual(Array.isArray(cfg.hooks), false, 'hooks should not be an array')
       assert.deepStrictEqual(cfg.sources, [])
     } finally {
       if (origDir !== undefined) process.env.PROVE_IT_DIR = origDir
       else delete process.env.PROVE_IT_DIR
       fs.rmSync(emptyDir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('mergeHooks', () => {
+  const { mergeHooks } = require('../lib/config')
+
+  it('returns base when override is empty', () => {
+    const base = { claude: { Stop: [{ name: 'a', command: 'echo a' }] } }
+    const result = mergeHooks(base, {})
+    assert.deepStrictEqual(result, base)
+  })
+
+  it('returns override when base is empty', () => {
+    const override = { claude: { Stop: [{ name: 'a', command: 'echo a' }] } }
+    const result = mergeHooks({}, override)
+    assert.deepStrictEqual(result, override)
+  })
+
+  it('appends new-name tasks after inherited tasks', () => {
+    const base = { claude: { Stop: [{ name: 'a', command: 'echo a' }] } }
+    const override = { claude: { Stop: [{ name: 'b', command: 'echo b' }] } }
+    const result = mergeHooks(base, override)
+    assert.deepStrictEqual(result.claude.Stop, [
+      { name: 'a', command: 'echo a' },
+      { name: 'b', command: 'echo b' }
+    ])
+  })
+
+  it('same-name task in descendant fully replaces parent', () => {
+    const base = { claude: { Stop: [{ name: 'a', command: 'echo a', timeout: 5000 }] } }
+    const override = { claude: { Stop: [{ name: 'a', command: 'echo override' }] } }
+    const result = mergeHooks(base, override)
+    assert.deepStrictEqual(result.claude.Stop, [
+      { name: 'a', command: 'echo override' }
+    ])
+    assert.strictEqual(result.claude.Stop[0].timeout, undefined, 'parent fields should not be inherited')
+  })
+
+  it('preserves ordering: base tasks first, new override tasks appended', () => {
+    const base = {
+      claude: {
+        PreToolUse: [
+          { name: 'a', command: 'echo a' },
+          { name: 'b', command: 'echo b' }
+        ]
+      }
+    }
+    const override = {
+      claude: {
+        PreToolUse: [
+          { name: 'c', command: 'echo c' },
+          { name: 'a', command: 'echo a-override' }
+        ]
+      }
+    }
+    const result = mergeHooks(base, override)
+    assert.deepStrictEqual(result.claude.PreToolUse.map(t => t.name), ['a', 'b', 'c'])
+    assert.strictEqual(result.claude.PreToolUse[0].command, 'echo a-override')
+  })
+
+  it('merges across hook types independently', () => {
+    const base = {
+      claude: { Stop: [{ name: 'a', command: 'echo a' }] },
+      git: { 'pre-commit': [{ name: 'b', command: 'echo b' }] }
+    }
+    const override = {
+      claude: { Stop: [{ name: 'c', command: 'echo c' }] },
+      git: { 'pre-push': [{ name: 'd', command: 'echo d' }] }
+    }
+    const result = mergeHooks(base, override)
+    assert.deepStrictEqual(result.claude.Stop.map(t => t.name), ['a', 'c'])
+    assert.deepStrictEqual(result.git['pre-commit'].map(t => t.name), ['b'])
+    assert.deepStrictEqual(result.git['pre-push'].map(t => t.name), ['d'])
+  })
+
+  it('adds new event keys from override', () => {
+    const base = { claude: { Stop: [{ name: 'a', command: 'echo a' }] } }
+    const override = { claude: { SessionStart: [{ name: 'b', command: 'echo b' }] } }
+    const result = mergeHooks(base, override)
+    assert.deepStrictEqual(result.claude.Stop, [{ name: 'a', command: 'echo a' }])
+    assert.deepStrictEqual(result.claude.SessionStart, [{ name: 'b', command: 'echo b' }])
+  })
+
+  it('adds new hook type from override', () => {
+    const base = { claude: { Stop: [{ name: 'a', command: 'echo a' }] } }
+    const override = { git: { 'pre-commit': [{ name: 'b', command: 'echo b' }] } }
+    const result = mergeHooks(base, override)
+    assert.ok(result.claude, 'base type preserved')
+    assert.ok(result.git, 'override type added')
+  })
+
+  it('handles undefined/null base and override gracefully', () => {
+    const hooks = { claude: { Stop: [{ name: 'a', command: 'echo a' }] } }
+    assert.deepStrictEqual(mergeHooks(undefined, hooks), hooks)
+    assert.deepStrictEqual(mergeHooks(null, hooks), hooks)
+    assert.deepStrictEqual(mergeHooks(hooks, undefined), hooks)
+    assert.deepStrictEqual(mergeHooks(hooks, null), hooks)
   })
 })
 
@@ -360,7 +449,7 @@ describe('userKeys tracking in loadEffectiveConfig', () => {
   it('tracks keys from user config files but not CONFIG_DEFAULTS', () => {
     const projectDir = setup(
       { enabled: true },
-      { hooks: [], sources: ['src/**/*.js'] }
+      { hooks: {}, sources: ['src/**/*.js'] }
     )
     try {
       const { userKeys } = loadEffectiveConfig(projectDir, require('../lib/defaults').configDefaults)

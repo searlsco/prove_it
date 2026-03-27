@@ -32,10 +32,7 @@ describe('phase integration', () => {
   })
 
   it('PreToolUse intercepts prove_it phase plan and records phase', () => {
-    writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] },
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { PreToolUse: [], Stop: [{ name: 'noop', type: 'script', command: 'true' }] } }))
 
     const result = invokeHook('claude:PreToolUse', {
       session_id: 'phase-int-1',
@@ -53,10 +50,7 @@ describe('phase integration', () => {
   })
 
   it('phase change emits systemMessage telling Claude to continue', () => {
-    writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] },
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { PreToolUse: [], Stop: [{ name: 'noop', type: 'script', command: 'true' }] } }))
 
     const result = invokeHook('claude:PreToolUse', {
       session_id: 'phase-sysmsg',
@@ -73,10 +67,7 @@ describe('phase integration', () => {
   })
 
   it('PreToolUse intercepts prove_it phase implement and records phase', () => {
-    writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] },
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { PreToolUse: [], Stop: [{ name: 'noop', type: 'script', command: 'true' }] } }))
 
     const result = invokeHook('claude:PreToolUse', {
       session_id: 'phase-int-2',
@@ -89,10 +80,7 @@ describe('phase integration', () => {
   })
 
   it('PreToolUse falls through for unknown phase types', () => {
-    writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] },
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { PreToolUse: [], Stop: [{ name: 'noop', type: 'script', command: 'true' }] } }))
 
     const result = invokeHook('claude:PreToolUse', {
       session_id: 'phase-unknown',
@@ -105,10 +93,7 @@ describe('phase integration', () => {
   })
 
   it('EnterPlanMode sets phase to plan', () => {
-    writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] },
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'noop', type: 'script', command: 'true' }] }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { PreToolUse: [], Stop: [{ name: 'noop', type: 'script', command: 'true' }] } }))
 
     const result = invokeHook('claude:PreToolUse', {
       session_id: 'phase-planmode',
@@ -124,15 +109,7 @@ describe('phase integration', () => {
     setPhase('phase-persist', 'implement')
     createFastTestScript(projectDir, true)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
-          { name: 'fast-tests', type: 'script', command: './script/test_fast' }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
     invokeHook('claude:Stop', {
       session_id: 'phase-persist'
@@ -145,16 +122,14 @@ describe('phase integration', () => {
     setPhase('phase-gated-fire', 'implement')
     createFastTestScript(projectDir, true)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
+    writeConfig(projectDir, makeConfig({
+      claude: {
+        Stop: [
           { name: 'fast-tests', type: 'script', command: './script/test_fast' },
           { name: 'phase-gated', type: 'script', command: 'echo phase-task-ran', when: { phase: 'implement' } }
         ]
       }
-    ]))
+    }))
 
     const result = invokeHook('claude:Stop', {
       session_id: 'phase-gated-fire'
@@ -168,16 +143,14 @@ describe('phase integration', () => {
     setPhase('phase-gated-skip', 'plan')
     createFastTestScript(projectDir, true)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
+    writeConfig(projectDir, makeConfig({
+      claude: {
+        Stop: [
           { name: 'fast-tests', type: 'script', command: './script/test_fast' },
           { name: 'phase-gated', type: 'script', command: 'echo should-not-run', when: { phase: 'implement' } }
         ]
       }
-    ]))
+    }))
 
     const result = invokeHook('claude:Stop', {
       session_id: 'phase-gated-skip'
@@ -192,15 +165,7 @@ describe('phase integration', () => {
     setSignal('phase-done-reset', 'done')
     createFastTestScript(projectDir, true)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
-          { name: 'fast-tests', type: 'script', command: './script/test_fast' }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
     invokeHook('claude:Stop', {
       session_id: 'phase-done-reset'
@@ -215,15 +180,7 @@ describe('phase integration', () => {
     setSignal('phase-stuck-keep', 'stuck')
     createFastTestScript(projectDir, true)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
-          { name: 'fast-tests', type: 'script', command: './script/test_fast' }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
     invokeHook('claude:Stop', {
       session_id: 'phase-stuck-keep'

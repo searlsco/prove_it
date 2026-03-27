@@ -101,6 +101,6 @@ default value of 10. No `|| fallback` patterns are needed downstream.
 
 - No dependencies beyond Node.js stdlib (devDependencies: standard for linting only)
 - Linter: `npx standard --fix` (run automatically by `./script/test_fast`)
-- Config format: `hooks` array containing `tasks`
+- Config format: `hooks` is a two-level object `{ type: { event: [tasks] } }` where type is `claude` or `git`, event is the lifecycle event name, and tasks carry their own `matcher`/`source`/`triggers`. Hooks merge across config layers by task `name` (same-name = full replacement, new-name = append).
 - Infrastructure scripts live in `libexec/` and are referenced via `$(prove_it prefix)/libexec/<name>`
 - Agent reviewer prompts are distributed as Claude Code skills (`lib/skills/prove-coverage.md`, `lib/skills/prove-done.md`), resolved via `promptType: 'skill'`

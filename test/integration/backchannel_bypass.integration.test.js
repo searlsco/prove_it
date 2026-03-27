@@ -40,15 +40,7 @@ describe('backchannel bypass on PreToolUse', () => {
   })
 
   function failingConfig () {
-    return makeConfig([
-      {
-        type: 'claude',
-        event: 'PreToolUse',
-        tasks: [
-          { name: 'always-fail', type: 'script', command: './script/test_fast' }
-        ]
-      }
-    ])
+    return makeConfig({ claude: { PreToolUse: [{ name: 'always-fail', type: 'script', command: './script/test_fast' }] } })
   }
 
   function bcPath (sessionId, taskName, filename) {

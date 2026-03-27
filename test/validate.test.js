@@ -8,16 +8,13 @@ describe('validateConfig', () => {
       enabled: true,
       sources: ['**/*.js'],
       format: { maxOutputChars: 12000 },
-      hooks: [
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Edit|Write',
-          tasks: [
-            { name: 'lint', type: 'script', command: './script/lint' }
+      hooks: {
+        claude: {
+          PreToolUse: [
+            { name: 'lint', type: 'script', command: './script/lint', matcher: 'Edit|Write' }
           ]
         }
-      ],
+      },
       ...overrides
     }
   }
@@ -85,11 +82,11 @@ describe('validateConfig', () => {
       // valid string with agent tasks passes
       const valid = validateConfig(validConfig({
         model: 'gpt-4.1',
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [{ name: 'a', type: 'agent', prompt: 'Review this' }]
-        }]
+        hooks: {
+          claude: {
+            Stop: [{ name: 'a', type: 'agent', prompt: 'Review this' }]
+          }
+        }
       }))
       assert.strictEqual(valid.errors.length, 0)
 
@@ -113,11 +110,11 @@ describe('validateConfig', () => {
       // valid integer with agent tasks passes
       const valid = validateConfig(validConfig({
         maxAgentTurns: 10,
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [{ name: 'a', type: 'agent', prompt: 'Review this' }]
-        }]
+        hooks: {
+          claude: {
+            Stop: [{ name: 'a', type: 'agent', prompt: 'Review this' }]
+          }
+        }
       }))
       assert.strictEqual(valid.errors.length, 0)
 
@@ -217,108 +214,96 @@ describe('validateConfig', () => {
       assert.ok(nullBypass.errors.some(e => e.includes('"taskBypassPermissions" must be a boolean')))
     })
 
-    it('validates hooks is required and must be array', () => {
+    it('validates hooks is required and must be an object', () => {
       const missing = validConfig()
       delete missing.hooks
       assert.ok(validateConfig(missing).errors.some(e => e.includes('"hooks" is required')))
 
-      const notArray = validateConfig(validConfig({ hooks: {} }))
-      assert.ok(notArray.errors.some(e => e.includes('"hooks" must be an array')))
+      const notObj = validateConfig(validConfig({ hooks: 'bad' }))
+      assert.ok(notObj.errors.some(e => e.includes('"hooks" must be an object')))
+    })
+
+    it('errors with migration guidance when hooks is an array', () => {
+      const { errors } = validateConfig(validConfig({
+        hooks: [{ type: 'claude', event: 'Stop', tasks: [] }]
+      }))
+      assert.ok(errors.some(e => e.includes('"hooks" must be an object, not an array.')))
+      assert.ok(errors.some(e => e.includes('hooks schema changed')))
     })
   })
 
-  describe('hook entry validation', () => {
-    function cfgWith (hookEntry) {
-      return validConfig({ hooks: [hookEntry] })
-    }
-
-    it('errors on missing or invalid type', () => {
-      const missing = validateConfig(cfgWith({ event: 'Stop', tasks: [] }))
-      assert.ok(missing.errors.some(e => e.includes('missing "type"')))
-
-      const invalid = validateConfig(cfgWith({ type: 'webhook', event: 'Stop', tasks: [] }))
-      assert.ok(invalid.errors.some(e => e.includes('invalid type "webhook"')))
+  describe('hooks structure validation', () => {
+    it('errors on unknown hook type keys', () => {
+      const { errors } = validateConfig(validConfig({
+        hooks: { webhook: { Stop: [] } }
+      }))
+      assert.ok(errors.some(e => e.includes('unknown type "webhook"')))
     })
 
-    it('errors on missing or invalid event', () => {
-      const missing = validateConfig(cfgWith({ type: 'claude', tasks: [] }))
-      assert.ok(missing.errors.some(e => e.includes('missing "event"')))
+    it('errors on invalid claude event names', () => {
+      const { errors } = validateConfig(validConfig({
+        hooks: { claude: { OnSave: [] } }
+      }))
+      assert.ok(errors.some(e => e.includes('invalid event "OnSave"')))
+    })
 
-      const invalidClaude = validateConfig(cfgWith({ type: 'claude', event: 'OnSave', tasks: [] }))
-      assert.ok(invalidClaude.errors.some(e => e.includes('invalid claude event "OnSave"')))
-
-      const invalidGit = validateConfig(cfgWith({ type: 'git', event: 'post-merge', tasks: [] }))
-      assert.ok(invalidGit.errors.some(e => e.includes('invalid git event "post-merge"')))
+    it('errors on invalid git event names', () => {
+      const { errors } = validateConfig(validConfig({
+        hooks: { git: { 'post-merge': [] } }
+      }))
+      assert.ok(errors.some(e => e.includes('invalid event "post-merge"')))
     })
 
     it('accepts PostToolUse and PostToolUseFailure as valid events', () => {
       for (const event of ['PostToolUse', 'PostToolUseFailure']) {
-        const { errors } = validateConfig(cfgWith({
-          type: 'claude',
-          event,
-          matcher: 'Bash',
-          tasks: [{ name: 'a', type: 'script', command: 'echo ok' }]
+        const { errors } = validateConfig(validConfig({
+          hooks: {
+            claude: {
+              [event]: [{ name: 'a', type: 'script', command: 'echo ok', matcher: 'Bash' }]
+            }
+          }
         }))
         assert.strictEqual(errors.length, 0, `${event} should be accepted`)
       }
     })
 
-    it('allows matcher on PostToolUse and PostToolUseFailure without warning', () => {
+    it('allows matcher on PostToolUse and PostToolUseFailure tasks without warning', () => {
       for (const event of ['PostToolUse', 'PostToolUseFailure']) {
-        const { warnings } = validateConfig(cfgWith({
-          type: 'claude',
-          event,
-          matcher: 'Bash',
-          tasks: [{ name: 'a', type: 'script', command: 'echo ok' }]
+        const { warnings } = validateConfig(validConfig({
+          hooks: {
+            claude: {
+              [event]: [{ name: 'a', type: 'script', command: 'echo ok', matcher: 'Bash' }]
+            }
+          }
         }))
         assert.ok(!warnings.some(w => w.includes('matcher')),
           `${event} should not warn about matcher`)
       }
     })
 
-    it('errors on legacy checks key and missing tasks', () => {
-      const legacy = validateConfig(cfgWith({
-        type: 'claude', event: 'Stop', checks: [{ name: 'a', type: 'script', command: 'x' }]
+    it('errors when events object is not an object', () => {
+      const { errors } = validateConfig(validConfig({
+        hooks: { claude: 'bad' }
       }))
-      assert.ok(legacy.errors.some(e => e.includes('Rename "checks" to "tasks"')))
-
-      const missing = validateConfig(cfgWith({ type: 'claude', event: 'Stop' }))
-      assert.ok(missing.errors.some(e => e.includes('missing "tasks"')))
+      assert.ok(errors.some(e => e.includes('hooks.claude must be an object')))
     })
 
-    it('warns when event-specific keys are used on wrong events', () => {
-      const matcher = validateConfig(cfgWith({
-        type: 'claude', event: 'Stop', matcher: 'Edit', tasks: []
+    it('errors when task array is not an array', () => {
+      const { errors } = validateConfig(validConfig({
+        hooks: { claude: { Stop: 'not-array' } }
       }))
-      assert.ok(matcher.warnings.some(w => w.includes('matcher only applies to PreToolUse')))
-
-      const triggers = validateConfig(cfgWith({
-        type: 'claude', event: 'Stop', triggers: ['npm'], tasks: []
-      }))
-      assert.ok(triggers.warnings.some(w => w.includes('triggers only applies to PreToolUse')))
-
-      const source = validateConfig(cfgWith({
-        type: 'claude', event: 'Stop', source: 'startup', tasks: []
-      }))
-      assert.ok(source.warnings.some(w => w.includes('source only applies to SessionStart')))
-    })
-
-    it('errors on unknown hook keys', () => {
-      const { errors } = validateConfig(cfgWith({
-        type: 'claude', event: 'Stop', tasks: [], extraKey: true
-      }))
-      assert.ok(errors.some(e => e.includes('unknown key "extraKey"')))
+      assert.ok(errors.some(e => e.includes('hooks.claude.Stop must be an array of tasks')))
     })
   })
 
   describe('task validation', () => {
-    function cfgWithTask (task) {
+    function cfgWithTask (task, hookType = 'claude', hookEvent = 'Stop') {
       return validConfig({
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [task]
-        }]
+        hooks: {
+          [hookType]: {
+            [hookEvent]: [task]
+          }
+        }
       })
     }
 
@@ -463,11 +448,11 @@ describe('validateConfig', () => {
 
     it('warns when async: true is used on SessionStart', () => {
       const { warnings } = validateConfig(validConfig({
-        hooks: [{
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [{ name: 'a', type: 'script', command: 'x', async: true }]
-        }]
+        hooks: {
+          claude: {
+            SessionStart: [{ name: 'a', type: 'script', command: 'x', async: true }]
+          }
+        }
       }))
       assert.ok(warnings.some(w => w.includes('async') && w.includes('SessionStart')))
 
@@ -480,23 +465,22 @@ describe('validateConfig', () => {
 
     it('warns when parallel: true is used on SessionStart', () => {
       const { warnings } = validateConfig(validConfig({
-        hooks: [{
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [{ name: 'a', type: 'script', command: 'x', parallel: true }]
-        }]
+        hooks: {
+          claude: {
+            SessionStart: [{ name: 'a', type: 'script', command: 'x', parallel: true }]
+          }
+        }
       }))
       assert.ok(warnings.some(w => w.includes('parallel') && w.includes('SessionStart')))
     })
 
     it('warns when parallel: true is used on PreToolUse', () => {
       const { warnings } = validateConfig(validConfig({
-        hooks: [{
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Bash',
-          tasks: [{ name: 'a', type: 'script', command: 'x', parallel: true }]
-        }]
+        hooks: {
+          claude: {
+            PreToolUse: [{ name: 'a', type: 'script', command: 'x', matcher: 'Bash', parallel: true }]
+          }
+        }
       }))
       assert.ok(warnings.some(w => w.includes('parallel') && w.includes('PreToolUse')))
     })
@@ -557,11 +541,11 @@ describe('validateConfig', () => {
     it('warns when linesWritten is used on a git hook but not linesChanged', () => {
       // linesWritten warns on git hooks
       const written = validateConfig(validConfig({
-        hooks: [{
-          type: 'git',
-          event: 'pre-commit',
-          tasks: [{ name: 'a', type: 'script', command: 'x', when: { linesWritten: 500 } }]
-        }]
+        hooks: {
+          git: {
+            'pre-commit': [{ name: 'a', type: 'script', command: 'x', when: { linesWritten: 500 } }]
+          }
+        }
       }))
       assert.strictEqual(written.errors.length, 0)
       assert.ok(written.warnings.some(w => w.includes('linesWritten') && w.includes('git')),
@@ -569,11 +553,11 @@ describe('validateConfig', () => {
 
       // linesChanged does NOT warn on git hooks (git-based now)
       const changed = validateConfig(validConfig({
-        hooks: [{
-          type: 'git',
-          event: 'pre-commit',
-          tasks: [{ name: 'a', type: 'script', command: 'x', when: { linesChanged: 500 } }]
-        }]
+        hooks: {
+          git: {
+            'pre-commit': [{ name: 'a', type: 'script', command: 'x', when: { linesChanged: 500 } }]
+          }
+        }
       }))
       assert.strictEqual(changed.errors.length, 0)
       assert.ok(!changed.warnings.some(w => w.includes('linesChanged')),
@@ -607,11 +591,11 @@ describe('validateConfig', () => {
 
     it('warns when sourceFilesEditedThisTurn is used on a git hook', () => {
       const { errors, warnings } = validateConfig(validConfig({
-        hooks: [{
-          type: 'git',
-          event: 'pre-commit',
-          tasks: [{ name: 'a', type: 'script', command: 'x', when: { sourceFilesEditedThisTurn: true } }]
-        }]
+        hooks: {
+          git: {
+            'pre-commit': [{ name: 'a', type: 'script', command: 'x', when: { sourceFilesEditedThisTurn: true } }]
+          }
+        }
       }))
       assert.strictEqual(errors.length, 0)
       assert.ok(warnings.some(w => w.includes('sourceFilesEditedThisTurn') && w.includes('git')))
@@ -715,11 +699,11 @@ describe('validateConfig', () => {
 
       // warns on env task
       const envWarn = validateConfig(validConfig({
-        hooks: [{
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [{ name: 'a', type: 'env', command: './script/env.sh', params: { foo: 'bar' } }]
-        }]
+        hooks: {
+          claude: {
+            SessionStart: [{ name: 'a', type: 'env', command: './script/env.sh', params: { foo: 'bar' } }]
+          }
+        }
       }))
       assert.ok(envWarn.warnings.some(w => w.includes('params') && w.includes('script tasks')))
     })
@@ -802,11 +786,11 @@ describe('validateConfig', () => {
 
       // warns on git hook
       const { warnings } = validateConfig(validConfig({
-        hooks: [{
-          type: 'git',
-          event: 'pre-commit',
-          tasks: [{ name: 'a', type: 'script', command: 'x', when: { toolsUsed: ['Edit'] } }]
-        }]
+        hooks: {
+          git: {
+            'pre-commit': [{ name: 'a', type: 'script', command: 'x', when: { toolsUsed: ['Edit'] } }]
+          }
+        }
       }))
       assert.ok(warnings.some(w => w.includes('toolsUsed') && w.includes('git')))
     })
@@ -843,32 +827,31 @@ describe('validateConfig', () => {
     it('warns when signal is used on wrong event types', () => {
       // git hook
       const { warnings: gitWarnings } = validateConfig(validConfig({
-        hooks: [{
-          type: 'git',
-          event: 'pre-commit',
-          tasks: [{ name: 'a', type: 'script', command: 'x', when: { signal: 'done' } }]
-        }]
+        hooks: {
+          git: {
+            'pre-commit': [{ name: 'a', type: 'script', command: 'x', when: { signal: 'done' } }]
+          }
+        }
       }))
       assert.ok(gitWarnings.some(w => w.includes('signal') && w.includes('git')))
 
       // SessionStart
       const { warnings: ssWarnings } = validateConfig(validConfig({
-        hooks: [{
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [{ name: 'a', type: 'script', command: 'x', when: { signal: 'done' } }]
-        }]
+        hooks: {
+          claude: {
+            SessionStart: [{ name: 'a', type: 'script', command: 'x', when: { signal: 'done' } }]
+          }
+        }
       }))
       assert.ok(ssWarnings.some(w => w.includes('signal') && w.includes('SessionStart')))
 
       // PreToolUse
       const { warnings: ptuWarnings } = validateConfig(validConfig({
-        hooks: [{
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Bash',
-          tasks: [{ name: 'a', type: 'script', command: 'x', when: { signal: 'done' } }]
-        }]
+        hooks: {
+          claude: {
+            PreToolUse: [{ name: 'a', type: 'script', command: 'x', matcher: 'Bash', when: { signal: 'done' } }]
+          }
+        }
       }))
       assert.ok(ptuWarnings.some(w => w.includes('signal') && w.includes('PreToolUse')))
     })
@@ -904,11 +887,11 @@ describe('validateConfig', () => {
 
     it('warns when phase is used on git hooks', () => {
       const { warnings: gitWarnings } = validateConfig(validConfig({
-        hooks: [{
-          type: 'git',
-          event: 'pre-commit',
-          tasks: [{ name: 'a', type: 'script', command: 'x', when: { phase: 'implement' } }]
-        }]
+        hooks: {
+          git: {
+            'pre-commit': [{ name: 'a', type: 'script', command: 'x', when: { phase: 'implement' } }]
+          }
+        }
       }))
       assert.ok(gitWarnings.some(w => w.includes('phase') && w.includes('git')))
     })
@@ -992,11 +975,11 @@ describe('validateConfig', () => {
   describe('env task validation', () => {
     function cfgWithEnvTask (task, event = 'SessionStart') {
       return validConfig({
-        hooks: [{
-          type: 'claude',
-          event,
-          tasks: [task]
-        }]
+        hooks: {
+          claude: {
+            [event]: [task]
+          }
+        }
       })
     }
 
@@ -1031,14 +1014,11 @@ describe('validateConfig', () => {
       assert.ok(stringCfg.errors.some(e => e.includes('Config must be a JSON object')))
     })
 
-    it('errors on non-object entries in hooks and tasks arrays', () => {
-      const badHook = validateConfig({ hooks: ['not-an-object'] })
-      assert.ok(badHook.errors.some(e => e.includes('hooks[0] must be an object')))
-
+    it('errors on non-object task entries in task arrays', () => {
       const badTask = validateConfig({
-        hooks: [{ type: 'claude', event: 'Stop', tasks: ['not-an-object'] }]
+        hooks: { claude: { Stop: ['not-an-object'] } }
       })
-      assert.ok(badTask.errors.some(e => e.includes('tasks[0] must be an object')))
+      assert.ok(badTask.errors.some(e => e.includes('hooks.claude.Stop[0] must be an object')))
     })
   })
 })
@@ -1046,12 +1026,12 @@ describe('validateConfig', () => {
 describe('formatErrors', () => {
   it('formats errors with reinstall/reinit guidance', () => {
     const result = {
-      errors: ['hooks[0] has "checks" instead of "tasks"'],
+      errors: ['hooks.claude.Stop[0] is missing "name"'],
       warnings: []
     }
     const output = formatErrors(result)
     assert.ok(output.includes('prove_it: invalid config'))
-    assert.ok(output.includes('hooks[0] has "checks"'))
+    assert.ok(output.includes('hooks.claude.Stop[0]'))
     assert.ok(output.includes('prove_it reinstall && prove_it reinit'))
   })
 

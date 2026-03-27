@@ -36,15 +36,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
 
   describe('EnterPlanMode — silent pass-through', () => {
     it('exits silently when signal-gated tasks exist', () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }] } }))
 
       const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
@@ -58,7 +50,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
     })
 
     it('exits silently when no signal-gated tasks exist', () => {
-      writeConfig(tmpDir, makeConfig([]))
+      writeConfig(tmpDir, makeConfig({}))
 
       const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
@@ -72,16 +64,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
     })
 
     it('runs user-configured tasks matched on EnterPlanMode', () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'EnterPlanMode',
-          tasks: [
-            { name: 'plan-entry-hook', type: 'script', command: 'echo "plan mode activated"', quiet: true }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [{ name: 'plan-entry-hook', matcher: 'EnterPlanMode', type: 'script', command: 'echo "plan mode activated"', quiet: true }] } }))
 
       const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',
@@ -100,15 +83,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
 
   describe('ExitPlanMode — plan file editing', () => {
     it('inserts signal task as next numbered step with ### headings', () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }] } }))
 
       const plansDir = path.join(tmpDir, '.claude', 'plans')
       fs.mkdirSync(plansDir, { recursive: true })
@@ -142,15 +117,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
     })
 
     it('inserts signal task with ## Step N: style headings', () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }] } }))
 
       const plansDir = path.join(tmpDir, '.claude', 'plans')
       fs.mkdirSync(plansDir, { recursive: true })
@@ -170,15 +137,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
     })
 
     it('falls back to appending when no numbered headings found', () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }] } }))
 
       const plansDir = path.join(tmpDir, '.claude', 'plans')
       fs.mkdirSync(plansDir, { recursive: true })
@@ -199,15 +158,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
     })
 
     it('numbers signal step when plan has a single numbered heading', () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }] } }))
 
       const plansDir = path.join(tmpDir, '.claude', 'plans')
       fs.mkdirSync(plansDir, { recursive: true })
@@ -228,15 +179,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
     })
 
     it('does not double-append signal task', () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }] } }))
 
       const plansDir = path.join(tmpDir, '.claude', 'plans')
       fs.mkdirSync(plansDir, { recursive: true })
@@ -264,7 +207,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
     })
 
     it('skips editing when no signal-gated tasks exist', () => {
-      writeConfig(tmpDir, makeConfig([]))
+      writeConfig(tmpDir, makeConfig({}))
 
       const plansDir = path.join(tmpDir, '.claude', 'plans')
       fs.mkdirSync(plansDir, { recursive: true })
@@ -287,15 +230,7 @@ describe('Plan mode enforcement via PreToolUse', () => {
     })
 
     it('allows even when plan file not found', () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }] } }))
 
       // No plans dir at all
       const result = invokeHook('claude:PreToolUse', {

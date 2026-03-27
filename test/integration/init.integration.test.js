@@ -311,13 +311,13 @@ describe('init integration', () => {
 
       // edited (non-sources modification)
       const cfg2 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
-      cfg2.hooks = []
+      cfg2.hooks = { claude: { Stop: [{ name: 'custom', type: 'script', command: 'true' }] } }
       fs.writeFileSync(cfgPath, JSON.stringify(cfg2, null, 2) + '\n')
       r = initProject(tmpDir, { gitHooks: false, defaultChecks: true })
       assert.ok(r.teamConfig.edited)
 
       // Legacy (no initSeed) → edited
-      fs.writeFileSync(cfgPath, JSON.stringify({ hooks: [] }, null, 2) + '\n')
+      fs.writeFileSync(cfgPath, JSON.stringify({ hooks: {} }, null, 2) + '\n')
       r = initProject(tmpDir, { gitHooks: false, defaultChecks: false })
       assert.ok(r.teamConfig.edited)
 

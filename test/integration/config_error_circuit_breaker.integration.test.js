@@ -41,7 +41,7 @@ describe('Config error circuit breaker', () => {
     fs.writeFileSync(cfgPath, JSON.stringify({
       enabled: true,
       staleKeyFromOldVersion: true,
-      hooks: []
+      hooks: {}
     }), 'utf8')
   }
 
@@ -255,7 +255,7 @@ describe('Config error circuit breaker', () => {
 
   describe('JSON parse error is non-blocking', () => {
     it('emits allow for PreToolUse with malformed stdin', () => {
-      writeConfig(tmpDir, { enabled: true, hooks: [] })
+      writeConfig(tmpDir, { enabled: true, hooks: {} })
       const { spawnSync: sp } = require('child_process')
       const CLI_PATH = path.join(__dirname, '..', '..', 'cli.js')
       const env = { ...isolatedEnv(tmpDir), CLAUDE_PROJECT_DIR: tmpDir }
@@ -275,7 +275,7 @@ describe('Config error circuit breaker', () => {
     })
 
     it('emits approve for Stop with malformed stdin', () => {
-      writeConfig(tmpDir, { enabled: true, hooks: [] })
+      writeConfig(tmpDir, { enabled: true, hooks: {} })
       const { spawnSync: sp } = require('child_process')
       const CLI_PATH = path.join(__dirname, '..', '..', 'cli.js')
       const env = { ...isolatedEnv(tmpDir), CLAUDE_PROJECT_DIR: tmpDir }

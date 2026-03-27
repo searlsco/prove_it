@@ -39,16 +39,7 @@ describe('PostToolUse dispatch', () => {
     createFile(tmpDir, 'echo-tool.sh', '#!/usr/bin/env bash\necho "post-tool-ran"\n')
     makeExecutable(path.join(tmpDir, 'echo-tool.sh'))
 
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PostToolUse',
-        matcher: 'Bash',
-        tasks: [
-          { name: 'post-check', type: 'script', command: './echo-tool.sh' }
-        ]
-      }
-    ]))
+    writeConfig(tmpDir, makeConfig({ claude: { PostToolUse: [{ name: 'post-check', matcher: 'Bash', type: 'script', command: './echo-tool.sh' }] } }))
 
     const result = invokeHook('claude:PostToolUse', {
       hook_event_name: 'PostToolUse',
@@ -67,16 +58,7 @@ describe('PostToolUse dispatch', () => {
     createFile(tmpDir, 'echo-tool.sh', '#!/usr/bin/env bash\necho "should-not-run"\n')
     makeExecutable(path.join(tmpDir, 'echo-tool.sh'))
 
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PostToolUse',
-        matcher: 'Bash',
-        tasks: [
-          { name: 'post-check', type: 'script', command: './echo-tool.sh' }
-        ]
-      }
-    ]))
+    writeConfig(tmpDir, makeConfig({ claude: { PostToolUse: [{ name: 'post-check', matcher: 'Bash', type: 'script', command: './echo-tool.sh' }] } }))
 
     const result = invokeHook('claude:PostToolUse', {
       hook_event_name: 'PostToolUse',
@@ -95,16 +77,7 @@ describe('PostToolUse dispatch', () => {
     createFile(tmpDir, 'read-response.sh', '#!/usr/bin/env bash\nread input\necho "$input" | node -e "process.stdin.on(\'data\',d=>{const j=JSON.parse(d);process.stdout.write(j.tool_response||\'none\')})"\n')
     makeExecutable(path.join(tmpDir, 'read-response.sh'))
 
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PostToolUse',
-        matcher: 'Bash',
-        tasks: [
-          { name: 'read-response', type: 'script', command: './read-response.sh' }
-        ]
-      }
-    ]))
+    writeConfig(tmpDir, makeConfig({ claude: { PostToolUse: [{ name: 'read-response', matcher: 'Bash', type: 'script', command: './read-response.sh' }] } }))
 
     const result = invokeHook('claude:PostToolUse', {
       hook_event_name: 'PostToolUse',
@@ -138,16 +111,7 @@ describe('PostToolUseFailure dispatch', () => {
     createFile(tmpDir, 'echo-fail.sh', '#!/usr/bin/env bash\necho "failure-handled"\n')
     makeExecutable(path.join(tmpDir, 'echo-fail.sh'))
 
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PostToolUseFailure',
-        matcher: 'Bash',
-        tasks: [
-          { name: 'fail-handler', type: 'script', command: './echo-fail.sh' }
-        ]
-      }
-    ]))
+    writeConfig(tmpDir, makeConfig({ claude: { PostToolUseFailure: [{ name: 'fail-handler', matcher: 'Bash', type: 'script', command: './echo-fail.sh' }] } }))
 
     const result = invokeHook('claude:PostToolUseFailure', {
       hook_event_name: 'PostToolUseFailure',
@@ -166,16 +130,7 @@ describe('PostToolUseFailure dispatch', () => {
     createFile(tmpDir, 'echo-fail.sh', '#!/usr/bin/env bash\necho "noted"\n')
     makeExecutable(path.join(tmpDir, 'echo-fail.sh'))
 
-    writeConfig(tmpDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'PostToolUseFailure',
-        matcher: 'Bash',
-        tasks: [
-          { name: 'fail-handler', type: 'script', command: './echo-fail.sh' }
-        ]
-      }
-    ]))
+    writeConfig(tmpDir, makeConfig({ claude: { PostToolUseFailure: [{ name: 'fail-handler', matcher: 'Bash', type: 'script', command: './echo-fail.sh' }] } }))
 
     const result = invokeHook('claude:PostToolUseFailure', {
       hook_event_name: 'PostToolUseFailure',

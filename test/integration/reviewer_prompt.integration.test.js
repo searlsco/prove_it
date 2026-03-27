@@ -55,23 +55,21 @@ describe('Reviewer prompt passthrough (v2)', () => {
 
   describe('Reviewer receives correct diff content', () => {
     it('commit reviewer receives staged diff in prompt', () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Bash',
-          triggers: ['(^|\\s)git\\s+commit\\b'],
-          tasks: [
-            { name: 'full-tests', type: 'script', command: './script/test' },
+      writeConfig(tmpDir, makeConfig({
+        claude: {
+          PreToolUse: [
+            { name: 'full-tests', triggers: ['(^|\\s)git\\s+commit\\b'], matcher: 'Bash', type: 'script', command: './script/test' },
             {
               name: 'commit-review',
+              triggers: ['(^|\\s)git\\s+commit\\b'],
+              matcher: 'Bash',
               type: 'agent',
               command: path.join(tmpDir, 'capture_reviewer.sh'),
               prompt: 'Review these staged changes:\n\n{{staged_diff}}'
             }
           ]
         }
-      ]))
+      }))
 
       // Stage a file so git diff --cached has content
       createFile(tmpDir, 'src/app.js', 'function app() { return 1; }\n')
@@ -96,23 +94,21 @@ describe('Reviewer prompt passthrough (v2)', () => {
 
   describe('Custom reviewer prompt from config', () => {
     it('reviewer uses custom prompt template', () => {
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Bash',
-          triggers: ['(^|\\s)git\\s+commit\\b'],
-          tasks: [
-            { name: 'full-tests', type: 'script', command: './script/test' },
+      writeConfig(tmpDir, makeConfig({
+        claude: {
+          PreToolUse: [
+            { name: 'full-tests', triggers: ['(^|\\s)git\\s+commit\\b'], matcher: 'Bash', type: 'script', command: './script/test' },
             {
               name: 'sql-review',
+              triggers: ['(^|\\s)git\\s+commit\\b'],
+              matcher: 'Bash',
               type: 'agent',
               command: path.join(tmpDir, 'capture_reviewer.sh'),
               prompt: 'Check for SQL injection only\n\n{{staged_diff}}'
             }
           ]
         }
-      ]))
+      }))
 
       createFile(tmpDir, 'src/db.js', 'function query(sql) { return sql; }\n')
       spawnSync('git', ['add', 'src/db.js'], { cwd: tmpDir })
@@ -141,23 +137,21 @@ describe('Reviewer prompt passthrough (v2)', () => {
         '#!/usr/bin/env bash\ncat > /dev/null\necho "FAIL: untested code"\n')
       makeExecutable(path.join(tmpDir, 'fail_reviewer.sh'))
 
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Bash',
-          triggers: ['(^|\\s)git\\s+commit\\b'],
-          tasks: [
-            { name: 'full-tests', type: 'script', command: './script/test' },
+      writeConfig(tmpDir, makeConfig({
+        claude: {
+          PreToolUse: [
+            { name: 'full-tests', triggers: ['(^|\\s)git\\s+commit\\b'], matcher: 'Bash', type: 'script', command: './script/test' },
             {
               name: 'commit-review',
+              triggers: ['(^|\\s)git\\s+commit\\b'],
+              matcher: 'Bash',
               type: 'agent',
               command: path.join(tmpDir, 'fail_reviewer.sh'),
               prompt: 'Review these changes:\n\n{{staged_diff}}'
             }
           ]
         }
-      ]))
+      }))
 
       createFile(tmpDir, 'src/new.js', 'function untested() {}\n')
       spawnSync('git', ['add', 'src/new.js'], { cwd: tmpDir })

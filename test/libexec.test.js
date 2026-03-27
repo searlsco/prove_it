@@ -1,5 +1,8 @@
-const { describe, it } = require('node:test')
+const { describe, it, beforeEach, afterEach } = require('node:test')
 const assert = require('node:assert')
+const fs = require('fs')
+const path = require('path')
+const os = require('os')
 const { guardConfig, matchesAnyPattern } = require('../libexec/guard-config')
 const { runBriefing } = require('../libexec/briefing')
 
@@ -219,16 +222,39 @@ describe('libexec/guard-config', () => {
 })
 
 describe('libexec/briefing', () => {
+  let tmpDir
+  let origProveItDir
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_briefing_'))
+    origProveItDir = process.env.PROVE_IT_DIR
+    // Isolate from the user's real global config (ancestor walk would find it)
+    process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+    fs.mkdirSync(process.env.PROVE_IT_DIR, { recursive: true })
+    fs.writeFileSync(
+      path.join(process.env.PROVE_IT_DIR, 'config.json'),
+      JSON.stringify({ enabled: true, hooks: {} }),
+      'utf8'
+    )
+  })
+
+  afterEach(() => {
+    if (origProveItDir === undefined) {
+      delete process.env.PROVE_IT_DIR
+    } else {
+      process.env.PROVE_IT_DIR = origProveItDir
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
   it('returns briefing text for valid project', () => {
-    const text = runBriefing(process.cwd())
+    // Use tmpDir as projectDir to avoid ancestor walk finding old-format configs
+    const text = runBriefing(tmpDir)
     assert.ok(text.includes('prove_it'), 'should contain prove_it in briefing')
   })
 
   it('handles invalid projectDir without throwing', () => {
-    // runBriefing itself may throw; that's fine for unit test —
-    // the script wrapper catches it. Test that it at least returns a string
-    // for the current project.
-    const text = runBriefing(process.cwd())
+    const text = runBriefing(tmpDir)
     assert.strictEqual(typeof text, 'string')
   })
 })

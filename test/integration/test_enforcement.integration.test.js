@@ -29,17 +29,13 @@ const {
  */
 
 function commitGateHooks (testCommand = './script/test') {
-  return [
-    {
-      type: 'claude',
-      event: 'PreToolUse',
-      matcher: 'Bash',
-      triggers: ['(^|\\s)git\\s+commit\\b'],
-      tasks: [
-        { name: 'full-tests', type: 'script', command: testCommand }
+  return {
+    claude: {
+      PreToolUse: [
+        { name: 'full-tests', matcher: 'Bash', triggers: ['(^|\\s)git\\s+commit\\b'], type: 'script', command: testCommand }
       ]
     }
-  ]
+  }
 }
 
 describe('v2 dispatcher: test enforcement', () => {
@@ -247,17 +243,7 @@ describe('v2 dispatcher: test enforcement', () => {
   describe('configurable triggers', () => {
     it('triggers on git push when configured', () => {
       createTestScript(tmpDir, true)
-      writeConfig(tmpDir, makeConfig([
-        {
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Bash',
-          triggers: ['(^|\\s)git\\s+commit\\b', '(^|\\s)git\\s+push\\b'],
-          tasks: [
-            { name: 'full-tests', type: 'script', command: './script/test' }
-          ]
-        }
-      ]))
+      writeConfig(tmpDir, makeConfig({ claude: { PreToolUse: [{ name: 'full-tests', triggers: ['(^|\\s)git\\s+commit\\b', '(^|\\s)git\\s+push\\b'], matcher: 'Bash', type: 'script', command: './script/test' }] } }))
 
       const result = invokeHook('claude:PreToolUse', {
         hook_event_name: 'PreToolUse',

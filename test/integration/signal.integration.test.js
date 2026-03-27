@@ -35,10 +35,7 @@ describe('signal integration', () => {
 
   it('PreToolUse intercepts prove_it signal done and records signal', () => {
     createFastTestScript(projectDir, true)
-    writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*', tasks: [] },
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { PreToolUse: [], Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
     const result = invokeHook('claude:PreToolUse', {
       session_id: 'sig-int-1',
@@ -62,10 +59,7 @@ describe('signal integration', () => {
 
   it('PreToolUse intercepts prove_it signal with --message', () => {
     createFastTestScript(projectDir, true)
-    writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] },
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { PreToolUse: [], Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
     const result = invokeHook('claude:PreToolUse', {
       session_id: 'sig-int-msg',
@@ -84,16 +78,14 @@ describe('signal integration', () => {
     setSignal('sig-stop-fire', 'done', null)
     createFastTestScript(projectDir, true)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
+    writeConfig(projectDir, makeConfig({
+      claude: {
+        Stop: [
           { name: 'fast-tests', type: 'script', command: './script/test_fast' },
           { name: 'signal-gated', type: 'script', command: 'echo signal-task-ran', when: { signal: 'done' } }
         ]
       }
-    ]))
+    }))
 
     const result = invokeHook('claude:Stop', {
       session_id: 'sig-stop-fire'
@@ -106,16 +98,14 @@ describe('signal integration', () => {
   it('Stop with when: { signal: "done" } skips when no signal active', () => {
     createFastTestScript(projectDir, true)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
+    writeConfig(projectDir, makeConfig({
+      claude: {
+        Stop: [
           { name: 'fast-tests', type: 'script', command: './script/test_fast' },
           { name: 'signal-gated', type: 'script', command: 'echo should-not-run', when: { signal: 'done' } }
         ]
       }
-    ]))
+    }))
 
     const result = invokeHook('claude:Stop', {
       session_id: 'sig-stop-skip'
@@ -129,15 +119,7 @@ describe('signal integration', () => {
     setSignal('sig-stop-clear', 'done', null)
     createFastTestScript(projectDir, true)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
-          { name: 'fast-tests', type: 'script', command: './script/test_fast' }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
     invokeHook('claude:Stop', {
       session_id: 'sig-stop-clear'
@@ -150,15 +132,7 @@ describe('signal integration', () => {
     setSignal('sig-stop-fail', 'done', null)
     createFastTestScript(projectDir, false)
 
-    writeConfig(projectDir, makeConfig([
-      {
-        type: 'claude',
-        event: 'Stop',
-        tasks: [
-          { name: 'fast-tests', type: 'script', command: './script/test_fast' }
-        ]
-      }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
     invokeHook('claude:Stop', {
       session_id: 'sig-stop-fail'
@@ -171,10 +145,7 @@ describe('signal integration', () => {
 
   it('PreToolUse falls through for unknown signal types', () => {
     createFastTestScript(projectDir, true)
-    writeConfig(projectDir, makeConfig([
-      { type: 'claude', event: 'PreToolUse', matcher: 'Bash', tasks: [] },
-      { type: 'claude', event: 'Stop', tasks: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] }
-    ]))
+    writeConfig(projectDir, makeConfig({ claude: { PreToolUse: [], Stop: [{ name: 'fast-tests', type: 'script', command: './script/test_fast' }] } }))
 
     const result = invokeHook('claude:PreToolUse', {
       session_id: 'sig-unknown',

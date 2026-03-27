@@ -10,7 +10,7 @@ describe('CONFIG_DEFAULTS', () => {
     assert.deepStrictEqual(CONFIG_DEFAULTS.tests, [])
     assert.deepStrictEqual(CONFIG_DEFAULTS.testCommands, [])
     assert.strictEqual(CONFIG_DEFAULTS.model, 'sonnet')
-    assert.deepStrictEqual(CONFIG_DEFAULTS.hooks, [])
+    assert.deepStrictEqual(CONFIG_DEFAULTS.hooks, {})
     assert.strictEqual(CONFIG_DEFAULTS.maxAgentTurns, 20)
     assert.deepStrictEqual(CONFIG_DEFAULTS.format, { maxOutputChars: 12000 })
     assert.deepStrictEqual(CONFIG_DEFAULTS.taskEnv, { TURBOCOMMIT_DISABLED: '1' })

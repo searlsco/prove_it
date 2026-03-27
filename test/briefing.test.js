@@ -6,24 +6,24 @@ const { buildConfig } = require('../lib/config')
 describe('briefing', () => {
   describe('renderBriefing', () => {
     it('contains prove_it header', () => {
-      const text = renderBriefing({ hooks: [] })
+      const text = renderBriefing({ hooks: {} })
       assert.ok(text.includes('# prove_it'), 'should have markdown header')
       assert.ok(text.includes('Verification Framework'), 'should describe what prove_it is')
     })
 
     it('shows simple header when no done-signal tasks', () => {
-      const text = renderBriefing({ hooks: [] })
+      const text = renderBriefing({ hooks: {} })
       assert.ok(text.includes('supervisory framework'), 'should describe what prove_it is')
       assert.ok(!text.includes('YOUR OBLIGATIONS'), 'should not show obligations')
     })
 
     it('shows obligations when done-signal tasks exist', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [{ name: 'review', type: 'agent', when: { signal: 'done' } }]
-        }]
+        hooks: {
+          claude: {
+            Stop: [{ name: 'review', type: 'agent', when: { signal: 'done' } }]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(text.includes('YOUR OBLIGATIONS'), 'should show obligations header')
@@ -35,11 +35,11 @@ describe('briefing', () => {
 
     it('omits obligations when no done-signal tasks', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [{ name: 'review', type: 'agent', when: { signal: 'stuck' } }]
-        }]
+        hooks: {
+          claude: {
+            Stop: [{ name: 'review', type: 'agent', when: { signal: 'stuck' } }]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(!text.includes('YOUR OBLIGATIONS'), 'should not show obligations')
@@ -47,17 +47,17 @@ describe('briefing', () => {
     })
 
     it('has separator between zones', () => {
-      const text = renderBriefing({ hooks: [] })
+      const text = renderBriefing({ hooks: {} })
       assert.ok(text.includes('\n---\n'), 'should have separator')
     })
 
     it('has reference section with markdown headers', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [{ name: 'review', type: 'agent' }]
-        }]
+        hooks: {
+          claude: {
+            Stop: [{ name: 'review', type: 'agent' }]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(text.includes('## How prove_it works (reference)'), 'should have reference header')
@@ -67,12 +67,11 @@ describe('briefing', () => {
 
     it('renders PreToolUse tasks with matcher in heading', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'PreToolUse',
-          matcher: 'Edit|Write',
-          tasks: [{ name: 'lock-config', type: 'script', command: '$(prove_it prefix)/libexec/guard-config' }]
-        }]
+        hooks: {
+          claude: {
+            PreToolUse: [{ name: 'lock-config', type: 'script', command: '$(prove_it prefix)/libexec/guard-config', matcher: 'Edit|Write' }]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(text.includes('Before tool use (Edit, Write)'), 'should show matcher tools')
@@ -81,14 +80,14 @@ describe('briefing', () => {
 
     it('renders Stop tasks (script + agent)', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'fast-tests', type: 'script', command: './script/test_fast' },
-            { name: 'code-review', type: 'agent', prompt: 'Review this', when: { linesWritten: 733 } }
-          ]
-        }]
+        hooks: {
+          claude: {
+            Stop: [
+              { name: 'fast-tests', type: 'script', command: './script/test_fast' },
+              { name: 'code-review', type: 'agent', prompt: 'Review this', when: { linesWritten: 733 } }
+            ]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(text.includes('After each turn'), 'should show Stop label')
@@ -99,18 +98,12 @@ describe('briefing', () => {
 
     it('renders git hook tasks', () => {
       const cfg = {
-        hooks: [
-          {
-            type: 'git',
-            event: 'pre-commit',
-            tasks: [{ name: 'full-tests', type: 'script', command: './script/test' }]
-          },
-          {
-            type: 'git',
-            event: 'pre-push',
-            tasks: [{ name: 'deploy-check', type: 'script', command: './script/deploy_check' }]
+        hooks: {
+          git: {
+            'pre-commit': [{ name: 'full-tests', type: 'script', command: './script/test' }],
+            'pre-push': [{ name: 'deploy-check', type: 'script', command: './script/deploy_check' }]
           }
-        ]
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(text.includes('On git commit'), 'should show pre-commit label')
@@ -121,20 +114,20 @@ describe('briefing', () => {
 
     it('describes agent when conditions in English', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [{
-            name: 'review',
-            type: 'agent',
-            when: {
-              linesWritten: 500,
-              linesChanged: 200,
-              sourceFilesEditedThisTurn: true,
-              fileExists: 'script/test'
-            }
-          }]
-        }]
+        hooks: {
+          claude: {
+            Stop: [{
+              name: 'review',
+              type: 'agent',
+              when: {
+                linesWritten: 500,
+                linesChanged: 200,
+                sourceFilesEditedThisTurn: true,
+                fileExists: 'script/test'
+              }
+            }]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(text.includes('500+ lines written'), 'should describe linesWritten')
@@ -145,14 +138,14 @@ describe('briefing', () => {
 
     it('skips the session-briefing task itself', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'SessionStart',
-          tasks: [
-            { name: 'session-briefing', type: 'script', command: '$(prove_it prefix)/libexec/briefing' },
-            { name: 'other-task', type: 'script', command: 'echo hello' }
-          ]
-        }]
+        hooks: {
+          claude: {
+            SessionStart: [
+              { name: 'session-briefing', type: 'script', command: '$(prove_it prefix)/libexec/briefing' },
+              { name: 'other-task', type: 'script', command: 'echo hello' }
+            ]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(!text.includes('session-briefing'), 'should not mention itself')
@@ -161,20 +154,14 @@ describe('briefing', () => {
 
     it('omits sections with zero renderable tasks', () => {
       const cfg = {
-        hooks: [
-          {
-            type: 'claude',
-            event: 'SessionStart',
-            tasks: [
+        hooks: {
+          claude: {
+            SessionStart: [
               { name: 'session-briefing', type: 'script', command: '$(prove_it prefix)/libexec/briefing' }
-            ]
-          },
-          {
-            type: 'claude',
-            event: 'Stop',
-            tasks: [{ name: 'tests', type: 'script', command: './script/test' }]
+            ],
+            Stop: [{ name: 'tests', type: 'script', command: './script/test' }]
           }
-        ]
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(!text.includes('On session start'), 'should omit SessionStart when only briefing task')
@@ -183,11 +170,11 @@ describe('briefing', () => {
 
     it('includes "Handling review failures" when agent tasks exist', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [{ name: 'review', type: 'agent' }]
-        }]
+        hooks: {
+          claude: {
+            Stop: [{ name: 'review', type: 'agent' }]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(text.includes('### Handling review failures'), 'should include review section')
@@ -197,11 +184,11 @@ describe('briefing', () => {
 
     it('has numbered steps in review failures section', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [{ name: 'review', type: 'agent' }]
-        }]
+        hooks: {
+          claude: {
+            Stop: [{ name: 'review', type: 'agent' }]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(text.includes('1. The FAIL message includes'), 'should have step 1')
@@ -211,11 +198,11 @@ describe('briefing', () => {
 
     it('omits review section when no agent tasks', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [{ name: 'tests', type: 'script', command: './script/test' }]
-        }]
+        hooks: {
+          claude: {
+            Stop: [{ name: 'tests', type: 'script', command: './script/test' }]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(!text.includes('Handling review failures'), 'should not include review section')
@@ -223,11 +210,11 @@ describe('briefing', () => {
 
     it('includes signal-gated tasks section when signal-gated tasks exist', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [{ name: 'done-review', type: 'agent', when: { signal: 'done' } }]
-        }]
+        hooks: {
+          claude: {
+            Stop: [{ name: 'done-review', type: 'agent', when: { signal: 'done' } }]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(text.includes('### Signal-gated tasks'), 'should include signal section')
@@ -237,11 +224,11 @@ describe('briefing', () => {
 
     it('shows "last ran" timing for signal-gated tasks when run data provided', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [{ name: 'full-tests', type: 'script', command: './script/test', when: { signal: 'done' } }]
-        }]
+        hooks: {
+          claude: {
+            Stop: [{ name: 'full-tests', type: 'script', command: './script/test', when: { signal: 'done' } }]
+          }
+        }
       }
       const runs = { 'full-tests': { at: Date.now() - 2 * 60 * 60 * 1000, result: 'pass' } }
       const text = renderBriefing(cfg, runs)
@@ -251,11 +238,11 @@ describe('briefing', () => {
 
     it('shows "never" for signal-gated tasks with no run data', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [{ name: 'deploy-check', type: 'agent', when: { signal: 'done' } }]
-        }]
+        hooks: {
+          claude: {
+            Stop: [{ name: 'deploy-check', type: 'agent', when: { signal: 'done' } }]
+          }
+        }
       }
       const text = renderBriefing(cfg, {})
       assert.ok(text.includes('**deploy-check**—last ran never'), 'should show bold name with never')
@@ -263,11 +250,11 @@ describe('briefing', () => {
 
     it('backward compat: renderBriefing(cfg) works without runs arg', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [{ name: 'my-task', type: 'script', command: 'true', when: { signal: 'done' } }]
-        }]
+        hooks: {
+          claude: {
+            Stop: [{ name: 'my-task', type: 'script', command: 'true', when: { signal: 'done' } }]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(text.includes('**my-task**—last ran never'), 'should default to never')
@@ -275,11 +262,11 @@ describe('briefing', () => {
 
     it('discovers signal-gated tasks with array-form when', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [{ name: 'arr-review', type: 'agent', when: [{ signal: 'done', linesChanged: 500 }] }]
-        }]
+        hooks: {
+          claude: {
+            Stop: [{ name: 'arr-review', type: 'agent', when: [{ signal: 'done', linesChanged: 500 }] }]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(text.includes('### Signal-gated tasks'), 'should include signal section')
@@ -289,11 +276,11 @@ describe('briefing', () => {
 
     it('omits signal-gated tasks section when no signal-gated tasks', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [{ name: 'tests', type: 'script', command: './script/test' }]
-        }]
+        hooks: {
+          claude: {
+            Stop: [{ name: 'tests', type: 'script', command: './script/test' }]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(!text.includes('Signal-gated tasks'), 'should not include signal section')
@@ -301,13 +288,13 @@ describe('briefing', () => {
 
     it('shows non-done signal directives in signal-gated section', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'Stop',
-          tasks: [
-            { name: 'help-check', type: 'agent', when: { signal: 'stuck' } }
-          ]
-        }]
+        hooks: {
+          claude: {
+            Stop: [
+              { name: 'help-check', type: 'agent', when: { signal: 'stuck' } }
+            ]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(text.includes('prove_it signal stuck'), 'should include stuck directive')
@@ -330,7 +317,7 @@ describe('briefing', () => {
     })
 
     it('handles empty hooks gracefully', () => {
-      const text = renderBriefing({ hooks: [] })
+      const text = renderBriefing({ hooks: {} })
       assert.ok(text.includes('# prove_it'), 'should still have header')
       assert.ok(!text.includes('Handling review failures'), 'no review section with no tasks')
     })
@@ -342,12 +329,11 @@ describe('briefing', () => {
 
     it('renders env tasks', () => {
       const cfg = {
-        hooks: [{
-          type: 'claude',
-          event: 'SessionStart',
-          source: 'startup|resume',
-          tasks: [{ name: 'setup-env', type: 'env' }]
-        }]
+        hooks: {
+          claude: {
+            SessionStart: [{ name: 'setup-env', type: 'env' }]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       assert.ok(text.includes('**setup-env**'), 'should show bold env task name')
@@ -356,11 +342,15 @@ describe('briefing', () => {
 
     it('sorts events in lifecycle order', () => {
       const cfg = {
-        hooks: [
-          { type: 'git', event: 'pre-commit', tasks: [{ name: 'commit-check', type: 'script', command: 'true' }] },
-          { type: 'claude', event: 'Stop', tasks: [{ name: 'stop-check', type: 'script', command: 'true' }] },
-          { type: 'claude', event: 'PreToolUse', matcher: 'Edit', tasks: [{ name: 'pre-check', type: 'script', command: 'true' }] }
-        ]
+        hooks: {
+          git: {
+            'pre-commit': [{ name: 'commit-check', type: 'script', command: 'true' }]
+          },
+          claude: {
+            Stop: [{ name: 'stop-check', type: 'script', command: 'true' }],
+            PreToolUse: [{ name: 'pre-check', type: 'script', command: 'true', matcher: 'Edit' }]
+          }
+        }
       }
       const text = renderBriefing(cfg)
       const preToolPos = text.indexOf('Before tool use')
@@ -373,33 +363,33 @@ describe('briefing', () => {
 
   describe('eventLabel', () => {
     it('labels SessionStart', () => {
-      assert.strictEqual(eventLabel({ type: 'claude', event: 'SessionStart' }), 'On session start')
+      assert.strictEqual(eventLabel('claude', 'SessionStart', []), 'On session start')
     })
 
     it('labels PreToolUse with matcher', () => {
       assert.strictEqual(
-        eventLabel({ type: 'claude', event: 'PreToolUse', matcher: 'Edit|Write|Bash' }),
+        eventLabel('claude', 'PreToolUse', [{ matcher: 'Edit|Write|Bash' }]),
         'Before tool use (Edit, Write, Bash)'
       )
     })
 
     it('labels PreToolUse without matcher', () => {
       assert.strictEqual(
-        eventLabel({ type: 'claude', event: 'PreToolUse' }),
+        eventLabel('claude', 'PreToolUse', []),
         'Before tool use (any tool)'
       )
     })
 
     it('labels Stop', () => {
-      assert.strictEqual(eventLabel({ type: 'claude', event: 'Stop' }), 'After each turn')
+      assert.strictEqual(eventLabel('claude', 'Stop', []), 'After each turn')
     })
 
     it('labels git pre-commit', () => {
-      assert.strictEqual(eventLabel({ type: 'git', event: 'pre-commit' }), 'On git commit')
+      assert.strictEqual(eventLabel('git', 'pre-commit', []), 'On git commit')
     })
 
     it('labels git pre-push', () => {
-      assert.strictEqual(eventLabel({ type: 'git', event: 'pre-push' }), 'On git push')
+      assert.strictEqual(eventLabel('git', 'pre-push', []), 'On git push')
     })
   })
 
