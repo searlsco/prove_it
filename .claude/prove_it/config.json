@@ -12,28 +12,22 @@
     "**/*_{test,spec}.*",
     "**/{test,tests,spec,specs,__tests__}/**/*.*"
   ],
-  "hooks": [
-    {
-      "type": "claude",
-      "event": "SessionStart",
-      "tasks": [
+  "hooks": {
+    "claude": {
+      "SessionStart": [
         {
           "name": "session-briefing",
           "type": "script",
           "command": "$(prove_it prefix)/libexec/briefing",
           "quiet": true
         }
-      ]
-    },
-    {
-      "type": "claude",
-      "event": "PreToolUse",
-      "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*",
-      "tasks": [
+      ],
+      "PreToolUse": [
         {
           "name": "lock-config",
           "type": "script",
           "command": "$(prove_it prefix)/libexec/guard-config",
+          "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*",
           "quiet": true,
           "params": {
             "paths": [
@@ -46,22 +40,17 @@
           "name": "test-first",
           "type": "script",
           "command": "$(prove_it prefix)/libexec/test-first",
+          "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|mcp__.*",
           "quiet": true,
           "params": {
             "untestedEditLimit": 3
           }
-        }
-      ]
-    },
-    {
-      "type": "claude",
-      "event": "PreToolUse",
-      "matcher": "ExitPlanMode",
-      "tasks": [
+        },
         {
           "name": "inject-tdd-plan",
           "type": "script",
           "command": "$(prove_it prefix)/libexec/inject-plan",
+          "matcher": "ExitPlanMode",
           "quiet": true,
           "briefing": "During implementation: follow BDD dual-loop TDD--start from a failing integration test, drive inward through unit-level red-green-refactor cycles, then confirm the integration test passes. During refactoring: run the test suite after every few edits to confirm behavior is preserved. To switch modes, run: prove_it phase implement  or  prove_it phase refactor",
           "params": {
@@ -70,12 +59,8 @@
             "block": "## Development approach\n\nFollow BDD dual-loop TDD. Every feature increment starts from a failing integration\ntest and is driven inward through unit-level red-green-refactor cycles.\n\n### Outer loop (integration)\n\n1. **Red (integration)** — Write one integration/acceptance test that describes the\n   next observable behavior from the outside in. Run it. Confirm it fails for the\n   reason you expect. Do not proceed until the failure message matches your intent.\n\n2. **Inner loop (unit) — repeat until the integration test can pass:**\n   - **Red** — Write the smallest unit test that expresses the next missing piece of\n     implementation the integration test needs.\n   - **Green** — Write the minimum production code to make that unit test pass.\n     Run it in isolation and confirm. No speculative code.\n   - **Refactor** — Clean up the code you just wrote (duplication, naming, structure)\n     while all unit tests stay green. Only touch code covered by passing tests.\n\n3. **Green (integration)** — When enough unit-level pieces exist, re-run the\n   integration test. If it still fails, diagnose which piece is missing and drop back\n   into the inner loop. Do not add code without a failing test driving it.\n\n4. **Refactor (integration)** — With the integration test green, refactor across\n   module boundaries if needed. All tests — unit and integration — must stay green.\n\n5. **Repeat from step 1** with the next slice of behavior until the task is complete.\n\n### Discipline rules\n\n- Never skip the red step. If you cannot articulate why a test fails, you do not yet\n  understand the requirement.\n- One logical change per cycle. If you are changing more than one behavior at a time,\n  split it.\n- Run only the relevant test after each green step, then the full suite before each\n  commit-worthy checkpoint.\n- If a refactor breaks a test, revert the refactor — do not fix forward.\n- Treat a surprise failure (wrong message, wrong location) as information: re-read it,\n  adjust your understanding, then proceed.\n"
           }
         }
-      ]
-    },
-    {
-      "type": "claude",
-      "event": "Stop",
-      "tasks": [
+      ],
+      "Stop": [
         {
           "name": "fast-tests",
           "type": "script",
@@ -132,10 +117,8 @@
         }
       ]
     },
-    {
-      "type": "git",
-      "event": "pre-commit",
-      "tasks": [
+    "git": {
+      "pre-commit": [
         {
           "name": "full-tests",
           "type": "script",
@@ -146,6 +129,6 @@
         }
       ]
     }
-  ],
+  },
   "initSeed": "e8159e705d04"
 }
