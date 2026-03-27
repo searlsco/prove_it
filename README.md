@@ -125,23 +125,21 @@ The `trap ... EXIT` pattern ensures results are always recorded, even when `set 
 
 ## Configuration
 
-prove_it is configured with a `hooks` array in `.claude/prove_it/config.json`. Each hook targets a lifecycle event and runs an ordered list of tasks:
+prove_it is configured with a `hooks` object in `.claude/prove_it/config.json`. Hooks are keyed by type (`claude`, `git`) then by event (`Stop`, `PreToolUse`, `SessionStart`, `pre-commit`, `pre-push`, etc.), with each event mapping to an ordered list of tasks:
 
 ```json
 {
   "enabled": true,
   "sources": ["src/**/*.js", "lib/**/*.js", "test/**/*.js"],
   "tests": ["test/**/*.test.js"],
-  "hooks": [
-    {
-      "type": "claude",
-      "event": "Stop",
-      "tasks": [
+  "hooks": {
+    "claude": {
+      "Stop": [
         { "name": "fast-tests", "type": "script", "command": "./script/test_fast" },
         { "name": "coverage-review", "type": "agent", "prompt": "Check coverage...\n\n{{session_diff}}" }
       ]
     }
-  ]
+  }
 }
 ```
 
@@ -152,6 +150,8 @@ Config files merge (later overrides earlier):
 1. `~/.claude/prove_it/config.json`—global defaults
 2. `.claude/prove_it/config.json`—project config (commit this)
 3. `.claude/prove_it/config.local.json`—local overrides (gitignored, per-developer)
+
+Hooks merge by task `name`: a task in a descendant config with the same name as one in an ancestor fully replaces the ancestor's task; a task with a new name is appended. Global tasks run first (most general to most specific). Other array fields (like `sources`) replace rather than merge.
 
 ### Source and test globs
 
@@ -266,15 +266,23 @@ Tasks have no timeout by default — they run until completion. Set an explicit 
 
 ### Matchers and triggers
 
-PreToolUse hooks can filter by tool name and command patterns:
+PreToolUse tasks can filter by tool name and command patterns using `matcher` and `triggers` on individual tasks:
 
 ```json
 {
-  "type": "claude",
-  "event": "PreToolUse",
-  "matcher": "Bash",
-  "triggers": ["(^|\\s)git\\s+commit\\b"],
-  "tasks": [...]
+  "hooks": {
+    "claude": {
+      "PreToolUse": [
+        {
+          "name": "guard-commits",
+          "type": "script",
+          "command": "./script/check",
+          "matcher": "Bash",
+          "triggers": ["(^|\\s)git\\s+commit\\b"]
+        }
+      ]
+    }
+  }
 }
 ```
 
@@ -790,7 +798,7 @@ When prove_it spawns reviewer subagents or runs script tasks, other hooks instal
   "taskEnv": {
     "TURBOCOMMIT_DISABLED": "1"
   },
-  "hooks": [...]
+  "hooks": { "claude": { "Stop": ["..."] } }
 }
 ```
 
@@ -812,7 +820,7 @@ If your custom agent tasks need tools outside the default list (e.g., MCP tools)
 ```json
 {
   "taskAllowedTools": ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "WebFetch", "WebSearch", "Task", "NotebookEdit", "mcp__xcode__XcodeBuild"],
-  "hooks": [...]
+  "hooks": { "claude": { "Stop": ["..."] } }
 }
 ```
 
@@ -821,7 +829,7 @@ If your custom agent tasks need tools outside the default list (e.g., MCP tools)
 ```json
 {
   "taskBypassPermissions": true,
-  "hooks": [...]
+  "hooks": { "claude": { "Stop": ["..."] } }
 }
 ```
 
@@ -837,7 +845,7 @@ By default, prove_it tracks Claude's built-in editing tools (`Edit`, `Write`, `N
 {
   "fileEditingTools": ["XcodeEdit"],
   "sources": ["**/*.swift", "**/*.m"],
-  "hooks": [...]
+  "hooks": { "claude": { "Stop": ["..."] } }
 }
 ```
 
@@ -854,7 +862,7 @@ prove_it stores session data in `~/.claude/prove_it/sessions/`—log files (`.js
 ```json
 {
   "format": { "maxOutputChars": 20000 },
-  "hooks": [...]
+  "hooks": { "claude": { "Stop": ["..."] } }
 }
 ```
 
@@ -927,7 +935,7 @@ prove_it doctor
   ```json
   {
     "fileEditingTools": ["XcodeEdit"],
-    "hooks": [...]
+    "hooks": { "claude": { "Stop": ["..."] } }
   }
   ```
 - **Async reviews not enforcing**—Async results are harvested on the next Stop. If Claude stops work before the async review completes, the result will be enforced on the stop after that. Check `prove_it monitor --verbose` to see RUNNING/DONE status progression.
@@ -967,11 +975,9 @@ chmod +x ~/bin/prove_it_tasks/prefer_gh_cli_over_fetch
 
 ```json
 {
-  "hooks": [
-    {
-      "type": "claude",
-      "event": "PreToolUse",
-      "tasks": [
+  "hooks": {
+    "claude": {
+      "PreToolUse": [
         {
           "name": "prefer-gh-cli-over-fetch",
           "type": "script",
@@ -980,13 +986,13 @@ chmod +x ~/bin/prove_it_tasks/prefer_gh_cli_over_fetch
         }
       ]
     }
-  ]
+  }
 }
 ```
 
 `quiet: true` suppresses log noise on every pass (most tool calls aren't WebFetch).
 
-**How it works:** prove_it pipes hook context (tool name, tool input, session ID) as JSON to script tasks on stdin. The script reads stdin, checks whether the tool is `WebFetch` with a GitHub URL, and exits 1 to deny it. Non-WebFetch tools exit 0 immediately. Because the PreToolUse registration has no matcher, prove_it sees all tool calls—individual scripts bail early for irrelevant tools.
+**How it works:** prove_it pipes hook context (tool name, tool input, session ID) as JSON to script tasks on stdin. The script reads stdin, checks whether the tool is `WebFetch` with a GitHub URL, and exits 1 to deny it. Non-WebFetch tools exit 0 immediately. Because the task has no `matcher`, prove_it sees all tool calls—individual scripts bail early for irrelevant tools.
 
 ## Examples
 

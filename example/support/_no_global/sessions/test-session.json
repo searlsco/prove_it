@@ -9,5 +9,11 @@
     "head": "c48d6caa1c8d3ef11100fb31484836b23b043d69",
     "status_hash": "92773473c87470a0affb034bb782e910651330bb2c9f726780f0aeb6331fc598"
   },
-  "configError": "prove_it: type error in /Users/justin/.claude/prove_it/config.json\n  \"hooks\" must be a object, got array\n\nTo fix: update the value in the file shown above, or run:\n  prove_it reinstall && prove_it reinit"
+  "configError": "prove_it: type error in /Users/justin/.claude/prove_it/config.json\n  \"hooks\" must be a object, got array\n\nTo fix: update the value in the file shown above, or run:\n  prove_it reinstall && prove_it reinit",
+  "successiveFailures": {
+    "session-briefing": 0,
+    "fast-tests": 0
+  },
+  "last_stop_head": "1f97f404eb87a33517af4b11a92c7ac91563823f",
+  "turnEdits": null
 }
