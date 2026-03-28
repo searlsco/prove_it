@@ -99,32 +99,28 @@ describe('protocol', () => {
       process.stdout.write = origWrite
     })
 
-    it('emits reason without permissionDecision', () => {
+    it('puts text into additionalContext (the only agent-visible field)', () => {
       emitPreToolUseContext('prove_it: all checks passed')
       const output = JSON.parse(captured)
       assert.strictEqual(output.hookSpecificOutput.hookEventName, 'PreToolUse')
-      assert.strictEqual(output.hookSpecificOutput.permissionDecisionReason, 'prove_it: all checks passed')
+      assert.strictEqual(output.hookSpecificOutput.additionalContext, 'prove_it: all checks passed')
+      assert.strictEqual(output.hookSpecificOutput.permissionDecisionReason, undefined)
       assert.strictEqual(output.hookSpecificOutput.permissionDecision, undefined)
     })
 
-    it('includes additionalContext when provided', () => {
-      emitPreToolUseContext('reason', { additionalContext: 'extra context' })
+    it('omits additionalContext when falsy', () => {
+      emitPreToolUseContext('')
       const output = JSON.parse(captured)
-      assert.strictEqual(output.hookSpecificOutput.additionalContext, 'extra context')
-      assert.strictEqual(output.hookSpecificOutput.permissionDecision, undefined)
+      assert.strictEqual(output.hookSpecificOutput.additionalContext, undefined)
+      assert.strictEqual(output.hookSpecificOutput.permissionDecisionReason, undefined)
     })
 
     it('includes systemMessage at top level when provided', () => {
       emitPreToolUseContext('reason', { systemMessage: 'sys msg' })
       const output = JSON.parse(captured)
       assert.strictEqual(output.systemMessage, 'sys msg')
+      assert.strictEqual(output.hookSpecificOutput.additionalContext, 'reason')
       assert.strictEqual(output.hookSpecificOutput.permissionDecision, undefined)
-    })
-
-    it('defaults reason to empty string when falsy', () => {
-      emitPreToolUseContext('')
-      const output = JSON.parse(captured)
-      assert.strictEqual(output.hookSpecificOutput.permissionDecisionReason, '')
     })
   })
 

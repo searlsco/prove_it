@@ -425,12 +425,8 @@ describe('v2 dispatcher: core hook behaviors', () => {
       )
       // The summary should be "all checks passed", not the task's individual reason
       assert.ok(
-        result.output.hookSpecificOutput.permissionDecisionReason.includes('all checks passed'),
-        `Summary should be "all checks passed" when only quiet tasks ran, got: ${result.output.hookSpecificOutput.permissionDecisionReason}`
-      )
-      assert.ok(
-        !result.output.hookSpecificOutput.permissionDecisionReason.includes('config:lock'),
-        `Quiet task reason should NOT appear in output, got: ${result.output.hookSpecificOutput.permissionDecisionReason}`
+        result.output.hookSpecificOutput.additionalContext.includes('all checks passed'),
+        `Summary should be "all checks passed" when only quiet tasks ran, got: ${result.output.hookSpecificOutput.additionalContext}`
       )
     })
 

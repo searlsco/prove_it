@@ -46,10 +46,10 @@ describe('signal integration', () => {
     assert.strictEqual(result.exitCode, 0)
     // Output is JSON with escaped quotes; check the parsed output
     assert.ok(result.output, 'Expected JSON output')
-    const reason = result.output.hookSpecificOutput?.permissionDecisionReason || ''
+    const context = result.output.hookSpecificOutput?.additionalContext || ''
     assert.ok(
-      reason.includes('signal "done" recorded'),
-      `Expected signal recorded in reason, got: ${reason}`
+      context.includes('signal "done" recorded'),
+      `Expected signal recorded in additionalContext, got: ${context}`
     )
 
     const signal = getSignal('sig-int-1')

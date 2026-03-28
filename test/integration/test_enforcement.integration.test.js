@@ -205,7 +205,7 @@ describe('v2 dispatcher: test enforcement', () => {
         'Circuit breaker must not emit permissionDecision (non-blocking pass)'
       )
       assert.ok(
-        output.hookSpecificOutput.permissionDecisionReason.includes('Failed to parse'),
+        output.hookSpecificOutput.additionalContext.includes('Failed to parse'),
         'Should explain the parse failure'
       )
     })

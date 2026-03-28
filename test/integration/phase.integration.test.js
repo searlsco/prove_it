@@ -41,10 +41,10 @@ describe('phase integration', () => {
     }, { projectDir, env })
 
     assert.strictEqual(result.exitCode, 0)
-    const reason = result.output.hookSpecificOutput?.permissionDecisionReason || ''
+    const context = result.output.hookSpecificOutput?.additionalContext || ''
     assert.ok(
-      reason.includes('phase "plan" recorded'),
-      `Expected phase recorded in reason, got: ${reason}`
+      context.includes('phase "plan" recorded'),
+      `Expected phase recorded in additionalContext, got: ${context}`
     )
     assert.strictEqual(getPhase('phase-int-1'), 'plan')
   })
