@@ -1,0 +1,22 @@
+{
+  "taskName": "coverage-review",
+  "task": {
+    "name": "coverage-review",
+    "type": "agent",
+    "async": true,
+    "promptType": "skill",
+    "prompt": "prove-coverage",
+    "model": "haiku",
+    "ruleFile": ".claude/rules/testing.md",
+    "when": {
+      "linesChanged": 541
+    }
+  },
+  "result": {
+    "pass": true,
+    "reason": "<<Reviewer provided no rationale>>",
+    "output": "",
+    "skipped": false
+  },
+  "completedAt": 1774700603076
+}
