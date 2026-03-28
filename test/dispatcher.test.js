@@ -481,7 +481,7 @@ describe('claude dispatcher', () => {
     })
   })
 
-  describe('evaluateWhen—sourceFilesEditedThisTurn', () => {
+  describe('evaluateWhen—sourceFilesEdited', () => {
     let tmpDir
     let origProveItDir
 
@@ -502,7 +502,7 @@ describe('claude dispatcher', () => {
 
     it('PreToolUse passes when tool is an edit tool and file matches sources', () => {
       const result = evaluateWhen(
-        { sourceFilesEditedThisTurn: true },
+        { sourceFilesEdited: true },
         {
           rootDir: tmpDir,
           hookEvent: 'PreToolUse',
@@ -518,7 +518,7 @@ describe('claude dispatcher', () => {
 
     it('PreToolUse skips when tool is not an edit tool', () => {
       const result = evaluateWhen(
-        { sourceFilesEditedThisTurn: true },
+        { sourceFilesEdited: true },
         {
           rootDir: tmpDir,
           hookEvent: 'PreToolUse',
@@ -535,7 +535,7 @@ describe('claude dispatcher', () => {
 
     it('PreToolUse skips when file is not a source file', () => {
       const result = evaluateWhen(
-        { sourceFilesEditedThisTurn: true },
+        { sourceFilesEdited: true },
         {
           rootDir: tmpDir,
           hookEvent: 'PreToolUse',
@@ -551,7 +551,7 @@ describe('claude dispatcher', () => {
 
     it('PreToolUse passes for custom fileEditingTools', () => {
       const result = evaluateWhen(
-        { sourceFilesEditedThisTurn: true },
+        { sourceFilesEdited: true },
         {
           rootDir: tmpDir,
           hookEvent: 'PreToolUse',
@@ -565,11 +565,60 @@ describe('claude dispatcher', () => {
       assert.strictEqual(result, true)
     })
 
+    it('PostToolUse passes when tool is an edit tool and file matches sources', () => {
+      const result = evaluateWhen(
+        { sourceFilesEdited: true },
+        {
+          rootDir: tmpDir,
+          hookEvent: 'PostToolUse',
+          toolName: 'Edit',
+          toolInput: { file_path: 'src/app.js' },
+          sources: ['**/*.js'],
+          fileEditingTools: BUILTIN_EDIT_TOOLS,
+          sessionId: null
+        }
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('PostToolUse skips when tool is not an edit tool', () => {
+      const result = evaluateWhen(
+        { sourceFilesEdited: true },
+        {
+          rootDir: tmpDir,
+          hookEvent: 'PostToolUse',
+          toolName: 'Read',
+          toolInput: { file_path: 'src/app.js' },
+          sources: ['**/*.js'],
+          fileEditingTools: BUILTIN_EDIT_TOOLS,
+          sessionId: null
+        }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('no source files were edited'), `Expected skip reason, got: ${result}`)
+    })
+
+    it('PostToolUse skips when file is not a source file', () => {
+      const result = evaluateWhen(
+        { sourceFilesEdited: true },
+        {
+          rootDir: tmpDir,
+          hookEvent: 'PostToolUse',
+          toolName: 'Edit',
+          toolInput: { file_path: 'README.md' },
+          sources: ['**/*.js'],
+          fileEditingTools: BUILTIN_EDIT_TOOLS,
+          sessionId: null
+        }
+      )
+      assert.notStrictEqual(result, true)
+    })
+
     it('Stop passes when session has file edits', () => {
       const sessionId = 'test-sfe-stop-pass'
       recordFileEdit(sessionId, 'Edit', 'src/app.js')
       const result = evaluateWhen(
-        { sourceFilesEditedThisTurn: true },
+        { sourceFilesEdited: true },
         { rootDir: '.', hookEvent: 'Stop', sessionId }
       )
       assert.strictEqual(result, true)
@@ -577,7 +626,7 @@ describe('claude dispatcher', () => {
 
     it('Stop skips when session has no file edits', () => {
       const result = evaluateWhen(
-        { sourceFilesEditedThisTurn: true },
+        { sourceFilesEdited: true },
         { rootDir: '.', hookEvent: 'Stop', sessionId: 'test-sfe-stop-empty' }
       )
       assert.notStrictEqual(result, true)
@@ -589,7 +638,7 @@ describe('claude dispatcher', () => {
       recordFileEdit(sessionId, 'Edit', 'src/app.js')
       resetTurnTracking(sessionId)
       const result = evaluateWhen(
-        { sourceFilesEditedThisTurn: true },
+        { sourceFilesEdited: true },
         { rootDir: '.', hookEvent: 'Stop', sessionId }
       )
       assert.notStrictEqual(result, true)
@@ -597,7 +646,152 @@ describe('claude dispatcher', () => {
 
     it('SessionStart always skips', () => {
       const result = evaluateWhen(
-        { sourceFilesEditedThisTurn: true },
+        { sourceFilesEdited: true },
+        { rootDir: '.', hookEvent: 'SessionStart', sessionId: null }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('not applicable'), `Expected not applicable reason, got: ${result}`)
+    })
+  })
+
+  describe('evaluateWhen—testFilesEdited', () => {
+    let tmpDir
+    let origProveItDir
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_tfe_'))
+      origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it')
+    })
+
+    afterEach(() => {
+      if (origProveItDir === undefined) {
+        delete process.env.PROVE_IT_DIR
+      } else {
+        process.env.PROVE_IT_DIR = origProveItDir
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    })
+
+    it('PreToolUse passes when tool is an edit tool and file matches tests', () => {
+      const result = evaluateWhen(
+        { testFilesEdited: true },
+        {
+          rootDir: tmpDir,
+          hookEvent: 'PreToolUse',
+          toolName: 'Edit',
+          toolInput: { file_path: 'test/app.test.js' },
+          tests: ['test/**/*.test.js'],
+          fileEditingTools: BUILTIN_EDIT_TOOLS,
+          sessionId: null
+        }
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('PreToolUse skips when tool is not an edit tool', () => {
+      const result = evaluateWhen(
+        { testFilesEdited: true },
+        {
+          rootDir: tmpDir,
+          hookEvent: 'PreToolUse',
+          toolName: 'Read',
+          toolInput: { file_path: 'test/app.test.js' },
+          tests: ['test/**/*.test.js'],
+          fileEditingTools: BUILTIN_EDIT_TOOLS,
+          sessionId: null
+        }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('no test files were edited'), `Expected skip reason, got: ${result}`)
+    })
+
+    it('PreToolUse skips when file is not a test file', () => {
+      const result = evaluateWhen(
+        { testFilesEdited: true },
+        {
+          rootDir: tmpDir,
+          hookEvent: 'PreToolUse',
+          toolName: 'Edit',
+          toolInput: { file_path: 'src/app.js' },
+          tests: ['test/**/*.test.js'],
+          fileEditingTools: BUILTIN_EDIT_TOOLS,
+          sessionId: null
+        }
+      )
+      assert.notStrictEqual(result, true)
+    })
+
+    it('PostToolUse passes when tool is an edit tool and file matches tests', () => {
+      const result = evaluateWhen(
+        { testFilesEdited: true },
+        {
+          rootDir: tmpDir,
+          hookEvent: 'PostToolUse',
+          toolName: 'Write',
+          toolInput: { file_path: 'test/foo.test.js' },
+          tests: ['test/**/*.test.js'],
+          fileEditingTools: BUILTIN_EDIT_TOOLS,
+          sessionId: null
+        }
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('PostToolUse skips when file is not a test file', () => {
+      const result = evaluateWhen(
+        { testFilesEdited: true },
+        {
+          rootDir: tmpDir,
+          hookEvent: 'PostToolUse',
+          toolName: 'Write',
+          toolInput: { file_path: 'src/app.js' },
+          tests: ['test/**/*.test.js'],
+          fileEditingTools: BUILTIN_EDIT_TOOLS,
+          sessionId: null
+        }
+      )
+      assert.notStrictEqual(result, true)
+    })
+
+    it('PostToolUse passes for custom fileEditingTools', () => {
+      const result = evaluateWhen(
+        { testFilesEdited: true },
+        {
+          rootDir: tmpDir,
+          hookEvent: 'PostToolUse',
+          toolName: 'XcodeEdit',
+          toolInput: { file_path: 'Tests/AppTests.swift' },
+          tests: ['Tests/**/*.swift'],
+          fileEditingTools: [...BUILTIN_EDIT_TOOLS, 'XcodeEdit'],
+          sessionId: null
+        }
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('Stop passes when session has file edits', () => {
+      const sessionId = 'test-tfe-stop-pass'
+      recordFileEdit(sessionId, 'Edit', 'test/app.test.js')
+      const result = evaluateWhen(
+        { testFilesEdited: true },
+        { rootDir: '.', hookEvent: 'Stop', sessionId }
+      )
+      assert.strictEqual(result, true)
+    })
+
+    it('Stop skips when session has no file edits', () => {
+      const result = evaluateWhen(
+        { testFilesEdited: true },
+        { rootDir: '.', hookEvent: 'Stop', sessionId: 'test-tfe-stop-empty' }
+      )
+      assert.notStrictEqual(result, true)
+      assert.ok(result.includes('no test files were edited'), `Expected skip reason, got: ${result}`)
+    })
+
+    it('SessionStart always skips', () => {
+      const result = evaluateWhen(
+        { testFilesEdited: true },
         { rootDir: '.', hookEvent: 'SessionStart', sessionId: null }
       )
       assert.notStrictEqual(result, true)
