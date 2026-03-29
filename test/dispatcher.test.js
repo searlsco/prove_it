@@ -614,14 +614,26 @@ describe('claude dispatcher', () => {
       assert.notStrictEqual(result, true)
     })
 
-    it('Stop passes when session has file edits', () => {
+    it('Stop passes when session has source file edits', () => {
       const sessionId = 'test-sfe-stop-pass'
       recordFileEdit(sessionId, 'Edit', 'src/app.js')
       const result = evaluateWhen(
         { sourceFilesEdited: true },
-        { rootDir: '.', hookEvent: 'Stop', sessionId }
+        { rootDir: tmpDir, hookEvent: 'Stop', sessionId, sources: ['src/**'] }
       )
       assert.strictEqual(result, true)
+    })
+
+    it('Stop skips when session has only test file edits (not source files)', () => {
+      const sessionId = 'test-sfe-stop-test-only'
+      recordFileEdit(sessionId, 'Edit', 'test/app.test.js')
+      const result = evaluateWhen(
+        { sourceFilesEdited: true },
+        { rootDir: tmpDir, hookEvent: 'Stop', sessionId, sources: ['src/**'] }
+      )
+      assert.notStrictEqual(result, true,
+        'Should skip when only test files were edited')
+      assert.ok(result.includes('no source files were edited'), `Expected skip reason, got: ${result}`)
     })
 
     it('Stop skips when session has no file edits', () => {
