@@ -211,6 +211,122 @@ describe('async task lifecycle', () => {
     assert.strictEqual(finalRemaining.length, 0, 'All result files should be consumed')
   })
 
+  it('async passing result is harvested on next PostToolUse (not just Stop)', () => {
+    // Create a passing async task on PostToolUse
+    const asyncScript = path.join(projectDir, 'script', 'post-check')
+    createFile(projectDir, 'script/post-check', '#!/usr/bin/env bash\necho "looks good"\nexit 0\n')
+    makeExecutable(asyncScript)
+
+    writeConfig(projectDir, makeConfig({
+      claude: {
+        PostToolUse: [
+          { name: 'post-check', type: 'script', async: true, command: './script/post-check' }
+        ]
+      }
+    }))
+
+    const sessionId = 'test-async-post-harvest-' + Date.now()
+
+    // First PostToolUse: spawns the async task
+    invokeHook('claude:PostToolUse', {
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Edit',
+      tool_input: { file_path: 'src/app.js' },
+      session_id: sessionId
+    }, { projectDir, env })
+
+    // Wait for the async result file
+    const asyncDir = path.join(env.PROVE_IT_DIR, 'sessions', sessionId, 'async')
+    for (let i = 0; i < 50; i++) {
+      const sab = new SharedArrayBuffer(4)
+      Atomics.wait(new Int32Array(sab), 0, 0, 100)
+      try {
+        const files = fs.readdirSync(asyncDir)
+        if (files.some(f => f === 'post-check.json')) break
+      } catch {}
+    }
+
+    // Second PostToolUse: should harvest the passing result as additionalContext
+    const r2 = invokeHook('claude:PostToolUse', {
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Edit',
+      tool_input: { file_path: 'src/app.js' },
+      session_id: sessionId
+    }, { projectDir, env })
+
+    assert.strictEqual(r2.exitCode, 0)
+    // Result file should be consumed
+    const remaining = fs.readdirSync(asyncDir).filter(f => f.endsWith('.json') && !f.endsWith('.context.json'))
+    assert.strictEqual(remaining.length, 0, 'Result file should be deleted after harvest')
+    // The passing result's output should appear as additionalContext
+    const ctx = r2.output?.hookSpecificOutput?.additionalContext || r2.stdout
+    assert.ok(ctx.includes('looks good'), `Expected async output in additionalContext, got: ${ctx}`)
+  })
+
+  it('async failing result on PostToolUse is held until Stop', () => {
+    const asyncScript = path.join(projectDir, 'script', 'failing-post')
+    createFile(projectDir, 'script/failing-post', '#!/usr/bin/env bash\necho "FAIL: bad test edit" >&2\nexit 1\n')
+    makeExecutable(asyncScript)
+
+    const noopScript = path.join(projectDir, 'script', 'noop')
+    createFile(projectDir, 'script/noop', '#!/usr/bin/env bash\nexit 0\n')
+    makeExecutable(noopScript)
+
+    writeConfig(projectDir, makeConfig({
+      claude: {
+        PostToolUse: [
+          { name: 'failing-post', type: 'script', async: true, command: './script/failing-post' }
+        ],
+        Stop: [
+          { name: 'noop', type: 'script', command: './script/noop' }
+        ]
+      }
+    }))
+
+    const sessionId = 'test-async-post-fail-' + Date.now()
+
+    // First PostToolUse: spawns the async task
+    invokeHook('claude:PostToolUse', {
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Edit',
+      tool_input: { file_path: 'src/app.js' },
+      session_id: sessionId
+    }, { projectDir, env })
+
+    // Wait for result
+    const asyncDir = path.join(env.PROVE_IT_DIR, 'sessions', sessionId, 'async')
+    for (let i = 0; i < 50; i++) {
+      const sab = new SharedArrayBuffer(4)
+      Atomics.wait(new Int32Array(sab), 0, 0, 100)
+      try {
+        const files = fs.readdirSync(asyncDir)
+        if (files.some(f => f === 'failing-post.json')) break
+      } catch {}
+    }
+
+    // Second PostToolUse: should NOT block, failing result should be held
+    const r2 = invokeHook('claude:PostToolUse', {
+      hook_event_name: 'PostToolUse',
+      tool_name: 'Edit',
+      tool_input: { file_path: 'src/app.js' },
+      session_id: sessionId
+    }, { projectDir, env })
+
+    assert.strictEqual(r2.exitCode, 0)
+    // Result file should still exist (held for Stop)
+    const remaining = fs.readdirSync(asyncDir).filter(f => f.endsWith('.json') && !f.endsWith('.context.json'))
+    assert.strictEqual(remaining.length, 1, 'Failing result should be held for Stop')
+
+    // Stop: should now block on the held failure
+    const r3 = invokeHook('claude:Stop', {
+      hook_event_name: 'Stop',
+      session_id: sessionId
+    }, { projectDir, env })
+
+    assert.strictEqual(r3.output.decision, 'block', 'Stop should block on deferred async failure')
+    assert.ok(r3.stdout.includes('(async)'), 'Failure message should mention async')
+  })
+
   it('async: true on SessionStart tasks is ignored (runs synchronously)', () => {
     writeConfig(projectDir, makeConfig({ claude: { SessionStart: [{ name: 'sync-briefing', type: 'script', command: 'echo hello', async: true }] } }))
 

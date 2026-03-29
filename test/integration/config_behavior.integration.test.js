@@ -646,9 +646,9 @@ describe('Config-driven hook behavior (v2)', () => {
     })
   })
 
-  // ──── sourceFilesEditedThisTurn + toolsUsed when conditions ────
+  // ──── sourceFilesEdited + toolsUsed when conditions ────
 
-  describe('sourceFilesEditedThisTurn when condition', () => {
+  describe('sourceFilesEdited when condition', () => {
     it('fires Stop after PreToolUse records source edits', async () => {
       const sessionId = 'test-sfe-integration'
       createFile(tmpDir, 'src/app.js', 'console.log("hello")\n')
@@ -662,7 +662,7 @@ describe('Config-driven hook behavior (v2)', () => {
               name: 'sfe-check',
               type: 'script',
               command: './script/check',
-              when: { sourceFilesEditedThisTurn: true }
+              when: { sourceFilesEdited: true }
             }
           ]
         }
@@ -716,7 +716,7 @@ describe('Config-driven hook behavior (v2)', () => {
               name: 'sfe-check',
               type: 'script',
               command: './script/check',
-              when: { sourceFilesEditedThisTurn: true }
+              when: { sourceFilesEdited: true }
             }
           ]
         }
@@ -760,7 +760,7 @@ describe('Config-driven hook behavior (v2)', () => {
               name: 'sfe-check',
               type: 'script',
               command: './script/check',
-              when: { sourceFilesEditedThisTurn: true }
+              when: { sourceFilesEdited: true }
             }
           ]
         }

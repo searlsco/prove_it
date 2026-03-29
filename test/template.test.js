@@ -46,6 +46,42 @@ describe('template', () => {
       assert.strictEqual(result, 'path: src/app.js')
     })
 
+    it('expands edit_file_path from toolInput', () => {
+      const context = { toolInput: { file_path: 'test/app.test.js' }, rootDir: '.', projectDir: '.', sessionId: null }
+      const result = expandTemplate('path: {{edit_file_path}}', context)
+      assert.strictEqual(result, 'path: test/app.test.js')
+    })
+
+    it('expands edit_file_path from notebook_path when file_path is absent', () => {
+      const context = { toolInput: { notebook_path: 'test/nb.ipynb' }, rootDir: '.', projectDir: '.', sessionId: null }
+      const result = expandTemplate('path: {{edit_file_path}}', context)
+      assert.strictEqual(result, 'path: test/nb.ipynb')
+    })
+
+    it('expands edit_old_string from toolInput', () => {
+      const context = { toolInput: { old_string: 'assert.ok(true)' }, rootDir: '.', projectDir: '.', sessionId: null }
+      const result = expandTemplate('old: {{edit_old_string}}', context)
+      assert.strictEqual(result, 'old: assert.ok(true)')
+    })
+
+    it('expands edit_new_string from toolInput', () => {
+      const context = { toolInput: { new_string: '// removed' }, rootDir: '.', projectDir: '.', sessionId: null }
+      const result = expandTemplate('new: {{edit_new_string}}', context)
+      assert.strictEqual(result, 'new: // removed')
+    })
+
+    it('expands edit_content from toolInput (Write)', () => {
+      const context = { toolInput: { content: 'describe("test", () => {})' }, rootDir: '.', projectDir: '.', sessionId: null }
+      const result = expandTemplate('content: {{edit_content}}', context)
+      assert.strictEqual(result, 'content: describe("test", () => {})')
+    })
+
+    it('expands edit_tool_name from context', () => {
+      const context = { toolName: 'Edit', toolInput: {}, rootDir: '.', projectDir: '.', sessionId: null }
+      const result = expandTemplate('tool: {{edit_tool_name}}', context)
+      assert.strictEqual(result, 'tool: Edit')
+    })
+
     it('expands test_output from context', () => {
       const context = { testOutput: 'PASS: all good', rootDir: '.', projectDir: '.', sessionId: null, toolInput: null }
       const result = expandTemplate('output: {{test_output}}', context)
@@ -346,13 +382,14 @@ describe('template', () => {
   })
 
   describe('KNOWN_VARS', () => {
-    it('has all 19 expected keys', () => {
+    it('has all 24 expected keys', () => {
       const expected = [
         'staged_diff', 'staged_files', 'working_diff', 'changed_files',
         'session_diff', 'test_output', 'tool_command', 'file_path',
         'project_dir', 'root_dir', 'session_id', 'git_head',
         'git_status', 'recent_commits', 'files_changed_since_last_run', 'sources',
-        'signal_message', 'changes_since_last_run', 'phase'
+        'signal_message', 'changes_since_last_run', 'phase',
+        'edit_file_path', 'edit_old_string', 'edit_new_string', 'edit_content', 'edit_tool_name'
       ]
       assert.deepStrictEqual(KNOWN_VARS, expected)
     })
@@ -462,7 +499,8 @@ describe('template', () => {
         'staged_diff', 'staged_files', 'working_diff', 'changed_files',
         'session_diff', 'test_output', 'tool_command', 'file_path',
         'project_dir', 'root_dir', 'session_id', 'git_head',
-        'git_status', 'recent_commits', 'files_changed_since_last_run', 'sources'
+        'git_status', 'recent_commits', 'files_changed_since_last_run', 'sources',
+        'edit_file_path', 'edit_old_string', 'edit_new_string', 'edit_content', 'edit_tool_name'
       ]
       for (const key of expectedKeys) {
         assert.strictEqual(typeof resolvers[key], 'function', `Missing resolver: ${key}`)
