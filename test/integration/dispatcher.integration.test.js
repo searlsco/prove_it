@@ -6,7 +6,8 @@ const os = require('os')
 const { spawnSync } = require('child_process')
 const { freshRepo } = require('../helpers')
 const { evaluateWhen } = require('../../lib/dispatcher/claude')
-const { updateRef, churnSinceRef, sanitizeRefName, incrementGross, grossChurnSince } = require('../../lib/git')
+const { updateRef, churnSinceRef, sanitizeRefName, incrementGross, grossChurnSince, readRef } = require('../../lib/git')
+const { saveSessionState } = require('../../lib/session')
 
 function setupAppJs (dir) {
   fs.writeFileSync(path.join(dir, 'app.js'), 'initial\n')
@@ -299,6 +300,79 @@ describe('evaluateWhen—array form (OR of ANDs)', () => {
       ),
       true,
       'Array form gives OR: linesWritten passes even though linesChanged does not'
+    )
+  })
+})
+
+// ---------- Story: stale ref flooring in evaluateWhen ----------
+describe('evaluateWhen—stale ref flooring', () => {
+  let tmpDir
+
+  beforeEach(() => { tmpDir = freshRepo(setupAppJs) })
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }) })
+
+  it('floors stale task ref to session start HEAD so prior-session churn is ignored', () => {
+    const GLOBS = ['**/*.js']
+    const sessionId = 'test-floor-session'
+
+    // Session A: bootstrap ref at initial HEAD
+    churnSinceRef(tmpDir, sanitizeRefName('stale-check'), GLOBS)
+    const refAtBootstrap = readRef(tmpDir, sanitizeRefName('stale-check'))
+
+    // Session A makes a big change and commits (ref NOT advanced — simulates failed review)
+    const lines = Array.from({ length: 600 }, (_, i) => `line${i}`).join('\n') + '\n'
+    fs.writeFileSync(path.join(tmpDir, 'app.js'), lines)
+    spawnSync('git', ['add', '.'], { cwd: tmpDir })
+    spawnSync('git', ['commit', '-m', 'session A work'], { cwd: tmpDir })
+
+    // Without session context, stale ref causes churn to fire
+    assert.strictEqual(
+      evaluateWhen({ linesChanged: 500 }, { rootDir: tmpDir, sources: GLOBS }, 'stale-check'),
+      true,
+      'Without session context, stale ref shows accumulated churn'
+    )
+
+    // Reset ref back to bootstrap point (undo the churnSinceRef side effect above)
+    updateRef(tmpDir, sanitizeRefName('stale-check'), refAtBootstrap)
+
+    // Session B starts — record session baseline with current HEAD
+    const sessionBHead = getHead(tmpDir)
+    saveSessionState(sessionId, 'git', { head: sessionBHead })
+
+    // With session context, stale ref should be floored — no churn from session A
+    const result = evaluateWhen(
+      { linesChanged: 500 },
+      { rootDir: tmpDir, sources: GLOBS, sessionId },
+      'stale-check'
+    )
+    assert.notStrictEqual(result, true, 'Session-scoped: stale ref floored, churn should be 0')
+
+    // Verify ref was advanced to session start HEAD
+    assert.strictEqual(readRef(tmpDir, sanitizeRefName('stale-check')), sessionBHead)
+  })
+
+  it('does not floor ref that is current or ahead of session start', () => {
+    const GLOBS = ['**/*.js']
+    const sessionId = 'test-no-floor-session'
+
+    // Session start HEAD
+    const sessionHead = getHead(tmpDir)
+    saveSessionState(sessionId, 'git', { head: sessionHead })
+
+    // Bootstrap ref at same HEAD as session start
+    churnSinceRef(tmpDir, sanitizeRefName('current-check'), GLOBS)
+
+    // Make a big change (in this session)
+    const lines = Array.from({ length: 600 }, (_, i) => `line${i}`).join('\n') + '\n'
+    fs.writeFileSync(path.join(tmpDir, 'app.js'), lines)
+    spawnSync('git', ['add', '.'], { cwd: tmpDir })
+    spawnSync('git', ['commit', '-m', 'this session work'], { cwd: tmpDir })
+
+    // Should still fire — ref is not stale (same as session start)
+    assert.strictEqual(
+      evaluateWhen({ linesChanged: 500 }, { rootDir: tmpDir, sources: GLOBS, sessionId }, 'current-check'),
+      true,
+      'Current ref should not be floored — churn from this session counts'
     )
   })
 })

@@ -345,6 +345,44 @@ describe('template', () => {
         fs.rmSync(tmpDir, { recursive: true, force: true })
       }
     })
+
+    it('floors stale task ref to session start HEAD', () => {
+      const tmpDir = freshRepo((dir) => {
+        fs.writeFileSync(path.join(dir, 'src.js'), 'initial\n')
+      })
+      const origProveItDir = process.env.PROVE_IT_DIR
+      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
+      try {
+        const { saveSessionState } = require('../lib/session')
+        const { updateRef, sanitizeRefName, readRef } = require('../lib/git')
+
+        // Set task ref at initial HEAD (simulating stale ref from prior session)
+        const staleHead = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
+        updateRef(tmpDir, sanitizeRefName('stale-review'), staleHead)
+
+        // Make commits (simulating prior session work that was committed)
+        fs.writeFileSync(path.join(tmpDir, 'src.js'), 'session-a-work\n')
+        spawnSync('git', ['add', '.'], { cwd: tmpDir })
+        spawnSync('git', ['commit', '-m', 'session A'], { cwd: tmpDir })
+
+        // Session B starts — save session baseline
+        const sessionBHead = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
+        saveSessionState('sess-floor-1', 'git', { head: sessionBHead })
+
+        // Resolve baseline — should floor to session B HEAD, not return stale ref
+        const r = makeResolvers({ rootDir: tmpDir, projectDir: tmpDir, sessionId: 'sess-floor-1', toolInput: null, taskName: 'stale-review', sources: ['**/*.js'] })
+        const stat = r.changes_since_last_run()
+        // No changes since session B started — stat should be empty
+        assert.strictEqual(stat, '', 'Stale ref floored: no changes since session start')
+
+        // Verify ref was advanced
+        assert.strictEqual(readRef(tmpDir, sanitizeRefName('stale-review')), sessionBHead)
+      } finally {
+        if (origProveItDir === undefined) delete process.env.PROVE_IT_DIR
+        else process.env.PROVE_IT_DIR = origProveItDir
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      }
+    })
   })
 
   describe('phase variable', () => {

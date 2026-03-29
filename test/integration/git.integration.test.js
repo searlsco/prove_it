@@ -8,7 +8,8 @@ const {
   readRef, updateRef, snapshotWorkingTree, deleteAllRefs,
   churnSinceRef, advanceTaskRef, sanitizeRefName,
   readCounterBlob, writeCounterRef, readGrossCounter,
-  incrementGross, grossChurnSince, advanceGrossSnapshot
+  incrementGross, grossChurnSince, advanceGrossSnapshot,
+  isAncestor
 } = require('../../lib/git')
 const { freshRepo } = require('../helpers')
 
@@ -448,6 +449,102 @@ describe('incrementGross CAS', () => {
     assert.ok(counter > 110, `CAS should recover more than single increment: got ${counter}`)
     assert.ok(counter <= 100 + (n * delta), `should not exceed max: got ${counter}`)
     assert.ok(counter >= 100 + (n * delta) / 2, `at least half should land: got ${counter}`)
+  })
+})
+
+// ---------- Story: isAncestor ----------
+describe('isAncestor', () => {
+  let tmpDir
+
+  beforeEach(() => { tmpDir = freshRepo(setupFileJs) })
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }) })
+
+  it('returns true when potentialAncestor is a strict ancestor', () => {
+    const first = getHead(tmpDir)
+    fs.writeFileSync(path.join(tmpDir, 'file.js'), 'changed\n')
+    commit(tmpDir, 'second')
+    const second = getHead(tmpDir)
+    assert.strictEqual(isAncestor(tmpDir, first, second), true)
+  })
+
+  it('returns true when SHAs are equal', () => {
+    const head = getHead(tmpDir)
+    assert.strictEqual(isAncestor(tmpDir, head, head), true)
+  })
+
+  it('returns false when reversed (descendant is not ancestor)', () => {
+    const first = getHead(tmpDir)
+    fs.writeFileSync(path.join(tmpDir, 'file.js'), 'changed\n')
+    commit(tmpDir, 'second')
+    const second = getHead(tmpDir)
+    assert.strictEqual(isAncestor(tmpDir, second, first), false)
+  })
+
+  it('returns false for null/undefined inputs', () => {
+    const head = getHead(tmpDir)
+    assert.strictEqual(isAncestor(tmpDir, null, head), false)
+    assert.strictEqual(isAncestor(tmpDir, head, null), false)
+    assert.strictEqual(isAncestor(tmpDir, null, null), false)
+  })
+})
+
+// ---------- Story: stale ref flooring ----------
+// Simulates the cross-session bug: task ref from a prior session is stale,
+// churn should not include committed changes from before the current session.
+describe('stale ref flooring', () => {
+  let tmpDir
+
+  beforeEach(() => { tmpDir = freshRepo(setupFileJs) })
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }) })
+
+  it('floors stale ref to session start HEAD, resetting accumulated churn', () => {
+    // Session A: bootstrap ref, make changes, ref stays at initial HEAD (simulating failed review)
+    const sessionAHead = getHead(tmpDir)
+    churnSinceRef(tmpDir, 'review-task', GLOBS)
+    assert.strictEqual(readRef(tmpDir, 'review-task'), sessionAHead)
+
+    // Session A makes changes and commits (ref NOT advanced because review failed)
+    fs.writeFileSync(path.join(tmpDir, 'file.js'), 'session-a-work\nline2\nline3\n')
+    commit(tmpDir, 'session A work')
+    const churnBeforeFloor = churnSinceRef(tmpDir, 'review-task', GLOBS)
+    assert.ok(churnBeforeFloor > 0, `Stale ref shows churn: ${churnBeforeFloor}`)
+
+    // Session B starts — HEAD is now after session A's commits
+    const sessionBHead = getHead(tmpDir)
+    assert.notStrictEqual(sessionAHead, sessionBHead)
+
+    // The fix: detect stale ref and floor it
+    const existing = readRef(tmpDir, 'review-task')
+    assert.strictEqual(isAncestor(tmpDir, existing, sessionBHead), true, 'ref is ancestor of session start')
+    updateRef(tmpDir, 'review-task', sessionBHead)
+
+    // After flooring: churn is 0 (no changes in session B yet)
+    assert.strictEqual(churnSinceRef(tmpDir, 'review-task', GLOBS), 0)
+  })
+
+  it('preserves ref when it is current (same as session start)', () => {
+    churnSinceRef(tmpDir, 'review-task', GLOBS)
+    const head = getHead(tmpDir)
+    updateRef(tmpDir, 'review-task', head)
+
+    // Ref equals session start — not stale
+    const existing = readRef(tmpDir, 'review-task')
+    assert.strictEqual(isAncestor(tmpDir, existing, head), true)
+    // But equal SHAs mean no flooring needed — ref stays as-is
+    assert.strictEqual(existing, head)
+  })
+
+  it('preserves ref when it is ahead of session start (set during this session)', () => {
+    const first = getHead(tmpDir)
+    fs.writeFileSync(path.join(tmpDir, 'file.js'), 'changed\n')
+    commit(tmpDir, 'advance')
+    const second = getHead(tmpDir)
+
+    // Ref is at second commit, session start was at first
+    updateRef(tmpDir, 'review-task', second)
+    assert.strictEqual(isAncestor(tmpDir, second, first), false, 'ref is NOT ancestor of session start')
+    // Ref should NOT be floored
+    assert.strictEqual(readRef(tmpDir, 'review-task'), second)
   })
 })
 
