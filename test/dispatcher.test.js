@@ -1115,14 +1115,12 @@ describe('claude dispatcher', () => {
       const asyncDir = getAsyncDir(sessionId)
       const contextFile = path.join(asyncDir, 'nag-testing.context.json')
 
-      if (fs.existsSync(contextFile)) {
-        const snapshot = JSON.parse(fs.readFileSync(contextFile, 'utf8'))
-        assert.strictEqual(snapshot.context.toolName, 'Edit')
-        assert.strictEqual(snapshot.context.toolInput.file_path, 'test/app.test.js')
-        assert.strictEqual(snapshot.context.toolInput.old_string, 'assert.strictEqual(x, 5)')
-        assert.strictEqual(snapshot.context.toolInput.new_string, 'assert.ok(x)')
-      }
-      assert.ok(fs.existsSync(asyncDir))
+      assert.ok(fs.existsSync(contextFile), 'context file should exist after spawnAsyncTask')
+      const snapshot = JSON.parse(fs.readFileSync(contextFile, 'utf8'))
+      assert.strictEqual(snapshot.context.toolName, 'Edit')
+      assert.strictEqual(snapshot.context.toolInput.file_path, 'test/app.test.js')
+      assert.strictEqual(snapshot.context.toolInput.old_string, 'assert.strictEqual(x, 5)')
+      assert.strictEqual(snapshot.context.toolInput.new_string, 'assert.ok(x)')
     })
   })
 
