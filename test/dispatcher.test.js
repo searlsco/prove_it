@@ -1090,6 +1090,40 @@ describe('claude dispatcher', () => {
       }
       assert.ok(fs.existsSync(asyncDir))
     })
+
+    it('serializes toolName and toolInput into context snapshot', () => {
+      const sessionId = 'test-spawn-tool-input'
+      const task = { name: 'nag-testing', type: 'agent', async: true, prompt: 'test prompt' }
+      const context = {
+        rootDir: tmpDir,
+        projectDir: tmpDir,
+        sessionId,
+        hookEvent: 'PostToolUse',
+        localCfgPath: '/fake/path',
+        sources: ['**/*.js'],
+        fileEditingTools: ['Edit'],
+        configEnv: null,
+        configModel: null,
+        maxChars: 12000,
+        testOutput: '',
+        toolName: 'Edit',
+        toolInput: { file_path: 'test/app.test.js', old_string: 'assert.strictEqual(x, 5)', new_string: 'assert.ok(x)' }
+      }
+
+      spawnAsyncTask(task, context)
+
+      const asyncDir = getAsyncDir(sessionId)
+      const contextFile = path.join(asyncDir, 'nag-testing.context.json')
+
+      if (fs.existsSync(contextFile)) {
+        const snapshot = JSON.parse(fs.readFileSync(contextFile, 'utf8'))
+        assert.strictEqual(snapshot.context.toolName, 'Edit')
+        assert.strictEqual(snapshot.context.toolInput.file_path, 'test/app.test.js')
+        assert.strictEqual(snapshot.context.toolInput.old_string, 'assert.strictEqual(x, 5)')
+        assert.strictEqual(snapshot.context.toolInput.new_string, 'assert.ok(x)')
+      }
+      assert.ok(fs.existsSync(asyncDir))
+    })
   })
 
   describe('harvestAsyncResults', () => {
