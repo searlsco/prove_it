@@ -67,7 +67,7 @@
           "command": "./script/test_fast",
           "when": {
             "sourcesModifiedSinceLastRun": true,
-            "sourceFilesEditedThisTurn": true
+            "sourceFilesEdited": true
           }
         },
         {
@@ -77,7 +77,7 @@
           "parallel": true,
           "when": {
             "signal": "done",
-            "sourceFilesEditedThisTurn": true
+            "sourceFilesEdited": true
           }
         },
         {
