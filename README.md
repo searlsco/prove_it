@@ -890,6 +890,7 @@ prove_it reinit         Deinit and re-init current repository
 prove_it doctor         Check installation and show effective config
 prove_it monitor        Tail hook results in real time
 prove_it signal <type>  Declare a lifecycle signal (done, stuck, idle)
+prove_it cancel         Cancel running hook tasks for the current session
 prove_it phase <mode>   Set session phase (unknown, plan, implement, refactor)
 prove_it hook <spec>    Run a dispatcher directly (claude:Stop, git:pre-commit)
 prove_it prefix         Print install directory (for resolving libexec scripts)
@@ -951,6 +952,7 @@ prove_it doctor
   }
   ```
 - **Async reviews not enforcing**—Async results are harvested on the next Stop. If Claude stops work before the async review completes, the result will be enforced on the stop after that. Check `prove_it monitor --verbose` to see RUNNING/DONE status progression.
+- **Hooks hanging or taking too long**—Press escape in Claude Code to dismiss the hook UI, then run `! prove_it cancel` to kill all running tasks for the current session. The hook exits with approve so Claude can continue. This works because prove_it injects `PROVE_IT_SESSION_ID` into your shell environment on session start.
 - **Config errors after upgrade**—Run `prove_it reinstall && prove_it reinit` to reset to current defaults
 
 ## Cookbook

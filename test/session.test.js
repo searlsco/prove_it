@@ -24,7 +24,13 @@ const {
   setPhase,
   getPhase,
   clearPhase,
-  pruneOldSessions
+  pruneOldSessions,
+  writeDispatcherPid,
+  readDispatcherPid,
+  clearDispatcherPid,
+  writeCancelSentinel,
+  readCancelSentinel,
+  clearCancelSentinel
 } = require('../lib/session')
 const { recordSessionBaseline } = require('../lib/dispatcher/claude')
 
@@ -849,6 +855,75 @@ describe('session state functions', () => {
       assert.doesNotThrow(() => pruneOldSessions(7))
 
       process.env.PROVE_IT_DIR = origDir
+    })
+  })
+
+  describe('dispatcher PID tracking', () => {
+    it('writeDispatcherPid / readDispatcherPid round-trips', () => {
+      writeDispatcherPid(SESSION_ID, { pid: 12345, event: 'Stop', startedAt: 1000 })
+      const result = readDispatcherPid(SESSION_ID)
+      assert.deepStrictEqual(result, { pid: 12345, event: 'Stop', startedAt: 1000 })
+    })
+
+    it('readDispatcherPid returns null when no PID file exists', () => {
+      assert.strictEqual(readDispatcherPid('no-pid-session'), null)
+    })
+
+    it('readDispatcherPid returns null for null sessionId', () => {
+      assert.strictEqual(readDispatcherPid(null), null)
+    })
+
+    it('clearDispatcherPid removes the PID file', () => {
+      writeDispatcherPid(SESSION_ID, { pid: 99, event: 'Stop', startedAt: 2000 })
+      assert.notStrictEqual(readDispatcherPid(SESSION_ID), null)
+      clearDispatcherPid(SESSION_ID)
+      assert.strictEqual(readDispatcherPid(SESSION_ID), null)
+    })
+
+    it('clearDispatcherPid is safe with null sessionId', () => {
+      clearDispatcherPid(null) // should not throw
+    })
+
+    it('clearDispatcherPid is safe when no PID file exists', () => {
+      clearDispatcherPid('nonexistent-session') // should not throw
+    })
+
+    it('writeDispatcherPid is safe with null sessionId', () => {
+      writeDispatcherPid(null, { pid: 1, event: 'Stop', startedAt: 0 }) // should not throw
+    })
+  })
+
+  describe('cancel sentinel', () => {
+    it('writeCancelSentinel / readCancelSentinel round-trips', () => {
+      writeCancelSentinel(SESSION_ID)
+      assert.strictEqual(readCancelSentinel(SESSION_ID), true)
+    })
+
+    it('readCancelSentinel returns false when no sentinel exists', () => {
+      assert.strictEqual(readCancelSentinel('no-cancel-session'), false)
+    })
+
+    it('readCancelSentinel returns false for null sessionId', () => {
+      assert.strictEqual(readCancelSentinel(null), false)
+    })
+
+    it('clearCancelSentinel removes the sentinel', () => {
+      writeCancelSentinel(SESSION_ID)
+      assert.strictEqual(readCancelSentinel(SESSION_ID), true)
+      clearCancelSentinel(SESSION_ID)
+      assert.strictEqual(readCancelSentinel(SESSION_ID), false)
+    })
+
+    it('clearCancelSentinel is safe with null sessionId', () => {
+      clearCancelSentinel(null) // should not throw
+    })
+
+    it('clearCancelSentinel is safe when no sentinel exists', () => {
+      clearCancelSentinel('nonexistent-session') // should not throw
+    })
+
+    it('writeCancelSentinel is safe with null sessionId', () => {
+      writeCancelSentinel(null) // should not throw
     })
   })
 

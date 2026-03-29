@@ -12,6 +12,7 @@
  *   hook      - Run a hook dispatcher (claude:<Event> or git:<event>)
  *   prefix    - Print install directory (for resolving libexec scripts)
  *   signal    - Declare a lifecycle signal (done, stuck, idle)
+ *   cancel    - Cancel running hook tasks for the current session
  *   phase     - Set session activity phase (unknown, plan, implement, refactor)
  *   record    - Record a test run result for run caching
  *   upgrade   - Update via Homebrew, reinstall hooks, reinit project
@@ -109,6 +110,11 @@ function main () {
     case 'signal': {
       const { cmdSignal } = require('./lib/commands/signal')
       cmdSignal()
+      break
+    }
+    case 'cancel': {
+      const { cmdCancel } = require('./lib/commands/cancel')
+      cmdCancel()
       break
     }
     case 'phase': {

@@ -276,6 +276,58 @@ describe('SessionStart task types', () => {
     })
   })
 
+  describe('PROVE_IT_SESSION_ID injection', () => {
+    it('writes PROVE_IT_SESSION_ID to CLAUDE_ENV_FILE on startup', () => {
+      const envFile = path.join(tmpDir, '.claude_env')
+      writeConfig(tmpDir, makeConfig({}))
+
+      const result = invokeHook('claude:SessionStart', {
+        hook_event_name: 'SessionStart',
+        session_id: 'test-ss-session-id-inject',
+        source: 'startup',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: { ...isolatedEnv(tmpDir), CLAUDE_ENV_FILE: envFile } })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(fs.existsSync(envFile), 'CLAUDE_ENV_FILE should be created')
+      const envContent = fs.readFileSync(envFile, 'utf8')
+      assert.ok(envContent.includes('PROVE_IT_SESSION_ID=test-ss-session-id-inject'),
+        `Should contain PROVE_IT_SESSION_ID, got: ${envContent}`)
+    })
+
+    it('writes PROVE_IT_SESSION_ID on resume', () => {
+      const envFile = path.join(tmpDir, '.claude_env')
+      writeConfig(tmpDir, makeConfig({}))
+
+      const result = invokeHook('claude:SessionStart', {
+        hook_event_name: 'SessionStart',
+        session_id: 'test-ss-session-id-resume',
+        source: 'resume',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: { ...isolatedEnv(tmpDir), CLAUDE_ENV_FILE: envFile } })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(fs.existsSync(envFile), 'CLAUDE_ENV_FILE should be created on resume')
+      const envContent = fs.readFileSync(envFile, 'utf8')
+      assert.ok(envContent.includes('PROVE_IT_SESSION_ID=test-ss-session-id-resume'),
+        `Should contain PROVE_IT_SESSION_ID on resume, got: ${envContent}`)
+    })
+
+    it('does not write PROVE_IT_SESSION_ID on clear', () => {
+      const envFile = path.join(tmpDir, '.claude_env')
+      writeConfig(tmpDir, makeConfig({}))
+
+      invokeHook('claude:SessionStart', {
+        hook_event_name: 'SessionStart',
+        session_id: 'test-ss-session-id-clear',
+        source: 'clear',
+        cwd: tmpDir
+      }, { projectDir: tmpDir, env: { ...isolatedEnv(tmpDir), CLAUDE_ENV_FILE: envFile } })
+
+      assert.ok(!fs.existsSync(envFile), 'CLAUDE_ENV_FILE should not be created on clear')
+    })
+  })
+
   describe('briefing field collection', () => {
     it('includes briefings from non-SessionStart tasks in additionalContext', () => {
       writeConfig(tmpDir, makeConfig({ claude: { SessionStart: [{ name: 'hello', type: 'script', command: 'echo "session context"' }], PreToolUse: [{ name: 'tdd-guide', matcher: 'ExitPlanMode', type: 'script', command: 'echo noop', quiet: true, briefing: 'Follow red-green TDD during implementation.' }] } }))
