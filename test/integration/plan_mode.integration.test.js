@@ -229,6 +229,38 @@ describe('Plan mode enforcement via PreToolUse', () => {
       assert.ok(!content.includes(PHASE_PLAN_MARKER), 'Plan file should not contain phase marker when no signal-gated tasks')
     })
 
+    it('injects verify-assumptions context on ExitPlanMode', () => {
+      writeConfig(tmpDir, makeConfig({
+        claude: {
+          PreToolUse: [{
+            name: 'verify-assumptions',
+            type: 'script',
+            command: "echo 'BLOCKING REQUIREMENT: Before presenting this plan, audit every assumption'",
+            matcher: 'ExitPlanMode',
+            quiet: true
+          }]
+        }
+      }))
+
+      const plansDir = path.join(tmpDir, '.claude', 'plans')
+      fs.mkdirSync(plansDir, { recursive: true })
+      const planText = '### 1. Do stuff\n\n### 2. Done'
+      fs.writeFileSync(path.join(plansDir, 'test-plan.md'), planText)
+
+      const result = invokeHook('claude:PreToolUse', {
+        hook_event_name: 'PreToolUse',
+        session_id: 'test-exit-plan-verify',
+        tool_name: 'ExitPlanMode',
+        tool_input: { plan: planText }
+      }, { projectDir: tmpDir, env })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.ok(result.output, 'Should produce output')
+      const context = result.output.hookSpecificOutput?.additionalContext || ''
+      assert.ok(context.includes('BLOCKING REQUIREMENT'),
+        `Should include verify-assumptions output in additionalContext, got: ${JSON.stringify(result.output)}`)
+    })
+
     it('allows even when plan file not found', () => {
       writeConfig(tmpDir, makeConfig({ claude: { Stop: [{ name: 'gated-task', type: 'script', command: 'echo ok', when: { signal: 'done' } }] } }))
 
