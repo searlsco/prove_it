@@ -312,6 +312,13 @@ prove_it repo (the dispatcher is invoked as a subprocess, not imported).
 **Isolated from real config.** Always use a fake HOME and PROVE_IT_DIR.
 Never touch `~/.claude/` or the user's real sessions.
 
+**FAKE_HOME is HOME.** Several prove_it internals use `process.env.HOME`,
+not `CLAUDE_PROJECT_DIR`. For example, `findPlanFile()` searches
+`HOME/.claude/plans/`, not the project directory. When your scenario
+involves plan files, place them under `FAKE_HOME/.claude/plans/`, not
+`PROJECT_DIR/.claude/plans/`. If a task passes silently but has no
+side effects, a wrong HOME-vs-project path split is the likely cause.
+
 **Human-readable first.** The output is for a human reading a terminal.
 Use color, alignment, and section headers. Print the raw dispatcher output
 for each scenario so the reader can verify without expanding tool calls.
