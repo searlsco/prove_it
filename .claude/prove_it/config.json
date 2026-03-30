@@ -49,7 +49,7 @@
         {
           "name": "verify-assumptions",
           "type": "script",
-          "command": "echo 'BLOCKING REQUIREMENT: Before presenting this plan, audit every assumption it relies on. If ANY assumption has not been objectively verified by you or the user, you MUST verify it now. Read the code, build a proof-of-concept, exercise the behavior in a real browser or app, or ask the user. Failure to identify and validate the plan's assumptions prior to implementation will result in your work being discarded and re-attempted by another developer.'",
+          "command": "echo 'BLOCKING REQUIREMENT: Before presenting this plan, audit every assumption it relies on. If ANY assumption has not been objectively verified by you or the user, you MUST verify it now. Read the code, build a proof-of-concept, exercise the behavior in a real browser or app, or ask the user. Failure to identify and validate your assumptions prior to implementation will result in your work being discarded and re-attempted by another developer.'",
           "matcher": "ExitPlanMode",
           "quiet": true
         },
