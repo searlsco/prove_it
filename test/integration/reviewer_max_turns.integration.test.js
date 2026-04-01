@@ -202,6 +202,41 @@ fi`)
     cleanup()
   })
 
+  it('recovers from error_max_turns when claude exits with code 1', () => {
+    setup()
+    const stateFile = path.join(tmpDir, '.call_count_exit1')
+    const maxTurnsJson = JSON.stringify({
+      result: '',
+      subtype: 'error_max_turns',
+      session_id: 'sess-exit1-recovery',
+      num_turns: 2
+    })
+    const resumeJson = JSON.stringify({
+      result: 'PASS: recovered from exit code 1',
+      subtype: 'success',
+      session_id: 'sess-exit1-recovery'
+    })
+    const claudePath = writeShim('claude', `cat > /dev/null
+if [ -f "${stateFile}" ]; then
+  echo '${resumeJson.replace(/'/g, "'\\''")}'
+else
+  touch "${stateFile}"
+  echo '${maxTurnsJson.replace(/'/g, "'\\''")}'
+  exit 1
+fi`)
+
+    const r = runReviewer(tmpDir, {
+      command: `${claudePath} -p`,
+      maxAgentTurns: 2
+    }, 'test prompt')
+    assert.ok(r.pass, `Expected PASS from exit-code-1 recovery, got: ${JSON.stringify(r)}`)
+    assert.strictEqual(r.reason, 'recovered from exit code 1')
+    assert.ok(r.finalTurn, 'Expected finalTurn metadata')
+    assert.strictEqual(r.finalTurn.succeeded, true)
+    assert.strictEqual(r.finalTurn.numTurns, 2)
+    cleanup()
+  })
+
   it('falls back to raw text when JSON is malformed', () => {
     setup()
     const claudePath = writeShim('claude',
