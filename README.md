@@ -101,7 +101,7 @@ For example, your `script/test_fast` script might run:
 ```bash
 #!/usr/bin/env bash
 set -e
-trap 'prove_it record --name fast-tests --result $?' EXIT
+trap 'rc=$?; command -v prove_it >/dev/null 2>&1 && prove_it record --name fast-tests --result $rc' EXIT
 rake test
 ```
 
@@ -110,7 +110,7 @@ And your full `script/test` command will probably run that and more:
 ```bash
 #!/usr/bin/env bash
 set -e
-trap 'prove_it record --name full-tests --result $?' EXIT
+trap 'rc=$?; command -v prove_it >/dev/null 2>&1 && prove_it record --name full-tests --result $rc' EXIT
 rake test standard:fix test:system
 ```
 

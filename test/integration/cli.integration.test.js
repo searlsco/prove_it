@@ -178,13 +178,13 @@ describe('init/deinit', () => {
     fs.writeFileSync(path.join(tmpDir, 'script', 'test_fast'), '#!/usr/bin/env bash\nnpm run test:unit\n')
     const r2 = runCli(['init'], { cwd: tmpDir })
     assert.match(r2.stdout, /skip redundant test runs/)
-    assert.match(r2.stdout, /trap 'prove_it record --name full-tests --result \$\?' EXIT/)
+    assert.match(r2.stdout, /trap 'rc=\$\?; command -v prove_it >\/dev\/null 2>&1 && prove_it record --name full-tests --result \$rc' EXIT/)
 
     // Scripts with prove_it record → done
     fs.writeFileSync(path.join(tmpDir, 'script', 'test'),
-      "#!/usr/bin/env bash\ntrap 'prove_it record --name full-tests --result $?' EXIT\nnpm test\n")
+      "#!/usr/bin/env bash\ntrap 'rc=$?; command -v prove_it >/dev/null 2>&1 && prove_it record --name full-tests --result $rc' EXIT\nnpm test\n")
     fs.writeFileSync(path.join(tmpDir, 'script', 'test_fast'),
-      "#!/usr/bin/env bash\ntrap 'prove_it record --name fast-tests --result $?' EXIT\nnpm run test:unit\n")
+      "#!/usr/bin/env bash\ntrap 'rc=$?; command -v prove_it >/dev/null 2>&1 && prove_it record --name fast-tests --result $rc' EXIT\nnpm run test:unit\n")
     const r3 = runCli(['init'], { cwd: tmpDir })
     assert.match(r3.stdout, /\[x\] script\/test records results/)
     assert.match(r3.stdout, /\[x\] script\/test_fast records results/)
