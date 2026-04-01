@@ -230,17 +230,21 @@ describe('init/deinit', () => {
     runCli(['init'], { cwd: tmpDir })
     assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'testing.md')))
     assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'done.md')))
+    assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'ui-design.md')))
     runCli(['deinit'], { cwd: tmpDir })
     assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'testing.md')))
     assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'done.md')))
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'ui-design.md')))
 
     // Customized rule files preserved
     runCli(['init'], { cwd: tmpDir })
     fs.writeFileSync(path.join(tmpDir, '.claude', 'rules', 'testing.md'), '# Custom\n')
     fs.writeFileSync(path.join(tmpDir, '.claude', 'rules', 'done.md'), '# Custom done\n')
+    fs.writeFileSync(path.join(tmpDir, '.claude', 'rules', 'ui-design.md'), '# Custom ui\n')
     const r2 = runCli(['deinit'], { cwd: tmpDir })
     assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'testing.md')))
     assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'done.md')))
+    assert.ok(fs.existsSync(path.join(tmpDir, '.claude', 'rules', 'ui-design.md')))
     assert.match(r2.stdout, /customized/)
 
     // .claude/prove_it/ directory removed (including runtime state)
