@@ -7,7 +7,7 @@ const { configHash, buildConfig } = require('../../lib/config')
 const {
   isScriptTestStub, initProject, overwriteTeamConfig,
   installGitHookShim, removeGitHookShim,
-  isProveItShim, hasProveItSection, isDefaultRuleFile, isDefaultDoneFile,
+  isProveItShim, hasProveItSection, isDefaultRuleFile, isDefaultDoneFile, isDefaultUiDesignFile,
   PROVE_IT_SHIM_MARKER
 } = require('../../lib/init')
 
@@ -59,6 +59,18 @@ describe('init integration', () => {
       assert.ok(!isDefaultDoneFile(path.join(tmpDir, '.claude', 'rules', 'done.md')))
 
       assert.ok(!isDefaultDoneFile(path.join(tmpDir, 'nonexistent')))
+    })
+  })
+
+  describe('isDefaultUiDesignFile', () => {
+    it('default → true, customized → false, nonexistent → false', () => {
+      initProject(tmpDir, { gitHooks: false, defaultChecks: true })
+      assert.ok(isDefaultUiDesignFile(path.join(tmpDir, '.claude', 'rules', 'ui-design.md')))
+
+      fs.writeFileSync(path.join(tmpDir, '.claude', 'rules', 'ui-design.md'), '# Custom\n')
+      assert.ok(!isDefaultUiDesignFile(path.join(tmpDir, '.claude', 'rules', 'ui-design.md')))
+
+      assert.ok(!isDefaultUiDesignFile(path.join(tmpDir, 'nonexistent')))
     })
   })
 
@@ -180,6 +192,7 @@ describe('init integration', () => {
       assert.ok(results.scriptTestFast.created)
       assert.ok(results.ruleFile.created)
       assert.ok(results.doneRuleFile.created)
+      assert.ok(results.uiDesignRuleFile.created)
       assert.ok(results.proveItGitignore.created)
 
       // Files exist
@@ -210,11 +223,16 @@ describe('init integration', () => {
       const doneContent = fs.readFileSync(path.join(tmpDir, '.claude', 'rules', 'done.md'), 'utf8')
       assert.ok(doneContent.includes('Definition of Done'))
 
+      // UI design rule file content
+      const uiDesignContent = fs.readFileSync(path.join(tmpDir, '.claude', 'rules', 'ui-design.md'), 'utf8')
+      assert.ok(uiDesignContent.includes('UI Design'))
+
       // No rule files when defaultChecks false
       const tmpDir2 = freshRepo()
       initProject(tmpDir2, { gitHooks: false, defaultChecks: false })
       assert.ok(!fs.existsSync(path.join(tmpDir2, '.claude', 'rules', 'testing.md')))
       assert.ok(!fs.existsSync(path.join(tmpDir2, '.claude', 'rules', 'done.md')))
+      assert.ok(!fs.existsSync(path.join(tmpDir2, '.claude', 'rules', 'ui-design.md')))
       fs.rmSync(tmpDir2, { recursive: true, force: true })
 
       // .gitignore content
@@ -261,11 +279,14 @@ describe('init integration', () => {
       fs.mkdirSync(ruleDir, { recursive: true })
       fs.writeFileSync(path.join(ruleDir, 'testing.md'), 'Custom rules\n')
       fs.writeFileSync(path.join(ruleDir, 'done.md'), 'Custom done rules\n')
+      fs.writeFileSync(path.join(ruleDir, 'ui-design.md'), 'Custom ui rules\n')
       r = initProject(tmpDir, { gitHooks: false, defaultChecks: true })
       assert.ok(r.ruleFile.existed && !r.ruleFile.created)
       assert.ok(r.doneRuleFile.existed && !r.doneRuleFile.created)
+      assert.ok(r.uiDesignRuleFile.existed && !r.uiDesignRuleFile.created)
       assert.strictEqual(fs.readFileSync(path.join(ruleDir, 'testing.md'), 'utf8'), 'Custom rules\n')
       assert.strictEqual(fs.readFileSync(path.join(ruleDir, 'done.md'), 'utf8'), 'Custom done rules\n')
+      assert.strictEqual(fs.readFileSync(path.join(ruleDir, 'ui-design.md'), 'utf8'), 'Custom ui rules\n')
 
       // upToDate
       fs.unlinkSync(cfgPath)

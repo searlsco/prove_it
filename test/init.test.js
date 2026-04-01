@@ -148,6 +148,32 @@ describe('init', () => {
       assert.strictEqual(briefing.quiet, true, 'session-briefing should have quiet: true')
     })
 
+    it('ui-design-review is in Stop entry with parallel, sonnet model, and signal+fileExists when condition', () => {
+      const cfg = buildConfig()
+      const stopTasks = cfg.hooks.claude.Stop
+      const task = stopTasks.find(t => t.name === 'ui-design-review')
+      assert.ok(task, 'Should have ui-design-review task in Stop')
+      assert.strictEqual(task.type, 'agent')
+      assert.strictEqual(task.parallel, true)
+      assert.strictEqual(task.promptType, 'skill')
+      assert.strictEqual(task.prompt, 'prove-ui-design')
+      assert.strictEqual(task.model, 'sonnet')
+      assert.deepStrictEqual(task.when, { signal: 'done', fileExists: '.claude/rules/ui-design.md' })
+    })
+
+    it('ui-design-review uses ui-design.md ruleFile', () => {
+      const cfg = buildConfig()
+      const tasks = allTasks(cfg.hooks)
+      const task = tasks.find(t => t.name === 'ui-design-review')
+      assert.strictEqual(task.ruleFile, '.claude/rules/ui-design.md')
+    })
+
+    it('ui-design-review not present when defaultChecks is false', () => {
+      const cfg = buildConfig({ defaultChecks: false })
+      const checks = allTasks(cfg.hooks)
+      assert.ok(!checks.some(c => c.name === 'ui-design-review'))
+    })
+
     it('generated config passes validation', () => {
       const { validateConfig } = require('../lib/validate')
       const cfg = buildConfig()
