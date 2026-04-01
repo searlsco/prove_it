@@ -174,6 +174,16 @@ describe('init', () => {
       assert.ok(!checks.some(c => c.name === 'ui-design-review'))
     })
 
+    it('approach-review is in Stop entry with signal:stuck when condition', () => {
+      const cfg = buildConfig()
+      const stopTasks = cfg.hooks.claude.Stop
+      const task = stopTasks.find(t => t.name === 'approach-review')
+      assert.ok(task, 'Should have approach-review task in Stop')
+      assert.strictEqual(task.type, 'agent')
+      assert.strictEqual(task.parallel, true)
+      assert.deepStrictEqual(task.when, { signal: 'stuck' })
+    })
+
     it('generated config passes validation', () => {
       const { validateConfig } = require('../lib/validate')
       const cfg = buildConfig()
