@@ -122,6 +122,7 @@ if [ -f "${stateFile}" ]; then
 else
   touch "${stateFile}"
   echo '${maxTurnsJson.replace(/'/g, "'\\''")}'
+  exit 1
 fi`)
 
     const r = runReviewer(tmpDir, {
@@ -155,6 +156,7 @@ if [ -f "${stateFile}" ]; then
 else
   touch "${stateFile}"
   echo '${maxTurnsJson.replace(/'/g, "'\\''")}'
+  exit 1
 fi`)
 
     const r = runReviewer(tmpDir, {
@@ -187,6 +189,7 @@ if [ -f "${stateFile}" ]; then
 else
   touch "${stateFile}"
   echo '${maxTurnsJson.replace(/'/g, "'\\''")}'
+  exit 1
 fi`)
 
     const r = runReviewer(tmpDir, {
