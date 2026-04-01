@@ -297,7 +297,7 @@ describe('install/uninstall', () => {
     assert.strictEqual(cfg.taskEnv.TURBOCOMMIT_DISABLED, '1')
 
     // Skill files (all 5)
-    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-done', 'prove-dry', 'prove-test-validity']) {
+    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-done', 'prove-dry', 'prove-test-validity', 'prove-testing-patterns', 'prove-ui-design']) {
       const skillPath = path.join(tmpDir, '.claude', 'skills', name, 'SKILL.md')
       assert.ok(fs.existsSync(skillPath), `Skill ${name} should exist`)
       const skillContent = fs.readFileSync(skillPath, 'utf8')
@@ -342,7 +342,7 @@ describe('install/uninstall', () => {
     assert.strictEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).taskEnv.TURBOCOMMIT_DISABLED, '1')
 
     // Outdated skill files (all 5)
-    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-done', 'prove-dry', 'prove-test-validity']) {
+    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-done', 'prove-dry', 'prove-test-validity', 'prove-testing-patterns', 'prove-ui-design']) {
       const sp = path.join(tmpDir, '.claude', 'skills', name, 'SKILL.md')
       fs.writeFileSync(sp, 'outdated content')
       runCli(['install'], { env })
@@ -445,7 +445,7 @@ describe('install/uninstall', () => {
     const proveItDir = path.join(tmpDir, '.claude', 'prove_it')
     assert.ok(fs.existsSync(proveItDir), 'prove_it directory should still exist')
     assert.strictEqual(fs.readdirSync(proveItDir).length, 0, 'prove_it directory should be empty')
-    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-done', 'prove-dry', 'prove-test-validity']) {
+    for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-done', 'prove-dry', 'prove-test-validity', 'prove-testing-patterns', 'prove-ui-design']) {
       assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'skills', name)), `Skill ${name} should be removed`)
     }
   })
