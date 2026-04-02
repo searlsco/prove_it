@@ -131,6 +131,45 @@ describe('script check', () => {
       assert.ok(result.output.includes('empty'), `Expected "empty" but got: ${result.output}`)
     })
 
+    it('failure output: structured summary with temp file and tail', () => {
+      // Generate output large enough that the tail slice is meaningful
+      const lines = []
+      for (let i = 0; i < 200; i++) lines.push(`PASS line ${i}`)
+      lines.push('ACTUAL FAILURE: assertion failed on line 42')
+      const body = lines.map(l => `echo "${l}"`).join('\n')
+      makeScript('bigfail', `${body}\nexit 1`)
+
+      const result = runScriptCheck(
+        { name: 'bigfail-test', command: './script/bigfail' },
+        { rootDir: tmpDir, localCfgPath: null, sources: null, maxChars: 12000 }
+      )
+      assert.strictEqual(result.pass, false)
+
+      // reason should start with structured header
+      assert.ok(result.reason.includes('bigfail-test'), 'reason should name the task')
+      assert.ok(result.reason.includes('exit 1'), 'reason should include exit code')
+
+      // reason should reference a temp file
+      const fileMatch = result.reason.match(/Full output: (.+\.log)/)
+      assert.ok(fileMatch, 'reason should include temp file path')
+      const tempFile = fileMatch[1]
+      assert.ok(fs.existsSync(tempFile), 'temp file should exist')
+
+      // temp file should have the full untruncated output
+      const fullOutput = fs.readFileSync(tempFile, 'utf8')
+      assert.ok(fullOutput.includes('PASS line 0'), 'temp file should have beginning of output')
+      assert.ok(fullOutput.includes('ACTUAL FAILURE'), 'temp file should have failure line')
+
+      // reason should include the tail with the failure
+      assert.ok(result.reason.includes('ACTUAL FAILURE'), 'reason tail should include the failure line')
+
+      // reason should NOT include the full raw output (should be compact)
+      assert.ok(!result.reason.includes('PASS line 0'), 'reason should not include beginning of output')
+
+      // clean up temp file
+      fs.unlinkSync(tempFile)
+    })
+
     // 7. configEnv story (3 → 1)
     it('configEnv: custom var, PROVE_IT_DISABLED override protection, null configEnv', () => {
       // custom env var passed to subprocess
