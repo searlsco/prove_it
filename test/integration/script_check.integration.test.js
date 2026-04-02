@@ -146,8 +146,8 @@ describe('script check', () => {
       assert.strictEqual(result.pass, false)
 
       // reason should start with structured header
-      assert.ok(result.reason.includes('bigfail-test'), 'reason should name the task')
       assert.ok(result.reason.includes('exit 1'), 'reason should include exit code')
+      assert.ok(result.reason.includes('./script/bigfail'), 'reason should include command')
 
       // reason should reference a temp file
       const fileMatch = result.reason.match(/Full output: (.+\.log)/)
