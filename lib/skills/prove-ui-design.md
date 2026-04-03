@@ -15,6 +15,7 @@ allowed-tools:
   - WebSearch
   - Task
   - NotebookEdit
+disable-model-invocation: true
 ---
 
 ## Scope
