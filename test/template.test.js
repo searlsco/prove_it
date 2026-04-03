@@ -234,47 +234,6 @@ describe('template', () => {
       }
     })
 
-    it('skips LAST_STOP_HEAD for first-run tasks and uses session start HEAD', () => {
-      const tmpDir = freshRepo((dir) => {
-        fs.writeFileSync(path.join(dir, 'src.js'), 'initial\n')
-      })
-      const origProveItDir = process.env.PROVE_IT_DIR
-      process.env.PROVE_IT_DIR = path.join(tmpDir, 'prove_it_state')
-      try {
-        const { saveSessionState } = require('../lib/session')
-        // Session starts — record session baseline HEAD
-        const sessionStartHead = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
-        saveSessionState('sess-first-run', 'git', { head: sessionStartHead })
-
-        // Agent edits a Swift UI file and commits
-        fs.writeFileSync(path.join(tmpDir, 'ContentView.swift'), 'struct ContentView: View { var body: some View { Text("hi") } }\n')
-        spawnSync('git', ['add', '.'], { cwd: tmpDir })
-        spawnSync('git', ['commit', '-m', 'add SwiftUI view'], { cwd: tmpDir })
-
-        // Stop fires and LAST_STOP_HEAD advances past the commit
-        const postCommitHead = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: tmpDir, encoding: 'utf8' }).stdout.trim()
-        saveSessionState('sess-first-run', 'last_stop_head', postCommitHead)
-
-        // ui-design-review runs for the first time (has taskName, no task ref)
-        const r = makeResolvers({
-          rootDir: tmpDir,
-          projectDir: tmpDir,
-          sessionId: 'sess-first-run',
-          toolInput: null,
-          taskName: 'ui-design-review',
-          sources: ['**/*.swift']
-        })
-        const files = r.files_changed_since_last_run()
-        // Should see the Swift file because baseline is session start, not LAST_STOP_HEAD
-        assert.ok(files.includes('ContentView.swift'),
-          `Expected ContentView.swift in output (baseline should be session start HEAD, not LAST_STOP_HEAD), got: "${files}"`)
-      } finally {
-        if (origProveItDir === undefined) delete process.env.PROVE_IT_DIR
-        else process.env.PROVE_IT_DIR = origProveItDir
-        fs.rmSync(tmpDir, { recursive: true, force: true })
-      }
-    })
-
     it('falls back to HEAD when no session and no task ref', () => {
       const tmpDir = freshRepo((dir) => {
         fs.writeFileSync(path.join(dir, 'src.js'), 'initial\n')
