@@ -59,6 +59,33 @@ describe('CLI', () => {
     assert.match(r.stdout, /signal "done" acknowledged/)
   })
 
+  // ---------- Story: hook ordering ----------
+  it('prepends prove_it hooks before existing hooks', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_order_'))
+    try {
+      const claudeDir = path.join(tmpDir, '.claude')
+      fs.mkdirSync(claudeDir, { recursive: true })
+      // Pre-populate settings with an existing Stop hook (e.g. turbocommit)
+      const existingHook = { hooks: [{ type: 'command', command: 'turbocommit' }] }
+      fs.writeFileSync(path.join(claudeDir, 'settings.json'), JSON.stringify({
+        hooks: { Stop: [existingHook] }
+      }, null, 2))
+
+      const env = { ...process.env, HOME: tmpDir }
+      runCli(['install'], { env })
+
+      const settings = JSON.parse(fs.readFileSync(path.join(claudeDir, 'settings.json'), 'utf8'))
+      const stopHooks = settings.hooks.Stop
+      assert.ok(stopHooks.length >= 2, `Expected at least 2 Stop hook groups, got ${stopHooks.length}`)
+      assert.ok(JSON.stringify(stopHooks[0]).includes('prove_it hook claude:Stop'),
+        `Expected prove_it hook at index 0, got: ${JSON.stringify(stopHooks[0])}`)
+      assert.ok(JSON.stringify(stopHooks[stopHooks.length - 1]).includes('turbocommit'),
+        `Expected turbocommit hook at end, got: ${JSON.stringify(stopHooks[stopHooks.length - 1])}`)
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   // ---------- Story: reinstall ----------
   it('reinstall uninstalls and reinstalls global hooks', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_reinstall_'))
