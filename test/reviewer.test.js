@@ -337,6 +337,39 @@ describe('parseJsonOutput', () => {
     const parsed = parseJsonOutput(json)
     assert.deepStrictEqual(parsed.permissionDenials, [{ tool_name: 'ExitPlanMode', tool_input: { plan: 'my review plan' } }])
   })
+
+  it('extracts result entry from JSON array format', () => {
+    const json = JSON.stringify([
+      { type: 'system', subtype: 'init', session_id: 'sys-1' },
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'hello' }] } },
+      { type: 'result', subtype: 'success', result: 'PASS: all good', session_id: 'arr-123', num_turns: 3 }
+    ])
+    const parsed = parseJsonOutput(json)
+    assert.strictEqual(parsed.result, 'PASS: all good')
+    assert.strictEqual(parsed.sessionId, 'arr-123')
+    assert.strictEqual(parsed.subtype, 'success')
+    assert.strictEqual(parsed.numTurns, 3)
+  })
+
+  it('returns null for JSON array with no result entry', () => {
+    const json = JSON.stringify([
+      { type: 'system', subtype: 'init' },
+      { type: 'assistant', message: {} }
+    ])
+    assert.strictEqual(parseJsonOutput(json), null)
+  })
+
+  it('handles JSON array with error_max_turns result', () => {
+    const json = JSON.stringify([
+      { type: 'system', subtype: 'init' },
+      { type: 'result', subtype: 'error_max_turns', result: '', session_id: 'max-1', num_turns: 10 }
+    ])
+    const parsed = parseJsonOutput(json)
+    assert.strictEqual(parsed.subtype, 'error_max_turns')
+    assert.strictEqual(parsed.sessionId, 'max-1')
+    assert.strictEqual(parsed.result, '')
+    assert.strictEqual(parsed.numTurns, 10)
+  })
 })
 
 describe('extractReviewText', () => {
