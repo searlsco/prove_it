@@ -293,6 +293,8 @@ describe('SessionStart task types', () => {
       const envContent = fs.readFileSync(envFile, 'utf8')
       assert.ok(envContent.includes('PROVE_IT_SESSION_ID=test-ss-session-id-inject'),
         `Should contain PROVE_IT_SESSION_ID, got: ${envContent}`)
+      assert.ok(envContent.includes('export PROVE_IT_SESSION_ID='),
+        `PROVE_IT_SESSION_ID must be exported so child processes inherit it, got: ${envContent}`)
     })
 
     it('writes PROVE_IT_SESSION_ID on resume', () => {
