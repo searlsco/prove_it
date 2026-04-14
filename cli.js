@@ -117,6 +117,16 @@ function main () {
       cmdCancel()
       break
     }
+    case 'disable': {
+      const { cmdDisable } = require('./lib/commands/disable')
+      cmdDisable()
+      break
+    }
+    case 'enable': {
+      const { cmdEnable } = require('./lib/commands/enable')
+      cmdEnable()
+      break
+    }
     case 'phase': {
       const { cmdPhase } = require('./lib/commands/phase')
       cmdPhase()

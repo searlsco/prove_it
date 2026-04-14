@@ -30,7 +30,10 @@ const {
   clearDispatcherPid,
   writeCancelSentinel,
   readCancelSentinel,
-  clearCancelSentinel
+  clearCancelSentinel,
+  writeDisabledSentinel,
+  readDisabledSentinel,
+  clearDisabledSentinel
 } = require('../lib/session')
 const { recordSessionBaseline } = require('../lib/dispatcher/claude')
 
@@ -924,6 +927,49 @@ describe('session state functions', () => {
 
     it('writeCancelSentinel is safe with null sessionId', () => {
       writeCancelSentinel(null) // should not throw
+    })
+  })
+
+  describe('disabled sentinel', () => {
+    it('writeDisabledSentinel / readDisabledSentinel round-trips', () => {
+      writeDisabledSentinel(SESSION_ID)
+      assert.strictEqual(readDisabledSentinel(SESSION_ID), true)
+    })
+
+    it('readDisabledSentinel returns false when no sentinel exists', () => {
+      assert.strictEqual(readDisabledSentinel('no-disabled-session'), false)
+    })
+
+    it('readDisabledSentinel returns false for null sessionId', () => {
+      assert.strictEqual(readDisabledSentinel(null), false)
+    })
+
+    it('clearDisabledSentinel removes the sentinel', () => {
+      writeDisabledSentinel(SESSION_ID)
+      assert.strictEqual(readDisabledSentinel(SESSION_ID), true)
+      clearDisabledSentinel(SESSION_ID)
+      assert.strictEqual(readDisabledSentinel(SESSION_ID), false)
+    })
+
+    it('clearDisabledSentinel is safe with null sessionId', () => {
+      clearDisabledSentinel(null) // should not throw
+    })
+
+    it('clearDisabledSentinel is safe when no sentinel exists', () => {
+      clearDisabledSentinel('nonexistent-session') // should not throw
+    })
+
+    it('writeDisabledSentinel is safe with null sessionId', () => {
+      writeDisabledSentinel(null) // should not throw
+    })
+
+    it('cancel and disabled sentinels are independent', () => {
+      writeCancelSentinel(SESSION_ID)
+      writeDisabledSentinel(SESSION_ID)
+      clearCancelSentinel(SESSION_ID)
+      assert.strictEqual(readCancelSentinel(SESSION_ID), false)
+      assert.strictEqual(readDisabledSentinel(SESSION_ID), true,
+        'clearing cancel should not clear disabled')
     })
   })
 
