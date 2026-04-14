@@ -891,6 +891,8 @@ prove_it doctor         Check installation and show effective config
 prove_it monitor        Tail hook results in real time
 prove_it signal <type>  Declare a lifecycle signal (done, stuck, idle)
 prove_it cancel         Cancel running hook tasks for the current session
+prove_it disable        Silence prove_it hooks for the current session (run via `!`)
+prove_it enable         Re-enable prove_it hooks for the current session
 prove_it phase <mode>   Set session phase (unknown, plan, implement, refactor)
 prove_it hook <spec>    Run a dispatcher directly (claude:Stop, git:pre-commit)
 prove_it prefix         Print install directory (for resolving libexec scripts)
@@ -934,6 +936,25 @@ For just you—edit `.claude/prove_it/config.local.json`:
 ```bash
 export PROVE_IT_DISABLED=1
 ```
+
+### Disable for the current Claude session only
+
+When a running Claude session is generating too much noise and you just want
+prove_it out of the way for the rest of the session:
+
+```bash
+! prove_it disable   # silences PreToolUse / Stop / PostToolUse hooks for this session
+! prove_it enable    # restore them
+```
+
+This works because prove_it injects `PROVE_IT_SESSION_ID` into the shell on
+SessionStart. The disabled state is keyed to that session id — other sessions
+(including new Claude windows) are unaffected. On resume of a disabled session,
+you'll see a one-line reminder in your terminal telling you to run
+`! prove_it enable` to restore hooks.
+
+Git hooks (pre-commit, pre-push) are not session-scoped and continue to run.
+Use `git commit --no-verify` if you need to bypass those.
 
 ## Troubleshooting
 
