@@ -803,7 +803,7 @@ The manual and automatic paths use the same prompt — the difference is who tri
 
 ## Subprocess environment (`taskEnv`)
 
-When prove_it spawns reviewer subagents or runs script tasks, other hooks installed in your environment (like [turbocommit](https://github.com/Siege/turbocommit)) may fire inside those subprocesses. Use the top-level `taskEnv` field to set environment variables across all prove_it subprocesses:
+When prove_it spawns reviewer subagents or runs script tasks, other hooks installed in your environment (like [turbocommit](https://github.com/searlsco/turbocommit)) may fire inside those subprocesses. Use the top-level `taskEnv` field to set environment variables across all prove_it subprocesses:
 
 ```json
 {
