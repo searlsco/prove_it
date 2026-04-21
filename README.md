@@ -893,6 +893,7 @@ prove_it signal <type>  Declare a lifecycle signal (done, stuck, idle)
 prove_it cancel         Cancel running hook tasks for the current session
 prove_it disable        Silence prove_it hooks for the current session (run via `!`)
 prove_it enable         Re-enable prove_it hooks for the current session
+prove_it catchup        Fast-forward reviewer baselines past stale repo state
 prove_it phase <mode>   Set session phase (unknown, plan, implement, refactor)
 prove_it hook <spec>    Run a dispatcher directly (claude:Stop, git:pre-commit)
 prove_it prefix         Print install directory (for resolving libexec scripts)
@@ -955,6 +956,26 @@ you'll see a one-line reminder in your terminal telling you to run
 
 Git hooks (pre-commit, pre-push) are not session-scoped and continue to run.
 Use `git commit --no-verify` if you need to bypass those.
+
+### Catch reviewers up after a big repo change
+
+If you `git pull` (or rebase / reset) mid-session and pull in commits the
+session didn't actually produce, reviewers will keep diffing against the
+old baseline and flag work that isn't yours. Run:
+
+```bash
+! prove_it catchup            # advance baselines for every task in this session
+! prove_it catchup done-review # only advance one task
+```
+
+`catchup` advances task refs (`refs/worktree/prove_it/<task>`) and the
+session baseline to the current `HEAD`, clears successive failure counts,
+removes tasks from the suspended list, and deletes any open backchannel
+appeal directories. Uncommitted edits stay visible to subsequent reviewers
+— catchup zips past committed history, not your in-progress work.
+
+Scoped to the current git checkout (or worktree). Per-task form leaves
+session-wide state untouched.
 
 ## Troubleshooting
 
