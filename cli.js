@@ -13,6 +13,7 @@
  *   prefix    - Print install directory (for resolving libexec scripts)
  *   signal    - Declare a lifecycle signal (done, stuck, idle)
  *   cancel    - Cancel running hook tasks for the current session
+ *   catchup   - Fast-forward reviewer baselines/state past stale repo state
  *   phase     - Set session activity phase (unknown, plan, implement, refactor)
  *   record    - Record a test run result for run caching
  *   upgrade   - Update via Homebrew, reinstall hooks, reinit project
@@ -125,6 +126,11 @@ function main () {
     case 'enable': {
       const { cmdEnable } = require('./lib/commands/enable')
       cmdEnable()
+      break
+    }
+    case 'catchup': {
+      const { cmdCatchup } = require('./lib/commands/catchup')
+      cmdCatchup(args[1])
       break
     }
     case 'phase': {
