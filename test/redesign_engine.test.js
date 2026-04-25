@@ -431,6 +431,235 @@ describe('shared workflow engine', () => {
     }
   })
 
+  it('skips signal-gated tasks unless the active signal matches and reports the skip without running the task', () => {
+    const repo = tmpRepo({
+      done_check: {
+        type: 'script',
+        command: './script/done',
+        when: { signal: 'done' }
+      },
+      stuck_check: {
+        type: 'script',
+        command: './script/stuck',
+        when: { signal: 'stuck' }
+      }
+    }, ['done_check', 'stuck_check'])
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const statePort = createMemoryStatePort()
+      const event = normalizePiToolCall({
+        toolName: 'edit',
+        input: { path: 'src/app.js' },
+        session_id: 'session-123'
+      }, { cwd: repo })
+      const calls = []
+      const taskPort = { run: ({ taskName }) => { calls.push(taskName); return { pass: true } } }
+
+      const noSignal = runWorkflowEngine({ event, effectiveConfig, statePort, taskPort })
+      statePort.writeSignal('session-123', { type: 'stuck', message: 'blocked', at: 123 })
+      const stuck = runWorkflowEngine({ event, effectiveConfig, statePort, taskPort })
+      statePort.writeSignal('session-123', { type: 'done', message: 'ready', at: 456 })
+      const done = runWorkflowEngine({ event, effectiveConfig, statePort, taskPort })
+
+      assert.strictEqual(noSignal.effect, 'allow')
+      assert.deepStrictEqual(noSignal.skipped.map(skip => skip.taskName), ['done_check', 'stuck_check'])
+      assert.deepStrictEqual(calls, ['stuck_check', 'done_check'])
+      assert.strictEqual(stuck.effect, 'allow')
+      assert.deepStrictEqual(stuck.skipped.map(skip => skip.taskName), ['done_check'])
+      assert.strictEqual(done.effect, 'allow')
+      assert.deepStrictEqual(done.skipped.map(skip => skip.taskName), ['stuck_check'])
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('classifies edited source and test files with strict globs before running when-gated tasks', () => {
+    const repo = tmpRepo({
+      source_check: {
+        type: 'script',
+        command: './script/source',
+        when: { sourceFilesEdited: true }
+      },
+      test_check: {
+        type: 'script',
+        command: './script/test',
+        when: { testFilesEdited: true }
+      }
+    }, ['source_check', 'test_check'])
+    const cfgPath = path.join(repo, '.prove_it', 'config.json')
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    cfg.globs = { source: ['src/**/*.js'], test: ['test/**/*.test.js'] }
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2))
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const calls = []
+      const taskPort = { run: ({ taskName }) => { calls.push(taskName); return { pass: true } } }
+
+      const sourceEdit = runWorkflowEngine({
+        event: normalizePiToolCall({ toolName: 'edit', input: { path: 'src/app.js' } }, { cwd: repo }),
+        effectiveConfig,
+        taskPort
+      })
+      const testEdit = runWorkflowEngine({
+        event: normalizePiToolCall({ toolName: 'edit', input: { path: 'test/app.test.js' } }, { cwd: repo }),
+        effectiveConfig,
+        taskPort
+      })
+
+      assert.deepStrictEqual(calls, ['source_check', 'test_check'])
+      assert.deepStrictEqual(sourceEdit.skipped.map(skip => skip.taskName), ['test_check'])
+      assert.deepStrictEqual(testEdit.skipped.map(skip => skip.taskName), ['source_check'])
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('uses injected observation facts for edited-file conditions when adapter observation recording is not present', () => {
+    const repo = tmpRepo({
+      source_check: {
+        type: 'script',
+        command: './script/source',
+        when: { sourceFilesEdited: true }
+      },
+      test_check: {
+        type: 'script',
+        command: './script/test',
+        when: { testFilesEdited: true }
+      }
+    }, ['source_check', 'test_check'])
+    const cfgPath = path.join(repo, '.prove_it', 'config.json')
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    cfg.globs = { source: ['src/**/*.js'], test: ['test/**/*.test.js'] }
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2))
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const calls = []
+      const taskPort = { run: ({ taskName }) => { calls.push(taskName); return { pass: true } } }
+      const observationPort = {
+        getFacts () {
+          return { editedFiles: ['test/app.test.js'] }
+        }
+      }
+
+      const effect = runWorkflowEngine({
+        event: normalizePiToolCall({ toolName: 'custom_observer_only_tool', input: {} }, { cwd: repo }),
+        effectiveConfig,
+        taskPort,
+        observationPort
+      })
+
+      assert.deepStrictEqual(calls, ['test_check'])
+      assert.deepStrictEqual(effect.skipped.map(skip => skip.taskName), ['source_check'])
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('supports sources-modified-since-last-run facts without running skipped tasks', () => {
+    const repo = tmpRepo({
+      stale_check: {
+        type: 'script',
+        command: './script/stale',
+        when: { sourcesModifiedSinceLastRun: true }
+      },
+      fresh_check: {
+        type: 'script',
+        command: './script/fresh',
+        when: { sourcesModifiedSinceLastRun: true }
+      }
+    }, ['stale_check', 'fresh_check'])
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const calls = []
+      const taskPort = { run: ({ taskName }) => { calls.push(taskName); return { pass: true } } }
+      const observationPort = {
+        getFacts () {
+          return {
+            sourcesModifiedSinceLastRun: {
+              stale_check: { modified: false, evidence: 'last passing run covers current source snapshot' },
+              fresh_check: { modified: true, evidence: 'src/app.js changed after last passing run' }
+            }
+          }
+        }
+      }
+
+      const effect = runWorkflowEngine({
+        event: normalizePiToolCall({ toolName: 'edit', input: { path: 'README.md' } }, { cwd: repo }),
+        effectiveConfig,
+        taskPort,
+        observationPort
+      })
+
+      assert.deepStrictEqual(calls, ['fresh_check'])
+      assert.deepStrictEqual(effect.skipped.map(skip => skip.taskName), ['stale_check'])
+      assert.match(effect.skipped[0].reason, /no sources were modified since the last run/)
+      assert.match(effect.skipped[0].evidence, /last passing run covers/)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('evaluates net linesChanged and gross linesWritten churn thresholds with explicit semantics', () => {
+    const repo = tmpRepo({
+      net_check: {
+        type: 'script',
+        command: './script/net',
+        when: { linesChanged: 5 }
+      },
+      net_pass: {
+        type: 'script',
+        command: './script/net-pass',
+        when: { linesChanged: 4 }
+      },
+      gross_check: {
+        type: 'script',
+        command: './script/gross',
+        when: { linesWritten: 10 }
+      },
+      gross_fail: {
+        type: 'script',
+        command: './script/gross-fail',
+        when: { linesWritten: 13 }
+      }
+    }, ['net_check', 'net_pass', 'gross_check', 'gross_fail'])
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const calls = []
+      const taskPort = { run: ({ taskName }) => { calls.push(taskName); return { pass: true } } }
+      const observationPort = {
+        getFacts () {
+          return {
+            churn: {
+              netLinesChanged: { net_check: 4, net_pass: 4, gross_check: 4, gross_fail: 4 },
+              grossLinesWritten: { net_check: 12, net_pass: 12, gross_check: 12, gross_fail: 12 }
+            }
+          }
+        }
+      }
+
+      const effect = runWorkflowEngine({
+        event: normalizePiToolCall({ toolName: 'edit', input: { path: 'src/app.js' } }, { cwd: repo }),
+        effectiveConfig,
+        taskPort,
+        observationPort
+      })
+
+      assert.deepStrictEqual(calls, ['net_pass', 'gross_check'])
+      assert.deepStrictEqual(effect.skipped.map(skip => skip.taskName), ['net_check', 'gross_fail'])
+      assert.match(effect.skipped[0].reason, /only 4 of 5 net lines changed/)
+      assert.strictEqual(effect.skipped[0].semantics, 'net:additions_plus_deletions_since_last_successful_run')
+      assert.match(effect.skipped[1].reason, /only 12 of 13 gross lines were written/)
+      assert.strictEqual(effect.skipped[1].semantics, 'gross:lines_written_by_edit_observations_since_last_successful_run')
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   it('does not import Claude hook protocol rendering in the shared engine', () => {
     const source = fs.readFileSync(path.join(__dirname, '../lib/redesign/engine.js'), 'utf8')
 

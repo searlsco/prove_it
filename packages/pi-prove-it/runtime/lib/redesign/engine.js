@@ -21,6 +21,7 @@ const {
   targetPathMatchesProtected,
   toProjectRelativePath
 } = require('./target_paths')
+const { evaluateWhen } = require('./when')
 
 const DEFAULT_PROTECTED_PATHS = [
   '.prove_it/config.json',
@@ -157,8 +158,38 @@ function taskRunnerContext (taskName, task, context) {
     statePort: context.ports?.state || null,
     taskPort: context.ports?.task || null,
     effectPort: context.ports?.effect || null,
+    observationPort: context.ports?.observations || null,
     ports: context.ports || {}
   }
+}
+
+function recordSkippedTask (context, taskName, task, result) {
+  if (!context.skippedTasks) context.skippedTasks = []
+  context.skippedTasks.push({
+    taskName,
+    reason: result.reason || 'Skipped because task conditions were not met',
+    when: task?.when || null,
+    evidence: result.evidence === undefined ? null : result.evidence,
+    semantics: result.semantics || null
+  })
+}
+
+function allowWithSkippedTasks (context, dependencies) {
+  if (context.skippedTasks && context.skippedTasks.length > 0) {
+    return dependencies.allowEffect({ skipped: context.skippedTasks })
+  }
+  return dependencies.allowEffect()
+}
+
+function whenHasSignal (when, signalType) {
+  if (!when || !signalType) return false
+  const clauses = Array.isArray(when) ? when : [when]
+  return clauses.some(clause => clause?.signal === signalType)
+}
+
+function agentEndTaskCanRunForSignal (task, signal) {
+  if (signal?.type === 'done') return true
+  return whenHasSignal(task?.when, signal?.type)
 }
 
 function invokeTaskRunner (runner, context) {
@@ -279,22 +310,30 @@ function runAgentEndWorkflow (config, event, options = {}) {
   const ports = options.ports || {
     task: options.taskPort || options.taskRunnerPort || null,
     effect: options.effectPort || options.effectsPort || null,
-    state: options.statePort || null
+    state: options.statePort || null,
+    observations: options.observationPort || options.observationsPort || null
   }
   const signal = readSignal(ports.state, event.sessionId)
-  if (!signal || signal.type !== 'done') return dependencies.allowEffect()
+  if (!signal || signal.type === 'idle') return dependencies.allowEffect()
 
   const context = {
     event,
     config,
     adapterCapabilities: options.adapterCapabilities || {},
-    ports
+    ports,
+    skippedTasks: []
   }
 
   const tasks = taskRegistry(config)
   for (const taskName of agentEndPipeline(config)) {
     const task = tasks[taskName]
     if (!task) continue
+    if (!agentEndTaskCanRunForSignal(task, signal)) continue
+    const whenResult = evaluateWhen(task.when, context, taskName)
+    if (!whenResult.passed) {
+      recordSkippedTask(context, taskName, task, whenResult)
+      continue
+    }
     if (task.type === 'script' || task.type === 'agent') {
       const effect = runScriptTask(taskName, task, context, dependencies)
       if (effect.effect === 'block' || effect.effect === 'fail') {
@@ -303,7 +342,9 @@ function runAgentEndWorkflow (config, event, options = {}) {
     }
   }
 
-  return completionPassEffect(context, dependencies)
+  const effect = completionPassEffect(context, dependencies)
+  if (context.skippedTasks.length > 0) effect.skipped = context.skippedTasks
+  return effect
 }
 
 function runPreToolWorkflow (config, event, options = {}) {
@@ -317,14 +358,21 @@ function runPreToolWorkflow (config, event, options = {}) {
     ports: options.ports || {
       task: options.taskPort || options.taskRunnerPort || null,
       effect: options.effectPort || options.effectsPort || null,
-      state: options.statePort || null
-    }
+      state: options.statePort || null,
+      observations: options.observationPort || options.observationsPort || null
+    },
+    skippedTasks: []
   }
 
   const tasks = taskRegistry(config)
   for (const taskName of preToolPipeline(config)) {
     const task = tasks[taskName]
     if (!task || !taskMatchesEvent(task, event)) continue
+    const whenResult = evaluateWhen(task.when, context, taskName)
+    if (!whenResult.passed) {
+      recordSkippedTask(context, taskName, task, whenResult)
+      continue
+    }
     if (task.type === 'config_guard') {
       const effect = evaluateConfigGuard(task, event, { dependencies })
       if (effect.effect === 'block') return effect
@@ -334,7 +382,7 @@ function runPreToolWorkflow (config, event, options = {}) {
     }
   }
 
-  return dependencies.allowEffect()
+  return allowWithSkippedTasks(context, dependencies)
 }
 
 function emitEffect (effectPort, effect, context) {
@@ -360,19 +408,23 @@ function runWorkflowEngine ({
   effectPort = null,
   effectsPort = null,
   taskRunnerPort = null,
+  observationPort = null,
+  observationsPort = null,
   dependencies = {}
 } = {}) {
   const workflowConfig = effectiveConfig || config
   const ports = {
     state: statePort,
     task: taskPort || taskRunnerPort,
-    effect: effectPort || effectsPort
+    effect: effectPort || effectsPort,
+    observations: observationPort || observationsPort
   }
   const context = {
     event,
     config: workflowConfig,
     adapterCapabilities,
-    ports
+    ports,
+    skippedTasks: []
   }
   const deps = defaultDependencies(dependencies)
 

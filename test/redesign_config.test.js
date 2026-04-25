@@ -100,6 +100,81 @@ describe('redesign strict .prove_it config/profile model', () => {
     }
   })
 
+  it('accepts strict task when conditions and preserves them in explain diagnostics', () => {
+    const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
+    const home = tmpDir('prove_it_home_')
+    const repo = tmpDir('prove_it_repo_')
+
+    try {
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        globs: { source: ['src/**/*.js'], test: ['test/**/*.js'] },
+        tasks: {
+          gated_check: {
+            type: 'script',
+            command: './script/check',
+            when: [
+              { signal: 'done', sourceFilesEdited: true, linesChanged: 10 },
+              { signal: 'stuck', testFilesEdited: true, linesWritten: 25, sourcesModifiedSinceLastRun: true }
+            ]
+          }
+        },
+        agent_workflows: { pre_tool: { append: ['gated_check'] } },
+        adapters: { claude: { enabled: true } }
+      })
+
+      const explained = loadEffectiveConfig(repo, { homeDir: home, explain: true })
+
+      assert.deepStrictEqual(explained.effective.tasks.gated_check.when, [
+        { signal: 'done', sourceFilesEdited: true, linesChanged: 10 },
+        { signal: 'stuck', testFilesEdited: true, linesWritten: 25, sourcesModifiedSinceLastRun: true }
+      ])
+      assert.ok(JSON.stringify(explained).includes('sourceFilesEdited'))
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects invalid strict task when condition shapes', () => {
+    const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
+    const home = tmpDir('prove_it_home_')
+    const repo = tmpDir('prove_it_repo_')
+
+    try {
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: {
+          bad_signal: { type: 'script', command: 'true', when: { signal: 'finished' } }
+        }
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /tasks\.bad_signal\.when\.signal must be one of done, stuck, idle/)
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: {
+          bad_key: { type: 'script', command: 'true', when: { claudeHookEvent: 'Stop' } }
+        }
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /unknown tasks\.bad_key\.when key "claudeHookEvent"/)
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: {
+          bad_threshold: { type: 'script', command: 'true', when: { linesChanged: -1 } }
+        }
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /tasks\.bad_threshold\.when\.linesChanged must be a non-negative integer/)
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   it('strictly rejects unknown fields, legacy hook-shaped config, and invalid task references', () => {
     const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
     const home = tmpDir('prove_it_home_')
@@ -175,7 +250,7 @@ describe('redesign strict .prove_it config/profile model', () => {
         profile_version: PROFILE_VERSION,
         tasks: {
           protect_prove_it_config: { type: 'config_guard' },
-          explain_check: { type: 'script', command: 'echo explain' }
+          explain_check: { type: 'script', command: 'echo explain', when: { signal: 'done', sourceFilesEdited: true } }
         },
         agent_workflows: { pre_tool: { append: ['explain_check'] } }
       })
@@ -198,6 +273,7 @@ describe('redesign strict .prove_it config/profile model', () => {
       ])
       assert.ok(explained.lineage.tasks.protect_prove_it_config.length >= 2)
       assert.ok(explained.task_shadowing.protect_prove_it_config)
+      assert.deepStrictEqual(explained.effective.tasks.explain_check.when, { signal: 'done', sourceFilesEdited: true })
       assert.doesNotMatch(stdout, /legacy/)
       assert.doesNotMatch(stdout, /\.claude\/prove_it/)
     } finally {

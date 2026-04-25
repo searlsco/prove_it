@@ -27,6 +27,7 @@ const RUNTIME_FILES = [
   'lib/redesign/signal_lifecycle.js',
   'lib/redesign/state_port.js',
   'lib/redesign/target_paths.js',
+  'lib/redesign/when.js',
   'lib/reviewer.js',
   'lib/session.js',
   'lib/template.js',
