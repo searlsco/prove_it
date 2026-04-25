@@ -6,7 +6,7 @@ const path = require('path')
 
 const { behaviorForCapability } = require('../lib/adapter_capabilities')
 const { loadProjectConfig, PROFILE_VERSION } = require('../lib/redesign/config')
-const { normalizePiToolCall } = require('../lib/redesign/events')
+const { normalizeLifecycleEvent, normalizePiToolCall } = require('../lib/redesign/events')
 const { runWorkflowEngine } = require('../lib/redesign/engine')
 const { readSignal } = require('../lib/redesign/signal_lifecycle')
 const { createMemoryStatePort } = require('../lib/redesign/state_port')
@@ -16,7 +16,7 @@ function tmpRepo (tasks = {
     type: 'config_guard',
     protected_paths: ['.prove_it/config.json']
   }
-}, preTool = ['protect_custom_config']) {
+}, preTool = ['protect_custom_config'], agentEnd = []) {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_engine_'))
   fs.mkdirSync(path.join(repo, '.prove_it'), { recursive: true })
   fs.writeFileSync(path.join(repo, '.prove_it', 'config.json'), JSON.stringify({
@@ -24,7 +24,8 @@ function tmpRepo (tasks = {
     profile_version: PROFILE_VERSION,
     tasks,
     agent_workflows: {
-      pre_tool: preTool
+      pre_tool: preTool,
+      agent_end: agentEnd
     },
     adapters: {
       pi: { enabled: true }
@@ -37,6 +38,24 @@ function piCapabilities () {
   return {
     pre_tool_blocking: behaviorForCapability('pi', 'pre_tool_blocking')
   }
+}
+
+function tmpCompletionRepo (agentEnd = ['completion_check']) {
+  return tmpRepo({
+    completion_check: {
+      type: 'script',
+      command: './script/test_fast'
+    }
+  }, [], agentEnd)
+}
+
+function agentEndEvent (adapterId, repo, sessionId = 'session-123') {
+  return normalizeLifecycleEvent({
+    adapterId,
+    rawEventName: adapterId === 'claude' ? 'Stop' : 'agent_end',
+    rawEvent: { session_id: sessionId },
+    cwd: repo
+  })
 }
 
 describe('shared workflow engine', () => {
@@ -258,6 +277,120 @@ describe('shared workflow engine', () => {
       assert.deepStrictEqual(order, ['first', 'second'])
       assert.strictEqual(effect.effect, 'block')
       assert.match(effect.reason, /second failed/)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('does not run completion verification until the done signal is active', () => {
+    const repo = tmpCompletionRepo()
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const taskPort = { run: () => assert.fail('agent_end workflow should be signal-gated by done') }
+
+      const effect = runWorkflowEngine({
+        event: agentEndEvent('claude', repo),
+        effectiveConfig,
+        adapterCapabilities: {
+          completion_verification: behaviorForCapability('claude', 'completion_verification')
+        },
+        statePort: createMemoryStatePort(),
+        taskPort
+      })
+
+      assert.deepStrictEqual(effect, { effect: 'allow' })
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('passing completion verification clears the done signal', () => {
+    const repo = tmpCompletionRepo()
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const statePort = createMemoryStatePort()
+      statePort.writeSignal('session-123', { type: 'done', message: 'ready', at: 123 })
+      const taskPort = { run: () => ({ pass: true }) }
+
+      const effect = runWorkflowEngine({
+        event: agentEndEvent('claude', repo),
+        effectiveConfig,
+        adapterCapabilities: {
+          completion_verification: behaviorForCapability('claude', 'completion_verification')
+        },
+        statePort,
+        taskPort
+      })
+
+      assert.strictEqual(effect.effect, 'approve')
+      assert.strictEqual(effect.signalLifecycle.action, 'clear')
+      assert.strictEqual(readSignal(statePort, 'session-123'), null)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('remediation-only completion verification fails with a remediation effect and preserves the done signal', () => {
+    const repo = tmpCompletionRepo()
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const statePort = createMemoryStatePort({}, { requireSessionId: false })
+      statePort.writeSignal(null, { type: 'done', message: 'ready', at: 123 })
+      const taskPort = {
+        run () {
+          return { pass: false, reason: 'reviewer found missing tests' }
+        }
+      }
+
+      const effect = runWorkflowEngine({
+        event: agentEndEvent('pi', repo, null),
+        effectiveConfig,
+        adapterCapabilities: {
+          completion_verification: behaviorForCapability('pi', 'completion_verification')
+        },
+        statePort,
+        taskPort
+      })
+
+      assert.strictEqual(effect.effect, 'remediation')
+      assert.match(effect.message, /reviewer found missing tests/)
+      assert.strictEqual(effect.enforcement, 'remediation')
+      assert.deepStrictEqual(readSignal(statePort, null), { type: 'done', message: 'ready', at: 123 })
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('hard-block capable completion verification fails with a fail effect and preserves the done signal', () => {
+    const repo = tmpCompletionRepo()
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const statePort = createMemoryStatePort()
+      statePort.writeSignal('session-123', { type: 'done', message: 'ready', at: 123 })
+      const taskPort = {
+        run () {
+          return { pass: false, reason: 'tests failed' }
+        }
+      }
+
+      const effect = runWorkflowEngine({
+        event: agentEndEvent('claude', repo),
+        effectiveConfig,
+        adapterCapabilities: {
+          completion_verification: behaviorForCapability('claude', 'completion_verification')
+        },
+        statePort,
+        taskPort
+      })
+
+      assert.strictEqual(effect.effect, 'fail')
+      assert.match(effect.reason, /tests failed/)
+      assert.strictEqual(effect.enforcement, 'hard_block')
+      assert.deepStrictEqual(readSignal(statePort, 'session-123'), { type: 'done', message: 'ready', at: 123 })
     } finally {
       fs.rmSync(repo, { recursive: true, force: true })
     }
