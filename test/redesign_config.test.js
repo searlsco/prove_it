@@ -118,10 +118,10 @@ describe('redesign strict .prove_it config/profile model', () => {
       writeJson(path.join(repo, '.prove_it', 'config.json'), {
         schema_version: 1,
         profile_version: PROFILE_VERSION,
-        tasks: { bad: { type: 'script', command: 'npm test', matcher: '*' } },
+        tasks: { bad: { type: 'script', command: 'npm test', legacyMatcher: '*' } },
         agent_workflows: { pre_tool: ['bad'] }
       })
-      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /unknown tasks\.bad key "matcher"/)
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /unknown tasks\.bad key "legacyMatcher"/)
 
       writeJson(path.join(repo, '.prove_it', 'config.json'), {
         schema_version: 1,

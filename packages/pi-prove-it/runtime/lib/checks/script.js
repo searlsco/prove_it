@@ -46,12 +46,21 @@ function runScriptCheck (check, context) {
 
   // Build hook input for stdin (mirrors Claude Code's native hook input format)
   const hookInput = {}
+  const includeNormalizedContext = Boolean(context.hookEvent || context.workflowStage || context.adapterId || context.normalizedEvent)
   if (context.hookEvent) hookInput.hook_event_name = context.hookEvent
+  if (includeNormalizedContext && context.workflowStage) hookInput.workflow_stage = context.workflowStage
+  if (includeNormalizedContext && context.adapterId) hookInput.adapter_id = context.adapterId
   if (context.sessionId) hookInput.session_id = context.sessionId
+  if (includeNormalizedContext && context.cwd) hookInput.cwd = context.cwd
+  if (includeNormalizedContext && context.projectDir) hookInput.project_dir = context.projectDir
+  if (includeNormalizedContext && context.rootDir) hookInput.root_dir = context.rootDir
   if (context.toolName) hookInput.tool_name = context.toolName
   if (context.toolInput) hookInput.tool_input = context.toolInput
   if (context.toolResponse) hookInput.tool_response = context.toolResponse
   if (context.error) hookInput.error = context.error
+  if (includeNormalizedContext && context.command) hookInput.command = context.command
+  if (includeNormalizedContext && context.targetPaths && context.targetPaths.length > 0) hookInput.target_paths = context.targetPaths
+  if (includeNormalizedContext && context.normalizedEvent) hookInput.normalized_event = context.normalizedEvent
   if (check.params) hookInput.params = check.params
   if (context.resolvedPlanPath) hookInput.resolved_plan_path = context.resolvedPlanPath
   if (context.sources) hookInput.sources = context.sources

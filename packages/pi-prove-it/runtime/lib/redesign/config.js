@@ -62,7 +62,7 @@ const GLOBS_KEYS = new Set(['source', 'test'])
 const AGENT_WORKFLOW_KEYS = new Set(['session_start', 'pre_tool', 'post_tool', 'post_tool_failure', 'agent_end'])
 const GIT_WORKFLOW_KEYS = new Set(['pre_commit', 'pre_push'])
 const PIPELINE_PATCH_KEYS = new Set(['prepend', 'append', 'remove', 'replace_tasks'])
-const TASK_COMMON_KEYS = new Set(['type', 'description'])
+const TASK_COMMON_KEYS = new Set(['type', 'description', 'matcher', 'triggers'])
 const TASK_TYPE_KEYS = {
   config_guard: new Set(['protected_paths']),
   script: new Set(['command', 'timeout_ms']),
@@ -172,6 +172,8 @@ function validateTask (name, task, filePath) {
   const allowed = new Set([...TASK_COMMON_KEYS, ...TASK_TYPE_KEYS[task.type]])
   assertKnownKeys(task, allowed, `tasks.${name}`, filePath)
   validateOptionalString(task.description, `tasks.${name}.description`, filePath)
+  validateOptionalString(task.matcher, `tasks.${name}.matcher`, filePath)
+  if (task.triggers !== undefined) validateStringArray(task.triggers, `tasks.${name}.triggers`, filePath)
 
   if (task.type === 'config_guard') {
     if (task.protected_paths !== undefined) {
