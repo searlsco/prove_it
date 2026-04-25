@@ -56,7 +56,7 @@ describe('Claude adapter shared-engine bridge', () => {
     assert.deepStrictEqual(seen[0].context.event.targetPaths, ['.claude/prove_it/config.json'])
   })
 
-  it('falls back to legacy guard-config for unsupported Bash redirect parsing', () => {
+  it('routes supported Bash redirect parsing through the shared engine', () => {
     const result = runClaudePreToolUseTaskThroughSharedEngine({
       task: guardTask(),
       input: {
@@ -70,7 +70,9 @@ describe('Claude adapter shared-engine bridge', () => {
       rootDir: '/repo'
     })
 
-    assert.deepStrictEqual(result, { handled: false })
+    assert.strictEqual(result.handled, true)
+    assert.strictEqual(result.effect.effect, 'block')
+    assert.strictEqual(result.effect.legacyReason, LEGACY_CONFIG_DENY_REASON)
   })
 
   it('keeps legacy .claude/prove_it paths adapter-owned, outside the clean shared defaults', () => {

@@ -41,11 +41,11 @@ function writeLegacyDenyConfig (repo) {
   })
 }
 
-function invokeClaudePreTool (repo, toolInput, extraEnv = {}) {
+function invokeClaudePreTool (repo, toolInput, extraEnv = {}, toolName = 'Write') {
   return invokeHook('claude:PreToolUse', {
     hook_event_name: 'PreToolUse',
     session_id: 'session-1',
-    tool_name: 'Write',
+    tool_name: toolName,
     tool_input: toolInput,
     cwd: repo
   }, {
@@ -188,6 +188,56 @@ describe('Claude clean-runtime hook route', () => {
     assert.match(result.output.hookSpecificOutput.permissionDecisionReason, /protected prove_it config path \.prove_it\/config\.json/)
     assert.doesNotMatch(result.stdout, /invalid legacy json|invalid legacy local json/)
     assert.doesNotMatch(result.stderr, /invalid legacy json|invalid legacy local json/)
+  })
+
+  it('hard-blocks strict local config edits from Claude file_path payloads', () => {
+    const repo = tmpRepo()
+    writeStrictConfig(repo, true)
+
+    const result = invokeClaudePreTool(repo, { file_path: '.prove_it/config.local.json', content: '{}' })
+
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.output.hookSpecificOutput.hookEventName, 'PreToolUse')
+    assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
+    assert.match(result.output.hookSpecificOutput.permissionDecisionReason, /protected prove_it config path \.prove_it\/config\.local\.json/)
+    assert.match(result.output.systemMessage, /protected prove_it config path \.prove_it\/config\.local\.json/)
+  })
+
+  it('hard-blocks strict config edits from Claude notebook_path payloads', () => {
+    const repo = tmpRepo()
+    writeStrictConfig(repo, true)
+
+    const result = invokeClaudePreTool(repo, { notebook_path: '.prove_it/config.json', edits: [] })
+
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.output.hookSpecificOutput.hookEventName, 'PreToolUse')
+    assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
+    assert.match(result.output.hookSpecificOutput.permissionDecisionReason, /protected prove_it config path \.prove_it\/config\.json/)
+  })
+
+  it('hard-blocks Bash redirects to strict prove_it config paths in the clean route', () => {
+    const repo = tmpRepo()
+    writeStrictConfig(repo, true)
+
+    const result = invokeClaudePreTool(repo, { command: 'mkdir -p .prove_it && echo {} > .prove_it/config.local.json' }, {}, 'Bash')
+
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.output.hookSpecificOutput.hookEventName, 'PreToolUse')
+    assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
+    assert.match(result.output.hookSpecificOutput.permissionDecisionReason, /protected prove_it config path \.prove_it\/config\.local\.json/)
+  })
+
+  it('does not treat .claude/prove_it config as clean-runtime protected config', () => {
+    const repo = tmpRepo()
+    writeStrictConfig(repo, true)
+    writeLegacyDenyConfig(repo)
+
+    const result = invokeClaudePreTool(repo, { file_path: '.claude/prove_it/config.json', content: '{}' })
+
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.stdout, '')
+    assert.strictEqual(result.stderr, '')
+    assert.strictEqual(result.output, null)
   })
 
   it('falls back to the legacy dispatcher when no strict project config exists', () => {

@@ -64,6 +64,18 @@ describe('shared target path extraction and matching', () => {
     ])
   })
 
+  it('extracts Bash write targets from redirects and tee commands', () => {
+    assert.deepStrictEqual(extractTargetPaths({
+      tool_name: 'Bash',
+      tool_input: {
+        command: 'mkdir -p .prove_it && echo {} > .prove_it/config.json && echo local | tee -a .prove_it/config.local.json'
+      }
+    }), [
+      '.prove_it/config.json',
+      '.prove_it/config.local.json'
+    ])
+  })
+
   it('matches protected .prove_it config paths through relative, absolute, and canonicalized forms', () => {
     const realRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_target_real_'))
     const linkRepo = path.join(os.tmpdir(), `prove_it_target_link_${process.pid}_${Date.now()}`)
