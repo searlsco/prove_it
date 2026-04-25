@@ -1,4 +1,4 @@
-# prove_it: force Claude's code to actually work
+# prove_it: methodology/workflow enforcement for coding agents
 
 🔥 **Comin' in Hot! Shipping multiple unstable releases per day at the moment. If you want prove_it to actually work, [email Justin](mailto:justin@searls.co) for updates** 🛬🔥
 
@@ -6,27 +6,49 @@
 
 [![Certified Shovelware](https://justin.searls.co/img/shovelware.svg)](https://justin.searls.co/shovelware/)
 
-By far the most frustrating thing about [Claude Code](https://docs.anthropic.com/en/docs/claude-code) is its penchant for prematurely declaring success. Out-of-the-box, Claude will happily announce a task is complete. But has it run the tests? No. Did it add any tests? No. Did it run the code? Also no.
+Out-of-the-box, coding agents happily declare work complete before they have proven it: tests may not have run, coverage may be missing, and verification may be hand-wavy.
 
-**prove_it** hooks into Claude Code's [lifecycle events](https://code.claude.com/docs/en/hooks) and runs whatever tasks you configure—test suites, lint scripts, AI code reviewers—blocking Claude until they pass.
+**prove_it** is a methodology/workflow engine for making agents prove their work. The clean runtime stores workflow intent in strict `.prove_it/config.json` and lets each adapter enforce that workflow according to the harness capabilities it actually has.
 
-(And in case it's not obvious, **prove_it currently only works with Claude Code.**)
+Pi is first-class via the `@davemo/pi-prove-it` package. Pi is the fully wired clean-runtime adapter path today. Claude is a fast-follow adapter: the current work added adapter/effect boundaries plus shared signal lifecycle and Stop settlement, but Claude dispatch does not yet generally consume strict `.prove_it/config.json` as its workflow source. Current Claude hard PreToolUse/Stop behavior exists in the old/current Claude path, while Claude strict clean-runtime migration is partial/fast-follow. See [Adapter capabilities](docs/adapters.md) for the honest enforcement matrix.
 
 ## Quick start
 
+Pi-first clean-runtime project:
+
 ```bash
 brew install searlsco/tap/prove_it
+cd your-project
+prove_it init --adapter pi
+pi install -l npm:@davemo/pi-prove-it
+prove_it doctor
+prove_it explain
+```
+
+Multi-adapter clean-runtime project:
+
+```bash
+prove_it init --adapter pi --adapter claude
+pi install -l npm:@davemo/pi-prove-it
+prove_it doctor
+```
+
+Current/legacy Claude product setup is still available:
+
+```bash
 prove_it install
 cd your-project && prove_it init
 ```
 
-Restart Claude Code and you're live.
+Restart the relevant agent harness after installing adapter-native hooks or packages.
 
 ## What can prove_it do?
 
-prove_it is a config-driven framework for enforcing quality in Claude Code sessions. You can easily configure **script** and **subagent** tasks in a few lines of JSON that:
+prove_it is a config-driven framework for enforcing quality in coding-agent sessions. In the clean runtime, shared workflow config lives under `.prove_it/`; adapter-native files activate Pi or Claude according to each adapter's implemented capability. Pi consumes the clean-runtime path end to end today. Current/legacy Claude task enforcement uses `.claude/prove_it/config.json` while strict clean-runtime Claude enforcement is partial/fast-follow.
 
-- **Block Claude from stopping** until your tests pass
+Depending on adapter support, prove_it can:
+
+- **Block Claude from stopping** until your tests pass in the old/current Claude path
 - **Block git commits** until a full test suite is green
 - **Run AI reviewers** — independent subagents that audit Claude's work for coverage gaps, logic errors, or security issues
 - **Fire reviews asynchronously** — expensive reviewers run in the background while Claude keeps working, then enforce their verdict on the next stop
@@ -36,7 +58,7 @@ prove_it is a config-driven framework for enforcing quality in Claude Code sessi
 - **Guard tool usage** — block specific tool calls (config file edits, dangerous commands) before they execute
 - **Track runs** — skip re-running tasks when code hasn't changed since the last pass (via `when: { sourcesModifiedSinceLastRun: true }`)
 
-Out of the box, `prove_it init` generates the Searls-stack of configured tasks:
+Out of the box, current/legacy Claude `prove_it init` generates the Searls-stack of configured tasks:
 
 - **Session briefing** on startup — Claude gets an orientation showing active tasks, signal instructions, and how the review process works
 - **Config lock** on every edit — silently blocks Claude from modifying your prove_it config
@@ -65,8 +87,21 @@ prove_it install
 
 ### Initialize a project
 
+For the clean runtime, initialize strict `.prove_it` config with explicit adapters:
+
 ```bash
 cd your-project
+prove_it init --adapter pi
+prove_it init --adapter pi --adapter claude
+```
+
+This writes strict `.prove_it/config.json` plus `.prove_it/ownership.json`. For Pi, enable the package with `pi install -l npm:@davemo/pi-prove-it`. For Claude, `prove_it init --adapter claude` writes Claude-native settings that call `prove_it hook claude:*` for the partial/fast-follow adapter path.
+
+The clean runtime does not read legacy `.claude/prove_it` config. Legacy `.claude/prove_it/config.json` remains old/current Claude product behavior, not clean-runtime compatibility. Claude dispatch does not yet generally consume strict `.prove_it/config.json` as its workflow source for task enforcement.
+
+For current/legacy Claude setup without explicit adapters:
+
+```bash
 prove_it init
 ```
 
@@ -78,6 +113,8 @@ Pass flags to skip prompts (useful for CI or scripting):
 
 ```bash
 prove_it init --git-hooks --default-checks
+prove_it init --adapter pi
+prove_it init --adapter pi --adapter claude
 ```
 
 | Flag | Default | Effect |
@@ -125,7 +162,9 @@ The `trap ... EXIT` pattern ensures results are always recorded, even when `set 
 
 ## Configuration
 
-prove_it is configured with a `hooks` object in `.claude/prove_it/config.json`. Hooks are keyed by type (`claude`, `git`) then by event (`Stop`, `PreToolUse`, `SessionStart`, `pre-commit`, `pre-push`, etc.), with each event mapping to an ordered list of tasks:
+Clean-runtime prove_it is configured in strict `.prove_it/config.json`; inspect its effective merged form with `prove_it explain`. The strict file uses shared workflow keys (`tasks`, `agent_workflows`, `git_workflows`, and `adapters`) and is covered in [Adapter capabilities](docs/adapters.md). Pi is the fully wired clean-runtime adapter path today; Claude strict clean-runtime migration is partial/fast-follow, so do not treat `.prove_it/config.json` as the full source of truth for Claude task enforcement yet.
+
+Current/legacy Claude prove_it is configured with a `hooks` object in `.claude/prove_it/config.json`. Hooks are keyed by type (`claude`, `git`) then by event (`Stop`, `PreToolUse`, `SessionStart`, `pre-commit`, `pre-push`, etc.), with each event mapping to an ordered list of tasks:
 
 ```json
 {
@@ -510,12 +549,7 @@ Agent tasks accept a `model` field to control which model the reviewer uses:
   "prompt": "Check test coverage...\n\n{{session_diff}}", "model": "haiku" }
 ```
 
-For OpenAI/codex models (names starting with `gpt-`), prove_it auto-switches to `codex exec -`:
-
-```json
-{ "name": "adversarial-review", "type": "agent",
-  "prompt": "Review this code for bugs...\n\n{{staged_diff}}", "model": "gpt-5.3-codex" }
-```
+Codex is deferred for future adapter capability discovery and is not documented as an implemented clean-runtime adapter.
 
 When no `model` is set and no custom `command` is provided, prove_it applies defaults:
 
@@ -541,12 +575,12 @@ You can use a different AI for each reviewer, so the agent doing the work is che
 {
   "name": "adversarial-review",
   "type": "agent",
-  "command": "codex exec -",
+  "command": "my-reviewer --stdin",
   "prompt": "Second opinion: look for issues the primary reviewer might miss.\n\n{{staged_diff}}"
 }
 ```
 
-The `command` field accepts any CLI that reads a prompt from stdin and writes its response to stdout. Defaults to `claude -p`.
+The `command` field accepts any CLI that reads a prompt from stdin and writes its response to stdout. Defaults to `claude -p` in the current/legacy Claude task runner.
 
 ### Async reviews
 
@@ -1052,7 +1086,18 @@ chmod +x ~/bin/prove_it_tasks/prefer_gh_cli_over_fetch
 
 ## Examples
 
-See [`example/basic/`](example/basic/) and [`example/advanced/`](example/advanced/) for working projects with configs, test suites, and reviewer prompts.
+Clean-runtime examples:
+
+- [`example/pi-strict/`](example/pi-strict/) — Pi-first strict `.prove_it` project using `@davemo/pi-prove-it`.
+- [`example/claude-fast-follow/`](example/claude-fast-follow/) — Claude fast-follow adapter project with strict `.prove_it` artifacts and partial clean-runtime migration notes.
+- [`example/multi-adapter/`](example/multi-adapter/) — Pi + Claude strict `.prove_it` project without implying end-to-end strict Claude workflow enforcement or cross-harness human review gates.
+
+Current/legacy Claude examples:
+
+- [`example/basic/`](example/basic/)
+- [`example/advanced/`](example/advanced/)
+
+Human review is downstream/external to prove_it core; examples do not model human approval as a core prove_it gate. Codex is deferred for future adapter capability discovery and is not documented as an implemented clean-runtime adapter.
 
 ## Requirements
 

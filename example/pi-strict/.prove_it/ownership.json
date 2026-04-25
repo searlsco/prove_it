@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "owner": "prove_it",
+  "profile_version": "prove_it.strict.v1",
+  "adapters": [
+    "pi"
+  ],
+  "artifacts": [
+    {
+      "owner": "prove_it",
+      "path": ".prove_it/config.json",
+      "sha256": "e3f4722e6b89246c18dd4183138e8e764f1cad0e0e29fdfea763d45b78ccda5c",
+      "kind": "shared_config"
+    },
+    {
+      "owner": "prove_it",
+      "path": ".prove_it/.gitignore",
+      "sha256": "22d674804bd89d4b001bdd68a816952069e028d3b5af8f72f293ccf11f2bf432",
+      "kind": "shared_gitignore"
+    }
+  ]
+}

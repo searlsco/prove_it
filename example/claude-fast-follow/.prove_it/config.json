@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "project": {},
+  "globs": {
+    "source": [],
+    "test": []
+  },
+  "tasks": {
+    "protect_prove_it_config": {
+      "type": "config_guard",
+      "protected_paths": [
+        ".prove_it/config.json",
+        ".prove_it/config.local.json"
+      ]
+    }
+  },
+  "agent_workflows": {
+    "session_start": [],
+    "pre_tool": [
+      "protect_prove_it_config"
+    ],
+    "post_tool": [],
+    "post_tool_failure": [],
+    "agent_end": []
+  },
+  "git_workflows": {
+    "pre_commit": [],
+    "pre_push": []
+  },
+  "adapters": {
+    "pi": {
+      "enabled": false
+    },
+    "claude": {
+      "enabled": true
+    }
+  },
+  "profile_version": "prove_it.strict.v1"
+}
