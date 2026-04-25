@@ -8,6 +8,8 @@ const { behaviorForCapability } = require('../lib/adapter_capabilities')
 const { loadProjectConfig, PROFILE_VERSION } = require('../lib/redesign/config')
 const { normalizePiToolCall } = require('../lib/redesign/events')
 const { runWorkflowEngine } = require('../lib/redesign/engine')
+const { readSignal } = require('../lib/redesign/signal_lifecycle')
+const { createMemoryStatePort } = require('../lib/redesign/state_port')
 
 function tmpRepo (tasks = {
   protect_custom_config: {
@@ -256,6 +258,41 @@ describe('shared workflow engine', () => {
       assert.deepStrictEqual(order, ['first', 'second'])
       assert.strictEqual(effect.effect, 'block')
       assert.match(effect.reason, /second failed/)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('records prove_it signal commands through the shared state port before task workflow evaluation', () => {
+    const repo = tmpRepo({
+      shouldNotRun: {
+        type: 'script',
+        command: 'exit 1'
+      }
+    }, ['shouldNotRun'])
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const statePort = createMemoryStatePort()
+      const taskPort = { run: () => assert.fail('signal interception should not run script tasks') }
+      const effect = runWorkflowEngine({
+        event: normalizePiToolCall({
+          toolName: 'Bash',
+          input: { command: 'prove_it signal done --message "ready"' },
+          session_id: 'session-123'
+        }, { cwd: repo }),
+        effectiveConfig,
+        adapterCapabilities: piCapabilities(),
+        statePort,
+        taskPort
+      })
+
+      const signal = readSignal(statePort, 'session-123')
+      assert.strictEqual(effect.effect, 'allow')
+      assert.match(effect.reason, /signal "done" recorded/)
+      assert.strictEqual(signal.type, 'done')
+      assert.strictEqual(signal.message, 'ready')
+      assert.strictEqual(typeof signal.at, 'number')
     } finally {
       fs.rmSync(repo, { recursive: true, force: true })
     }

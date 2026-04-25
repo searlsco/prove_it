@@ -65,6 +65,23 @@ describe('pi adapter pre-tool config guard', () => {
     assert.match(result.reason, /\.prove_it\/config\.local\.json/)
   })
 
+  it('persists prove_it signal commands through Pi adapter-native state', async () => {
+    const { handleToolCall } = require('../lib/adapters/pi/bridge')
+    const { readSignal } = require('../lib/redesign/signal_lifecycle')
+    const { createObjectStatePort } = require('../lib/redesign/state_port')
+    const repo = tmpRepo()
+    const state = {}
+    const result = await handleToolCall({
+      toolName: 'Bash',
+      input: { command: 'prove_it signal done --message "ready"' }
+    }, { cwd: repo, state })
+    const statePort = createObjectStatePort(state, { requireSessionId: false })
+
+    assert.strictEqual(result, undefined)
+    assert.strictEqual(readSignal(statePort, null).type, 'done')
+    assert.strictEqual(readSignal(statePort, null).message, 'ready')
+  })
+
   it('recognizes Pi-style top-level path payloads', async () => {
     const { handleToolCall } = require('../lib/adapters/pi/bridge')
     const repo = tmpRepo()
