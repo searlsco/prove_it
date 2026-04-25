@@ -6,9 +6,9 @@ This brief captures what we learned from the multi-adapter exploration branch an
 
 The key conclusion is that prove_it should not be modeled as “Claude hooks generalized.” prove_it should define a product methodology above any one harness: agents make claims about completion, and prove_it makes those claims accountable through deterministic verification gates where possible and explicit remediation loops where hard blocking is unavailable.
 
-Claude should be treated as the mature reference adapter, not as the source of truth. pi should be treated as a capability-constrained peer adapter whose implementation differs where pi lifecycle primitives differ. Codex and other harnesses should be modeled through the same adapter capability contract.
+Pi should be treated as the first clean-room proving-ground adapter. Claude should be treated as an existing behavioral reference and fast-follow adapter, not as the source of truth or compatibility substrate. Codex and other harnesses are deferred until Pi and Claude stabilize and should be modeled through the same adapter capability contract.
 
-The current exploration branch proved many technical slices, but it also accumulated enough transitional code that a clean implementation branch from main is likely preferable. This document is intended to be the source of truth for that clean implementation.
+The current exploration branch proved many technical slices, but it also accumulated enough transitional code that a clean implementation branch from main is preferable. This document is intended to be the source of truth for that clean, Pi-first implementation.
 
 ## Product intent
 
@@ -54,7 +54,7 @@ The important invariant is:
 ### What the branch revealed as product concerns
 
 - pi does not currently appear to expose a hard synchronous Stop-blocking primitive equivalent to Claude’s Stop hook.
-- pi Stop failures therefore require a remediation loop after `agent_end`, which is weaker than Claude’s immediate hard block.
+- pi completion-verification failures therefore require a remediation loop after `agent_end`; this is a documented capability-profile difference, not a reason to label Pi experimental by default.
 - Agent-initiated `done` signals are part of prove_it’s intended workflow. Treating signals as user-owned only would diverge from prove_it’s product intent.
 - Signal semantics need to be centralized above adapters so pi, Claude, and future adapters render the same methodology in harness-native ways.
 - Prompt guidance alone is not the product guarantee. Enforcement happens when agent declarations trigger workflow gates.
@@ -319,13 +319,13 @@ Canonical redesign config locations:
 - repo project config under `.prove_it`
 - repo local overrides under `.prove_it`
 
-Legacy `.claude/prove_it` files may be supported as compatibility artifacts for the existing product line, but the clean major-version model should not treat legacy hook-shaped config as the primary story.
+Legacy `.claude/prove_it` files remain part of the old/current Claude-oriented product line and may be useful for comparison, but the clean major-version runtime does not support them as compatibility artifacts.
 
 ## Adapter behavior targets
 
 ### Claude target behavior
 
-Claude should preserve existing mature behavior while moving ownership into the Claude adapter:
+Claude is a fast-follow adapter for the clean redesign. It should preserve existing mature behavior where that behavior aligns with shared methodology, but the existing Claude implementation is a comparison oracle rather than a compatibility substrate:
 
 - hard pre-tool config guard
 - hard Stop enforcement
@@ -342,22 +342,21 @@ Claude behavior is a reference implementation of hard enforcement, but any obser
 
 ### pi target behavior
 
-pi should implement the same methodology using pi-native primitives:
+Pi is the first clean-room proving-ground adapter and should implement the methodology using pi-native primitives:
 
 - hard tool-call blocking for config guards and other pre-tool policies
 - model-callable `prove_it_signal` for agent completion declarations
-- model-callable or otherwise adapter-native phase updates if aligned with methodology
 - slash commands as user override/debug controls, not the primary workflow path
-- session custom entries for signal/phase state
+- session custom entries for signal state
 - prompt injection that mirrors shared methodology guidance
 - post-tool tracking through `tool_result`
 - Stop-equivalent checks on `agent_end`
 - follow-up remediation when checks fail
 - signal preserved on failure and cleared on success
 - pi-backed reviewers that use pi’s configured defaults unless explicitly overridden
-- documentation that pi Stop enforcement is remediation-based until a hard Stop primitive exists
+- documentation that Pi completion enforcement is remediation-based after `agent_end` until a hard Stop primitive exists
 
-pi should not be described as perfectly equivalent to Claude where harness capabilities differ.
+Pi should not be described as perfectly equivalent to Claude where harness capabilities differ, but Pi is first-class for this redesign and should not be labeled experimental merely because completion enforcement is remediation-based.
 
 ### Codex target behavior
 
@@ -365,101 +364,112 @@ Codex should be added through the same adapter contract after capability discove
 
 ## Proposed clean implementation phases
 
-### Phase 1: Methodology extraction
+### Phase 1: Minimal Pi pre-tool config-guard vertical slice
 
-Build a shared methodology module and tests.
+Build the smallest end-to-end clean-runtime path: strict `.prove_it` config, normalized Pi `tool_call`, minimal workflow/effect evaluation, and a Pi adapter response that blocks protected `.prove_it` config edits.
 
 Acceptance criteria:
 
-- signal semantics are represented as structured data
-- completion declaration guidance is adapter-renderable
-- clear-on-pass and preserve-on-fail semantics are explicit
-- Claude and pi guidance can be rendered from the same source
-- tests prevent drift between adapter guidance and shared methodology
+- Pi-shaped path payloads such as `input.path` are first-class.
+- `.prove_it/config.json` and `.prove_it/config.local.json` edits are blocked through Pi `tool_call`.
+- The slice does not read legacy `.claude/prove_it` config.
+- Stop/remediation, reviewers, phase, package distribution, and Claude migration are out of scope.
 
-### Phase 2: Capability model
+### Phase 2: Methodology extraction
+
+Build shared methodology data and renderable guidance.
+
+Acceptance criteria:
+
+- Signal semantics are represented as structured data.
+- Completion accountability and evidence-oriented proving are adapter-renderable.
+- No user-only signal authority mode is introduced.
+- Phase is not required by core methodology.
+
+### Phase 3: Capability profiles
 
 Build adapter capability declarations and diagnostics.
 
 Acceptance criteria:
 
-- Claude and pi declare capabilities explicitly
-- diagnostics explain where pi has degraded Stop enforcement
-- workflow engine can choose hard block vs remediation based on capabilities
-- tests cover capability validation and behavior selection
+- Pi and Claude declare concrete enforcement capabilities.
+- Pi reports remediation-based completion verification after `agent_end`.
+- Capability differences are diagnostics, not broad experimental labels.
 
-### Phase 3: Config/profile foundation
+### Phase 4: Strict config/profile foundation
 
 Build the redesign config model cleanly.
 
 Acceptance criteria:
 
-- strict schema validation
-- profile-driven defaults
-- workflow-first public config
-- task registry and pipeline patching
-- lineage/explanation support
-- no runtime support for legacy hook-shaped config in the new major-version path
+- Strict `.prove_it` schema validation.
+- Profile-driven defaults.
+- Workflow-first public config.
+- Task registry and pipeline patching.
+- No legacy runtime compatibility.
 
-### Phase 4: Workflow engine effects
+### Phase 5: Workflow engine effects
 
 Build or refactor the engine around harness-neutral effects.
 
 Acceptance criteria:
 
-- pre-tool workflows emit allow/block effects
-- Stop workflows emit approve/fail/remediate effects
-- session start emits context/state effects
-- signal lifecycle is handled consistently
-- task execution is isolated from adapter protocols
+- Pre-tool workflows emit allow/block effects.
+- Completion workflows can emit hard-block or remediation effects based on capability profiles.
+- Task execution is isolated from adapter protocols.
 
-### Phase 5: Claude adapter
+### Phase 6: Pi completion loop
 
-Map the clean engine to Claude.
+Extend the Pi adapter beyond pre-tool blocking.
 
 Acceptance criteria:
 
-- current Claude behavior remains intact
-- hook protocol output is owned by Claude adapter
-- Claude env/session/file-history behavior is adapter-owned
-- existing Claude tests pass or are rewritten against the clean boundaries
+- Pi supports agent-owned `done`, `stuck`, and `idle` where appropriate.
+- Pi runs completion verification after `agent_end`.
+- Failed completion verification queues remediation and preserves `done`.
+- Successful completion verification clears `done`.
+- Phase remains out of scope for the MVP.
 
-### Phase 6: pi adapter/package
+### Phase 7: Pi package
 
-Map the clean engine to pi.
+Package the Pi adapter after the runtime behavior works.
 
 Acceptance criteria:
 
-- pi blocks protected tool calls
-- pi tracks source/test edits and command results
-- pi supports agent-initiated completion declarations
-- pi runs Stop-equivalent checks after `agent_end`
-- pi queues remediation on failure
-- pi package is portable and tested for runtime drift
-- docs clearly describe pi’s enforcement limitations
+- Package identity is `@davemo/pi-prove-it`.
+- Package is portable and drift-tested.
+- Bundled skills/guidance align with shared methodology.
 
-### Phase 7: Examples and docs
+### Phase 8: Claude fast-follow adapter
+
+Map the clean engine to Claude after the Pi-first contract is proven.
+
+Acceptance criteria:
+
+- Current Claude behavior remains a comparison target where it aligns with methodology.
+- Claude adapter owns hook protocol and Claude-specific paths.
+- No legacy config runtime bridge is introduced.
+
+### Phase 9: Examples and docs
 
 Rebuild public docs around the new product model.
 
 Acceptance criteria:
 
-- docs explain prove_it as a methodology/workflow engine
-- examples cover Claude-only, pi-only, and multi-adapter repos
-- manual comparison matrix is maintained
-- terminology aligns with ubiquitous language
-- compatibility artifacts are clearly secondary
+- Docs explain prove_it as a methodology/workflow engine.
+- Examples cover Pi-first and Claude fast-follow shapes.
+- Capability profiles distinguish hard blocking from remediation.
+- Human review is described as downstream/external, not a core gate.
 
-### Phase 8: Codex discovery and adapter planning
+### Phase 10: Codex discovery and adapter planning
 
-Research Codex capabilities and plan adapter implementation.
+Research Codex after Pi and Claude stabilize.
 
 Acceptance criteria:
 
-- Codex capability matrix is documented
-- adapter feasibility is known
-- Stop/pre-tool enforcement gaps are explicit
-- implementation slices are planned only after capability discovery
+- Codex capability matrix is documented.
+- Adapter feasibility is known.
+- Implementation slices are planned only after capability discovery.
 
 ## What to salvage from the exploration branch
 
@@ -493,21 +503,31 @@ The exploration branch should be treated as a reference implementation and proof
 - Carrying generated session/backchannel artifacts in examples.
 - Hiding capability degradation behind generic “multi-adapter” language.
 
-## Open product questions for Justin
+## Resolved public policy defaults
 
-1. Should agent-initiated `done` declarations remain mandatory after every coherent coding task?
-2. Should there be a user-only or strict mode for teams that do not want agents to set signals themselves?
-3. Is pi’s remediation-after-agent-end acceptable as experimental support, or should pi support wait for a hard Stop primitive?
-4. Should the major-version redesign hard-break legacy config shapes, or should compatibility remain available behind an explicit legacy mode?
-5. Should `/prove` remain a skill-level feature or become part of the shared methodology module?
-6. How much of the TDD/phase system is core methodology versus a default profile choice?
-7. Should Codex be a first-class launch adapter or a later adapter after Claude and pi stabilize?
-8. What package identity should the pi adapter use when published?
-9. Should reviewers always run inside the active harness where possible, or should cross-harness reviewers remain a supported product feature?
-10. What level of enforcement degradation is acceptable before an adapter should be labeled experimental?
+The redesign defaults that block early implementation are resolved in `plans/prove-it-harness-neutral-clean-policy-defaults.md`.
+
+Summary:
+
+1. Pi is the first clean-room proving-ground adapter; Claude is fast-follow; Codex is deferred.
+2. Agent-initiated `done` remains mandatory after each coherent coding task in the default methodology.
+3. There is no user-only signal authority mode in this redesign scope.
+4. The new major-version `.prove_it` path is strict and has no legacy runtime compatibility.
+5. Pi completion verification is remediation-based after `agent_end` until a hard Stop blocker exists; Pi is not experimental by default.
+6. Adapter differences are reported through capability profiles, not broad experimental labels.
+7. Evidence-oriented proving is core methodology; `/prove` as a command name is adapter/distribution UX.
+8. TDD is the default methodology profile, not a universal core invariant.
+9. Phase state is out of scope for the Pi-first MVP.
+10. Reviewers use the active harness only in this redesign scope.
+11. Human review is downstream/external, not a core prove_it gate.
+12. The working Pi package identity is `@davemo/pi-prove-it`.
+
+## Remaining product questions
+
+None for the Pi-first MVP. Codex launch status is deferred by policy.
 
 ## Recommended next step
 
 Start a fresh implementation branch from main using this brief as the architectural source of truth. Preserve the exploration branch for reference and selectively cherry-pick only after each clean module boundary is established and tested.
 
-The first clean implementation slice should be the shared methodology module, because it resolves the most important ambiguity discovered during manual testing: signals are not merely user commands, and adapters must render the same agent-accountability semantics in harness-native ways.
+The first clean implementation slice should be a minimal Pi pre-tool config-guard vertical slice: strict `.prove_it` config, normalized Pi `tool_call`, minimal workflow/effect handling, and a Pi adapter response that blocks protected `.prove_it` config edits. This proves the clean-room adapter contract before broader methodology, completion-remediation, reviewers, packaging, or Claude fast-follow work.
