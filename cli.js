@@ -9,6 +9,7 @@
  *   deinit    - Remove prove_it files from current repository
  *   doctor    - Check installation status and report issues
  *   monitor   - Tail hook results in real time
+ *   explain   - Explain effective strict .prove_it configuration
  *   hook      - Run a hook dispatcher (claude:<Event> or git:<event>)
  *   prefix    - Print install directory (for resolving libexec scripts)
  *   signal    - Declare a lifecycle signal (done, stuck, idle)
@@ -141,6 +142,11 @@ function main () {
     case 'monitor': {
       const { cmdMonitor } = require('./lib/commands/monitor')
       cmdMonitor()
+      break
+    }
+    case 'explain': {
+      const { cmdExplain } = require('./lib/commands/explain')
+      cmdExplain()
       break
     }
     case '-v':

@@ -5,11 +5,12 @@ const path = require('path')
 const os = require('os')
 
 function tmpRepo () {
+  const { PROFILE_VERSION } = require('../lib/redesign/config')
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_pi_'))
   fs.mkdirSync(path.join(dir, '.prove_it'), { recursive: true })
   fs.writeFileSync(path.join(dir, '.prove_it', 'config.json'), JSON.stringify({
     schema_version: 1,
-    profile_version: 'test',
+    profile_version: PROFILE_VERSION,
     tasks: {
       protect_prove_it_config: {
         type: 'config_guard',
