@@ -8,8 +8,8 @@
 | **Methodology** | The product rules for accountable agent behavior, especially completion, evidence, remediation, and reviewer use. | Prompt text, vibes, policy blob |
 | **Workflow Engine** | The harness-neutral runtime that evaluates config, runs tasks, applies signal lifecycle rules, and emits effects. | Harness, adapter, dispatcher |
 | **Clean Runtime** | The new strict `.prove_it` implementation of the Workflow Engine and adapter contract. | Redesign, Pi runtime, strict mode |
-| **Legacy Runtime** | The old Claude-first `.claude/prove_it` implementation used as behavior reference during migration. | Current runtime, compatibility mode |
-| **Parity** | Equivalent prove_it product behavior across a migration, even when adapter mechanics differ. | Byte-for-byte compatibility, lowest-common-denominator support |
+| **Legacy Runtime** | The old Claude-first `.claude/prove_it` implementation used as behavior reference during clean-runtime cutover. | Current runtime, compatibility mode |
+| **Parity** | Equivalent prove_it product behavior across a cutover, even when adapter mechanics differ. | Byte-for-byte compatibility, lowest-common-denominator support |
 | **Platform Capability** | A prove_it feature that should eventually work across adapters when a harness can support it. | Claude feature, plugin feature |
 
 ## Actors and execution environments
@@ -92,11 +92,11 @@
 | **Context Injection** | An adapter capability that adds instructions or status context to the Primary Agent's session. | Prompt only, methodology itself |
 | **Adapter-Owned Mechanic** | A harness-specific implementation detail that should not leak into the core product model. | Core feature, methodology |
 
-## Claude migration
+## Claude adapter terms
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
-| **Claude Parity Migration** | The migration that ports existing Claude product behavior onto the Clean Runtime and `.prove_it` config. | Claude MVP, partial fast-follow |
+| **Claude Parity Cutover** | The hard-break move that ports existing Claude product behavior onto the Clean Runtime and `.prove_it` config. | Config migration, Claude MVP, partial fast-follow, dual-runtime support |
 | **Claude Adapter** | The adapter that maps Claude Code hooks, settings, env files, Bash tools, and Stop decisions to prove_it. | Legacy dispatcher, Claude runtime |
 | **Claude Hook** | A Claude Code lifecycle callback used by the Claude Adapter as a harness event source. | Workflow Stage, pipeline |
 | **Claude Stop** | Claude Code's hard completion gate that the Claude Adapter uses for hard-blocking Completion Verification. | Agent end, turn end |
@@ -105,7 +105,7 @@
 | **Claude File History** | Claude-specific session/file snapshot data used to reconstruct edits or changed files. | Core state, git history |
 | **Claude Legacy Config** | The retired `.claude/prove_it` task configuration used by the Legacy Runtime. | Project Config, clean config |
 
-## Pi migration
+## Pi adapter terms
 
 | Term | Definition | Aliases to avoid |
 | --- | --- | --- |
@@ -128,7 +128,7 @@
 - Passing **Completion Verification** clears the **Done Signal**.
 - A **Reviewer** is not the **Primary Agent**; it is invoked by a **Reviewer Task**.
 - **Claude Settings** are an **Adapter Artifact**, not the **Project Config**.
-- **Claude Legacy Config** is a migration reference, not the Clean Runtime source of truth.
+- **Claude Legacy Config** is a cutover reference, not the Clean Runtime source of truth.
 - A **Worktree** may eventually have distinct **Project Config**, **Session State**, and **Evidence** boundaries.
 
 ## Example dialogue
@@ -143,7 +143,7 @@
 >
 > **Dev:** "For Justin's Claude workflow, do we keep `.claude/prove_it` around as a second config model?"
 >
-> **Domain expert:** "No. The **Claude Parity Migration** ports product behavior into the **Clean Runtime** so `.prove_it/config.json` is the source of truth."
+> **Domain expert:** "No. The **Claude Parity Cutover** ports product behavior into the **Clean Runtime** so `.prove_it/config.json` is the source of truth."
 >
 > **Dev:** "What about worktrees?"
 >
