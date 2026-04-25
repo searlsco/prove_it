@@ -381,6 +381,21 @@ describe('doctor', () => {
     assert.ok(!result.stdout.includes('Git hook shim'))
   })
 
+  it('reports enabled strict .prove_it adapters when present', () => {
+    writeSettings(tmpHome, correctSettings())
+    writeTeamConfig(tmpRepo, {
+      enabled: true,
+      sources: ['**/*.js'],
+      hooks: {}
+    })
+    const { initStrictProject } = require('../../lib/redesign/init')
+    initStrictProject(tmpRepo, { adapters: ['pi', 'claude'] })
+
+    const result = run()
+
+    assert.match(result.stdout, /Strict \.prove_it adapters enabled: pi, claude/)
+  })
+
   it('surfaces adapter capability diagnostics without changing install checks', () => {
     writeSettings(tmpHome, correctSettings())
     writeTeamConfig(tmpRepo, {
