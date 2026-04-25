@@ -100,6 +100,56 @@ describe('redesign strict .prove_it config/profile model', () => {
     }
   })
 
+  it('accepts strict task lifecycle flags for background async and parallel work', () => {
+    const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
+    const home = tmpDir('prove_it_home_')
+    const repo = tmpDir('prove_it_repo_')
+
+    try {
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: {
+          background_check: { type: 'script', command: './script/background', async: true },
+          parallel_check: { type: 'script', command: './script/parallel', parallel: true }
+        },
+        agent_workflows: {
+          post_tool: { append: ['background_check'] },
+          agent_end: { append: ['parallel_check'] }
+        }
+      })
+
+      const explained = loadEffectiveConfig(repo, { homeDir: home })
+
+      assert.strictEqual(explained.effective.tasks.background_check.async, true)
+      assert.strictEqual(explained.effective.tasks.parallel_check.parallel, true)
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects tasks configured as both async and parallel', () => {
+    const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
+    const home = tmpDir('prove_it_home_')
+    const repo = tmpDir('prove_it_repo_')
+
+    try {
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: {
+          impossible: { type: 'script', command: './script/check', async: true, parallel: true }
+        }
+      })
+
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /tasks\.impossible cannot be both async and parallel/)
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   it('accepts strict task when conditions and preserves them in explain diagnostics', () => {
     const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
     const home = tmpDir('prove_it_home_')

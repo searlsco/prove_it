@@ -1,4 +1,9 @@
+const fs = require('fs')
+const path = require('path')
+const { fork } = require('child_process')
 const { runScriptCheck } = require('../checks/script')
+const { ensureDir, sanitizeTaskName } = require('../io')
+const { getAsyncDir } = require('../session')
 
 const DEFAULT_MAX_CHARS = 12000
 
@@ -31,6 +36,66 @@ function scriptContextFromWorkflowContext ({ event, config, effectiveConfig }) {
   }
 }
 
+function asyncSnapshotForTask (context, options = {}) {
+  const sessionId = context.event?.sessionId || null
+  const asyncDir = options.asyncDir || getAsyncDir(sessionId)
+  if (!asyncDir) return null
+
+  const taskFile = `${sanitizeTaskName(context.taskName)}-${Date.now()}-${process.pid}`
+  const contextFilePath = path.join(asyncDir, `${taskFile}.context.json`)
+  const resultPath = path.join(asyncDir, `${taskFile}.json`)
+  const snapshot = {
+    task: scriptCheckFromTask(context.taskName, context.task),
+    context: scriptContextFromWorkflowContext(context),
+    resultPath
+  }
+
+  ensureDir(asyncDir)
+  fs.writeFileSync(contextFilePath, JSON.stringify(snapshot, null, 2), 'utf8')
+  return { contextFilePath, resultPath }
+}
+
+function launchBackgroundScriptTask (context, options = {}) {
+  const snapshot = asyncSnapshotForTask(context, options)
+  if (!snapshot) return null
+
+  const workerPath = options.workerPath || path.join(__dirname, '..', 'async_worker.js')
+  const child = fork(workerPath, [snapshot.contextFilePath], {
+    detached: true,
+    stdio: 'ignore',
+    env: { ...process.env, PROVE_IT_DISABLED: '1', PROVE_IT_SKIP_NOTIFY: '1' }
+  })
+  child.unref()
+  return { id: snapshot.resultPath, status: 'pending' }
+}
+
+function harvestBackgroundScriptTasks ({ pending } = {}) {
+  const results = []
+  for (const entry of Array.isArray(pending) ? pending : []) {
+    if (!entry?.id || typeof entry.id !== 'string') continue
+    try {
+      const data = JSON.parse(fs.readFileSync(entry.id, 'utf8'))
+      results.push({
+        id: entry.id,
+        taskName: data.taskName || entry.taskName,
+        task: data.task || null,
+        result: data.result || null
+      })
+    } catch {}
+  }
+  return results
+}
+
+function consumeBackgroundScriptTask (result) {
+  if (!result?.id || typeof result.id !== 'string') return false
+  try {
+    fs.unlinkSync(result.id)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function createScriptTaskPort (options = {}) {
   const runScript = options.runScript || runScriptCheck
 
@@ -40,12 +105,24 @@ function createScriptTaskPort (options = {}) {
         scriptCheckFromTask(context.taskName, context.task),
         scriptContextFromWorkflowContext(context)
       )
+    },
+    launchBackgroundTask (context) {
+      return launchBackgroundScriptTask(context, options)
+    },
+    harvestBackgroundTasks (context) {
+      return harvestBackgroundScriptTasks(context)
+    },
+    consumeBackgroundTask (result) {
+      return consumeBackgroundScriptTask(result)
     }
   }
 }
 
 module.exports = {
+  consumeBackgroundScriptTask,
   createScriptTaskPort,
+  harvestBackgroundScriptTasks,
+  launchBackgroundScriptTask,
   scriptCheckFromTask,
   scriptContextFromWorkflowContext
 }
