@@ -23,7 +23,7 @@ prove_it explain
 prove_it doctor
 ```
 
-The Pi extension provides methodology prompt injection, hard pre-tool config guard blocking, the model-callable `prove_it_signal` tool, completion verification after `agent_end`, and remediation follow-up when verification fails. Pi completion verification is remediation-based after `agent_end`, not Claude-style hard Stop parity.
+The Pi extension provides methodology prompt injection, hard pre-tool config guard blocking, the model-callable `prove_it_signal` tool, completion verification from Pi `turn_end`, and remediation follow-up when verification fails. Pi completion verification is remediation-based from `turn_end`, with `agent_end` settlement as a fallback; it is not Claude-style hard Stop parity.
 
 The clean runtime reads `.prove_it/config.json`; it does not read legacy `.claude/prove_it` config.
 

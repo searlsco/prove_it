@@ -80,4 +80,4 @@ PY
 pi -p 'Create done_probe.txt with "done probe", then use prove_it_signal with signal="done" and stop.'
 ```
 
-Expected result: Pi records the `done` signal, runs completion verification from `turn_end`, preserves `done` when `script/test_fast` fails, and receives exactly one automatic follow-up user message that starts with `prove_it completion verification failed after Pi agent_end:` and asks the agent to remediate before signaling `done` again. It should not loop forever without a fresh `prove_it_signal(done)` call.
+Expected result: Pi records the `done` signal, runs completion verification from `turn_end`, preserves `done` when `script/test_fast` fails, and receives exactly one automatic follow-up user message that starts with `prove_it completion verification failed:` and asks the agent to remediate before signaling `done` again. It should not loop forever without a fresh `prove_it_signal(done)` call.
