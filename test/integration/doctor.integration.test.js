@@ -381,6 +381,25 @@ describe('doctor', () => {
     assert.ok(!result.stdout.includes('Git hook shim'))
   })
 
+  it('surfaces adapter capability diagnostics without changing install checks', () => {
+    writeSettings(tmpHome, correctSettings())
+    writeTeamConfig(tmpRepo, {
+      enabled: true,
+      sources: ['**/*.js'],
+      hooks: {}
+    })
+
+    const result = run()
+    assert.match(result.stdout, /Adapter capability diagnostics:/)
+    assert.match(result.stdout, /Claude adapter capabilities:/)
+    assert.match(result.stdout, /pre-tool blocking: hard block/)
+    assert.match(result.stdout, /completion verification: hard block/)
+    assert.match(result.stdout, /Pi adapter capabilities:/)
+    assert.match(result.stdout, /completion verification: remediation after agent_end/)
+    assert.match(result.stdout, /Pi cannot hard-block completion at agent_end; prove_it prompts remediation instead/)
+    assert.doesNotMatch(result.stdout, /Issues found:[\s\S]*Pi cannot hard-block completion/)
+  })
+
   it('config validation warnings', () => {
     writeSettings(tmpHome, correctSettings())
     // matcher on a Stop task triggers a warning
