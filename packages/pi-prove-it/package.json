@@ -1,0 +1,34 @@
+{
+  "name": "@davemo/pi-prove-it",
+  "displayName": "Pi",
+  "version": "0.72.0",
+  "description": "Pi package for prove_it methodology enforcement and verification workflows.",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "./extensions/prove-it.js",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "prove_it",
+    "verification",
+    "testing"
+  ],
+  "files": [
+    "extensions/",
+    "runtime/",
+    "skills/",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": ["./extensions"],
+    "skills": ["./skills"]
+  },
+  "prove_it": {
+    "adapterId": "pi",
+    "displayName": "Pi"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
