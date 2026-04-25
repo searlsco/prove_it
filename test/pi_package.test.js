@@ -107,6 +107,7 @@ describe('Pi package scaffold', () => {
 
     assert.strictEqual(typeof handlers.before_agent_start, 'function')
     assert.strictEqual(typeof handlers.tool_call, 'function')
+    assert.strictEqual(typeof handlers.turn_end, 'function')
     assert.strictEqual(typeof handlers.agent_end, 'function')
     assert.strictEqual(typeof tools.prove_it_signal.execute, 'function')
   })

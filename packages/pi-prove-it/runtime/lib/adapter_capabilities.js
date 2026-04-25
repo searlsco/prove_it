@@ -76,8 +76,8 @@ const ADAPTER_CAPABILITY_PROFILES = {
       },
       completion_verification: {
         strength: 'remediation',
-        event: 'agent_end',
-        diagnostic: 'Pi cannot hard-block completion at agent_end; prove_it prompts remediation instead.'
+        event: 'turn_end',
+        diagnostic: 'Pi cannot hard-block completion; prove_it prompts remediation from turn_end and preserves agent_end settlement.'
       }
     }
   }

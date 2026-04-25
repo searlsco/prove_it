@@ -189,7 +189,7 @@ describe('example projects', () => {
       assert.match(combined, /Pi is first-class/)
       assert.match(combined, /Pi is the fully wired clean-runtime adapter path today/)
       assert.match(combined, /@davemo\/pi-prove-it/)
-      assert.match(combined, /remediation-after-agent-end|remediation after `agent_end`/)
+      assert.match(combined, /remediation-after-turn-end|remediation after `turn_end`/)
       assert.match(combined, /Claude fast-follow/)
       assert.match(combined, /Claude strict clean-runtime migration is partial\/fast-follow/)
       assert.match(combined, /Claude dispatch does not yet generally consume strict `\.prove_it\/config\.json` as its workflow source/)

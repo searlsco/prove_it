@@ -43,7 +43,8 @@ function fakePi () {
     appendEntry (customType, data) {
       entries.push({ type: 'custom', customType, data })
     },
-    sendUserMessage (content, options) {
+    async sendUserMessage (content, options) {
+      await new Promise(resolve => setImmediate(resolve))
       sentUserMessages.push({ content, options })
     }
   }
@@ -243,7 +244,7 @@ describe('pi adapter pre-tool config guard', () => {
     assert.strictEqual(pi.entries.at(-1).customType, 'prove_it_state')
   })
 
-  it('queues a remediation follow-up on failed Pi agent_end verification and preserves done', async () => {
+  it('failed Pi agent_end verification returns remediation and preserves done', async () => {
     const registerPiExtension = require('../lib/adapters/pi/extension')
     const { createPiStatePort } = require('../lib/adapters/pi/bridge')
     const { readSignal } = require('../lib/redesign/signal_lifecycle')
@@ -262,14 +263,100 @@ describe('pi adapter pre-tool config guard', () => {
     const effect = await pi.handlers.agent_end({ messages: [] }, ctx)
 
     assert.strictEqual(effect.effect, 'remediation')
-    assert.strictEqual(pi.sentUserMessages.length, 1)
-    assert.match(pi.sentUserMessages[0].content, /reviewer found missing tests/)
-    assert.match(pi.sentUserMessages[0].content, /done signal is preserved/)
-    assert.deepStrictEqual(pi.sentUserMessages[0].options, { deliverAs: 'followUp' })
     assert.strictEqual(readSignal(createPiStatePort(pi, ctx), null).type, 'done')
   })
 
-  it('clears done without queuing remediation after successful Pi agent_end verification', async () => {
+  it('queues a remediation follow-up from Pi turn_end when completion verification fails', async () => {
+    const registerPiExtension = require('../lib/adapters/pi/extension')
+    const { createPiStatePort } = require('../lib/adapters/pi/bridge')
+    const { readSignal } = require('../lib/redesign/signal_lifecycle')
+    const repo = tmpCompletionRepo()
+    const pi = fakePi()
+    registerPiExtension(pi)
+    const ctx = fakePiCtx(pi, repo, {
+      taskPort: {
+        run () {
+          return { pass: false, reason: 'reviewer found missing tests' }
+        }
+      }
+    })
+    await pi.tools.prove_it_signal.execute('tool-call-1', { signal: 'done', message: 'ready' }, undefined, undefined, ctx)
+
+    const effect = await pi.handlers.turn_end({ message: {}, toolResults: [] }, ctx)
+
+    assert.strictEqual(effect.effect, 'remediation')
+    assert.strictEqual(pi.sentUserMessages.length, 1)
+    assert.match(pi.sentUserMessages[0].content, /reviewer found missing tests/)
+    assert.match(pi.sentUserMessages[0].content, /done signal is preserved/)
+    assert.deepStrictEqual(pi.sentUserMessages[0].options, { deliverAs: 'followUp', triggerTurn: true })
+    assert.strictEqual(readSignal(createPiStatePort(pi, ctx), null).type, 'done')
+
+    const agentEndEffect = await pi.handlers.agent_end({ messages: [] }, ctx)
+    assert.strictEqual(agentEndEffect.effect, 'allow')
+    assert.strictEqual(pi.sentUserMessages.length, 1)
+  })
+
+  it('prefers and awaits ctx.sendUserMessage when queueing remediation', async () => {
+    const { queueRemediation } = require('../lib/adapters/pi/bridge')
+    const repo = tmpCompletionRepo()
+    const pi = fakePi()
+    const ctxMessages = []
+    let awaited = false
+    const ctx = fakePiCtx(pi, repo, {
+      async sendUserMessage (content, options) {
+        await new Promise(resolve => setImmediate(resolve))
+        ctxMessages.push({ content, options })
+        awaited = true
+      }
+    })
+
+    const queued = await queueRemediation(pi, ctx, {
+      effect: 'remediation',
+      message: 'focused verification failed'
+    })
+
+    assert.strictEqual(queued, true)
+    assert.strictEqual(awaited, true)
+    assert.strictEqual(ctxMessages.length, 1)
+    assert.match(ctxMessages[0].content, /focused verification failed/)
+    assert.deepStrictEqual(ctxMessages[0].options, { deliverAs: 'followUp', triggerTurn: true })
+    assert.deepStrictEqual(pi.sentUserMessages, [])
+  })
+
+  it('does not repeat automatic remediation for the same done signal', async () => {
+    const registerPiExtension = require('../lib/adapters/pi/extension')
+    const repo = tmpCompletionRepo()
+    const pi = fakePi()
+    registerPiExtension(pi)
+    let runs = 0
+    const ctx = fakePiCtx(pi, repo, {
+      taskPort: {
+        run () {
+          runs += 1
+          return { pass: false, reason: `completion failure ${runs}` }
+        }
+      }
+    })
+    await pi.tools.prove_it_signal.execute('tool-call-1', { signal: 'done', message: 'ready' }, undefined, undefined, ctx)
+
+    const first = await pi.handlers.turn_end({ turnIndex: 1, message: {}, toolResults: [] }, ctx)
+    const second = await pi.handlers.turn_end({ turnIndex: 2, message: {}, toolResults: [] }, ctx)
+
+    assert.strictEqual(first.effect, 'remediation')
+    assert.strictEqual(second.effect, 'allow')
+    assert.strictEqual(runs, 1)
+    assert.strictEqual(pi.sentUserMessages.length, 1)
+
+    await pi.tools.prove_it_signal.execute('tool-call-2', { signal: 'done', message: 'ready after remediation' }, undefined, undefined, ctx)
+    const third = await pi.handlers.turn_end({ turnIndex: 3, message: {}, toolResults: [] }, ctx)
+
+    assert.strictEqual(third.effect, 'remediation')
+    assert.strictEqual(runs, 2)
+    assert.strictEqual(pi.sentUserMessages.length, 2)
+    assert.match(pi.sentUserMessages[1].content, /completion failure 2/)
+  })
+
+  it('clears done without queuing remediation after successful Pi turn_end verification', async () => {
     const registerPiExtension = require('../lib/adapters/pi/extension')
     const { createPiStatePort } = require('../lib/adapters/pi/bridge')
     const { readSignal } = require('../lib/redesign/signal_lifecycle')
@@ -285,7 +372,7 @@ describe('pi adapter pre-tool config guard', () => {
     })
     await pi.tools.prove_it_signal.execute('tool-call-1', { signal: 'done', message: 'ready' }, undefined, undefined, ctx)
 
-    const effect = await pi.handlers.agent_end({ messages: [] }, ctx)
+    const effect = await pi.handlers.turn_end({ messages: [] }, ctx)
 
     assert.strictEqual(effect.effect, 'approve')
     assert.strictEqual(readSignal(createPiStatePort(pi, ctx), null), null)

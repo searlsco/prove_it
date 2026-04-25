@@ -40,7 +40,7 @@ describe('adapter capability profiles', () => {
     assert.strictEqual(pi.model_callable_tools.strength, 'available')
     assert.strictEqual(pi.session_state.strength, 'available')
     assert.strictEqual(pi.completion_verification.strength, 'remediation')
-    assert.strictEqual(pi.completion_verification.event, 'agent_end')
+    assert.strictEqual(pi.completion_verification.event, 'turn_end')
     assert.strictEqual(ADAPTER_CAPABILITY_PROFILES.pi.experimental, undefined)
   })
 
@@ -75,8 +75,8 @@ describe('adapter capability profiles', () => {
     const output = renderAdapterCapabilityDiagnostics(ADAPTER_CAPABILITY_PROFILES)
 
     assert.match(output, /Pi adapter capabilities:/)
-    assert.match(output, /completion verification: remediation after agent_end/)
-    assert.match(output, /Pi cannot hard-block completion at agent_end; prove_it prompts remediation instead/)
+    assert.match(output, /completion verification: remediation after turn_end/)
+    assert.match(output, /Pi cannot hard-block completion; prove_it prompts remediation from turn_end and preserves agent_end settlement/)
     assert.doesNotMatch(output, /experimental/i)
   })
 })

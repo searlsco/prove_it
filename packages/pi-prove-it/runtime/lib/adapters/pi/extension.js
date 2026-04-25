@@ -1,4 +1,4 @@
-const { handleAgentEnd, handleSignalTool, handleToolCall } = require('./bridge')
+const { handleAgentEnd, handleSignalTool, handleToolCall, handleTurnEnd } = require('./bridge')
 const { renderMethodologySummary } = require('../../methodology')
 const { VALID_SIGNALS } = require('../../redesign/signal_lifecycle')
 
@@ -47,6 +47,7 @@ function signalToolDefinition (pi) {
 function registerPiExtension (pi) {
   pi.on('before_agent_start', async (event) => injectMethodology(event))
   pi.on('tool_call', async (event, ctx) => handleToolCall(event, ctx, pi))
+  pi.on('turn_end', async (event, ctx) => handleTurnEnd(event, ctx, pi))
   pi.on('agent_end', async (event, ctx) => handleAgentEnd(event, ctx, pi))
   if (typeof pi.registerTool === 'function') pi.registerTool(signalToolDefinition(pi))
 }

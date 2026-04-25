@@ -410,8 +410,8 @@ describe('doctor', () => {
     assert.match(result.stdout, /pre-tool blocking: hard block/)
     assert.match(result.stdout, /completion verification: hard block/)
     assert.match(result.stdout, /Pi adapter capabilities:/)
-    assert.match(result.stdout, /completion verification: remediation after agent_end/)
-    assert.match(result.stdout, /Pi cannot hard-block completion at agent_end; prove_it prompts remediation instead/)
+    assert.match(result.stdout, /completion verification: remediation after turn_end/)
+    assert.match(result.stdout, /Pi cannot hard-block completion; prove_it prompts remediation from turn_end and preserves agent_end settlement/)
     assert.doesNotMatch(result.stdout, /Issues found:[\s\S]*Pi cannot hard-block completion/)
   })
 

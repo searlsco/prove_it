@@ -55,10 +55,10 @@ The Pi extension currently provides:
 - methodology prompt injection before the agent starts;
 - hard pre-tool config guard blocking through Pi `tool_call`;
 - model-callable `prove_it_signal` for shared signal semantics;
-- completion verification after `agent_end`;
+- completion verification from Pi `turn_end`, with `agent_end` settlement as a fallback;
 - remediation follow-up when completion verification fails.
 
-Pi completion verification is remediation after `agent_end`, not hard Stop parity. When verification fails, prove_it asks Pi to continue and remediate; it does not claim that Pi has Claude-style Stop blocking.
+Pi completion verification is remediation from `turn_end`, not hard Stop parity. When verification fails, prove_it asks Pi to continue and remediate; it does not claim that Pi has Claude-style Stop blocking.
 
 See [`example/pi-strict/`](../example/pi-strict/) for the smallest Pi-first strict `.prove_it` project.
 
@@ -100,10 +100,10 @@ See [`example/multi-adapter/`](../example/multi-adapter/) for a strict `.prove_i
 | Post-tool observation | observe-only via Pi `tool_result` | observable through Claude post-tool hooks in the old/current Claude product |
 | Model-callable signals | available through `prove_it_signal` | command-based `prove_it signal ...` through Claude tool use |
 | Session state | available through Pi session state entries | adapter-owned Claude session/log state |
-| Completion verification | remediation after `agent_end` | hard block in the old/current Claude `Stop` path; shared signal settlement exists, but strict `.prove_it` task workflow is not the general source yet |
+| Completion verification | remediation after `turn_end` | hard block in the old/current Claude `Stop` path; shared signal settlement exists, but strict `.prove_it` task workflow is not the general source yet |
 | Protocol rendering | Pi extension return values and remediation messages | Claude adapter owns Claude hook JSON output |
 
-The matrix intentionally distinguishes hard block from remediation. A hard block prevents the guarded action or completion in that harness. Remediation means the harness has already reached its completion event, so prove_it queues or asks for follow-up work instead of claiming hard enforcement.
+The matrix intentionally distinguishes hard block from remediation. A hard block prevents the guarded action or completion in that harness. Remediation means the harness has reached a post-turn or completion lifecycle point, so prove_it queues or asks for follow-up work instead of claiming hard enforcement.
 
 ## What is not implemented here
 

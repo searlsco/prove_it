@@ -4,9 +4,10 @@ const { normalizeLifecycleEvent, normalizePiToolCall } = require('../../redesign
 const { runWorkflowEngine } = require('../../redesign/engine')
 const { createPiTaskPort } = require('./task_port')
 const { createAdapterStatePort, createObjectStatePort, createStatePort } = require('../../redesign/state_port')
-const { VALID_SIGNALS, setSignal } = require('../../redesign/signal_lifecycle')
+const { VALID_SIGNALS, readSignal, setSignal } = require('../../redesign/signal_lifecycle')
 
 const PI_STATE_ENTRY = 'prove_it_state'
+const PI_REMEDIATION_STATE_KEY = 'pi_completion_remediation'
 
 function renderToolCallEffect (effect) {
   if (!effect || effect.effect === 'allow') return undefined
@@ -128,21 +129,75 @@ function remediationMessage (effect) {
   ].join('\n')
 }
 
-function queueRemediation (pi, ctx, effect) {
-  const sendUserMessage = typeof pi?.sendUserMessage === 'function'
-    ? pi.sendUserMessage.bind(pi)
-    : typeof ctx?.sendUserMessage === 'function'
-      ? ctx.sendUserMessage.bind(ctx)
+async function queueRemediation (pi, ctx, effect) {
+  const sendUserMessage = typeof ctx?.sendUserMessage === 'function'
+    ? ctx.sendUserMessage.bind(ctx)
+    : typeof pi?.sendUserMessage === 'function'
+      ? pi.sendUserMessage.bind(pi)
       : null
   if (!sendUserMessage) return false
-  sendUserMessage(remediationMessage(effect), { deliverAs: 'followUp' })
+  await sendUserMessage(remediationMessage(effect), { deliverAs: 'followUp', triggerTurn: true })
   return true
 }
 
-async function handleAgentEnd (event, ctx = {}, pi = null) {
-  const cwd = ctx.cwd || event?.cwd || process.cwd()
-  let config
+function readStateValue (statePort, sessionId, key) {
+  if (!statePort || typeof statePort.readSessionState !== 'function') return null
+  return statePort.readSessionState(sessionId, key)
+}
 
+function writeStateValue (statePort, sessionId, key, value) {
+  if (!statePort || typeof statePort.writeSessionState !== 'function') return false
+  return statePort.writeSessionState(sessionId, key, value)
+}
+
+function remediationKey (effect, signal) {
+  if (signal?.type === 'done') return `done:${signal.at}:${signal.message || ''}`
+  return `effect:${effect?.message || effect?.reason || 'completion verification failed'}`
+}
+
+function alreadyRemediatedForKey (statePort, sessionId, key) {
+  const state = readStateValue(statePort, sessionId, PI_REMEDIATION_STATE_KEY)
+  return isObject(state) && state.key === key && (state.status === 'queued' || state.status === 'delivered')
+}
+
+function currentDoneSignal (statePort, sessionId) {
+  const signal = readSignal(statePort, sessionId)
+  return signal?.type === 'done' ? signal : null
+}
+
+function completionAlreadyRemediated (statePort, sessionId) {
+  const signal = currentDoneSignal(statePort, sessionId)
+  return signal ? alreadyRemediatedForKey(statePort, sessionId, remediationKey(null, signal)) : false
+}
+
+function markRemediation (statePort, sessionId, key, status, effect) {
+  writeStateValue(statePort, sessionId, PI_REMEDIATION_STATE_KEY, {
+    key,
+    status,
+    message: effect?.message || effect?.reason || null,
+    at: Date.now()
+  })
+}
+
+async function queueRemediationOnce (pi, ctx, effect, statePort, sessionId) {
+  const signal = currentDoneSignal(statePort, sessionId)
+  const key = remediationKey(effect, signal)
+  if (alreadyRemediatedForKey(statePort, sessionId, key)) return false
+
+  markRemediation(statePort, sessionId, key, 'queued', effect)
+  const queued = await queueRemediation(pi, ctx, effect)
+  if (queued) markRemediation(statePort, sessionId, key, 'delivered', effect)
+  return queued
+}
+
+async function runCompletionVerification (event, ctx = {}, pi = null, options = {}) {
+  const cwd = ctx.cwd || event?.cwd || process.cwd()
+  const statePort = createPiStatePort(pi, ctx)
+  const sessionId = ctx.sessionId || ctx.session_id || event?.sessionId || event?.session_id || null
+
+  if (completionAlreadyRemediated(statePort, sessionId)) return { effect: 'allow' }
+
+  let config
   try {
     config = loadProjectConfig(cwd)
   } catch (error) {
@@ -150,7 +205,7 @@ async function handleAgentEnd (event, ctx = {}, pi = null) {
       effect: 'remediation',
       message: `prove_it: invalid .prove_it/config.json: ${error.message}`
     }
-    queueRemediation(pi, ctx, effect)
+    if (options.queueRemediation) await queueRemediationOnce(pi, ctx, effect, statePort, sessionId)
     return effect
   }
 
@@ -170,20 +225,32 @@ async function handleAgentEnd (event, ctx = {}, pi = null) {
       completion_verification: behaviorForCapability('pi', 'completion_verification')
     },
     taskPort: ctx.taskPort || ctx.taskRunnerPort || createPiTaskPort(pi, ctx),
-    statePort: createPiStatePort(pi, ctx),
+    statePort,
     effectPort: ctx.effectPort || ctx.effectsPort
   })
 
-  if (effect.effect === 'remediation') queueRemediation(pi, ctx, effect)
+  if (effect.effect === 'remediation' && options.queueRemediation) {
+    await queueRemediationOnce(pi, ctx, effect, statePort, normalizedEvent.sessionId)
+  }
   return effect
 }
 
+async function handleTurnEnd (event, ctx = {}, pi = null) {
+  return runCompletionVerification(event, ctx, pi, { queueRemediation: true })
+}
+
+async function handleAgentEnd (event, ctx = {}, pi = null) {
+  return runCompletionVerification(event, ctx, pi, { queueRemediation: true })
+}
+
 module.exports = {
+  PI_REMEDIATION_STATE_KEY,
   PI_STATE_ENTRY,
   createPiStatePort,
   handleAgentEnd,
   handleSignalTool,
   handleToolCall,
+  handleTurnEnd,
   queueRemediation,
   remediationMessage,
   renderToolCallEffect
