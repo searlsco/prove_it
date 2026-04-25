@@ -11,6 +11,7 @@ const {
 const { renderCompletionAccountability, renderMethodologySummary } = require('../methodology')
 const { isHardBlock, isRemediation } = require('../adapter_capabilities')
 const {
+  VALID_SIGNALS,
   parseSignalCommand,
   readSignal,
   setSignal: setLifecycleSignal,
@@ -42,6 +43,19 @@ function normalizeToolName (toolName) {
 
 function isMutatingTool (toolName) {
   return MUTATING_TOOLS.has(normalizeToolName(toolName))
+}
+
+function isBashTool (toolName) {
+  return normalizeToolName(toolName) === 'bash'
+}
+
+function invalidSignalReason (signalCommand) {
+  const type = signalCommand?.type || 'missing'
+  return `prove_it: invalid signal "${type}". Expected one of: ${VALID_SIGNALS.join(', ')}`
+}
+
+function signalStateUnavailableReason (type) {
+  return `prove_it: signal "${type}" could not be recorded because session state is unavailable`
 }
 
 function defaultDependencies (overrides = {}) {
@@ -370,13 +384,27 @@ function runWorkflowEngine ({
       ports
     })
   } else if (event?.stage === 'pre_tool') {
-    const signalCommand = parseSignalCommand(event.command)
-    if (signalCommand?.valid) {
-      const result = setLifecycleSignal(ports.state, event.sessionId, signalCommand.type, signalCommand.message)
-      effect = deps.allowEffect({
-        reason: `prove_it: signal "${signalCommand.type}" recorded`,
-        signal: result.signal
-      })
+    const signalCommand = isBashTool(event.toolName) ? parseSignalCommand(event.command) : null
+    if (signalCommand?.matched) {
+      if (signalCommand.valid) {
+        const result = setLifecycleSignal(ports.state, event.sessionId, signalCommand.type, signalCommand.message)
+        effect = deps.allowEffect({
+          reason: result.ok
+            ? `prove_it: signal "${signalCommand.type}" recorded`
+            : signalStateUnavailableReason(signalCommand.type),
+          signal: result.signal,
+          signalLifecycle: result
+        })
+      } else {
+        effect = deps.allowEffect({
+          reason: invalidSignalReason(signalCommand),
+          signalLifecycle: {
+            ok: false,
+            reason: 'invalid_signal',
+            signal: null
+          }
+        })
+      }
     } else {
       effect = runPreToolWorkflow(workflowConfig, event, {
         adapterCapabilities,
