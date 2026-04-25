@@ -150,8 +150,9 @@ describe('Claude adapter effect renderer', () => {
     assert.strictEqual(effect.signalLifecycle.action, 'preserve')
     assert.deepStrictEqual(readSignal(statePort, 'session-1'), { type: 'done', message: 'ready', at: 123 })
     assert.strictEqual(output.decision, 'block')
-    assert.strictEqual(output.reason, 'prove_it: stop checks failed')
-    assert.strictEqual(output.systemMessage, 'prove_it: stop checks failed')
+    assert.match(output.reason, /prove_it: stop checks failed/)
+    assert.match(output.reason, /done signal is preserved/i)
+    assert.strictEqual(output.systemMessage, output.reason)
   })
 
   it('renders Claude Stop approval effects and clears passed done signals through shared lifecycle', () => {
