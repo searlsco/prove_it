@@ -2,6 +2,7 @@ const { describe, it } = require('node:test')
 const assert = require('node:assert')
 const { renderBriefing, eventLabel, whenDescription, taskLine, timeAgo, signalDirective } = require('../lib/briefing')
 const { buildConfig } = require('../lib/config')
+const { renderCompletionAccountability, cloneMethodology, renderSignalDirective } = require('../lib/methodology')
 
 describe('briefing', () => {
   describe('renderBriefing', () => {
@@ -31,6 +32,26 @@ describe('briefing', () => {
       assert.ok(text.includes('Accountability rule'), 'should include accountability rule')
       assert.ok(text.includes('prove_it signal done'), 'should include signal command')
       assert.ok(text.includes('not after every edit'), 'should include anti-spam language')
+      assert.ok(text.includes(renderCompletionAccountability()), 'should render obligations from shared methodology')
+    })
+
+    it('changes Claude briefing obligations when shared methodology data changes', () => {
+      const cfg = {
+        hooks: {
+          claude: {
+            Stop: [{ name: 'review', type: 'agent', when: { signal: 'done' } }]
+          }
+        }
+      }
+      const custom = cloneMethodology()
+      custom.signals.done.command = 'prove_it signal shipped'
+      custom.completionAccountability.validIncompleteReasons = ['Custom shared methodology reason']
+
+      const text = renderBriefing(cfg, {}, { methodology: custom })
+
+      assert.ok(text.includes('prove_it signal shipped'))
+      assert.ok(text.includes('Custom shared methodology reason'))
+      assert.ok(!text.includes('Blocked on user input or a decision'))
     })
 
     it('omits obligations when no done-signal tasks', () => {
@@ -511,6 +532,7 @@ describe('briefing', () => {
   describe('signalDirective', () => {
     it('returns actionable directive for "done"', () => {
       const d = signalDirective('done')
+      assert.strictEqual(d, renderSignalDirective('done'))
       assert.ok(d.includes('prove_it signal done'), 'should include command')
       assert.ok(d.includes('not after every edit'), 'should include anti-spam guidance')
     })

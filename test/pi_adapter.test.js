@@ -141,7 +141,9 @@ describe('pi adapter pre-tool config guard', () => {
     }, { cwd: process.cwd() })
 
     assert.match(result.systemPrompt, /Base system prompt/)
+    const { renderMethodologySummary } = require('../lib/methodology')
     assert.match(result.systemPrompt, /prove_it methodology/)
     assert.match(result.systemPrompt, /verify claims with evidence/)
+    assert.ok(result.systemPrompt.includes(renderMethodologySummary()), 'Pi guidance should render from shared methodology')
   })
 })
