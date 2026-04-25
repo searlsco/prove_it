@@ -26,12 +26,64 @@ function tmpRepo () {
 
 function fakePi () {
   const handlers = {}
-  return {
+  const tools = {}
+  const entries = []
+  const sentUserMessages = []
+  const pi = {
     handlers,
+    tools,
+    entries,
+    sentUserMessages,
     on (eventName, handler) {
       handlers[eventName] = handler
+    },
+    registerTool (definition) {
+      tools[definition.name] = definition
+    },
+    appendEntry (customType, data) {
+      entries.push({ type: 'custom', customType, data })
+    },
+    sendUserMessage (content, options) {
+      sentUserMessages.push({ content, options })
     }
   }
+  return pi
+}
+
+function fakePiCtx (pi, repo, extra = {}) {
+  return {
+    cwd: repo,
+    sessionManager: {
+      getEntries () {
+        return pi.entries
+      }
+    },
+    ...extra
+  }
+}
+
+function tmpCompletionRepo () {
+  const { PROFILE_VERSION } = require('../lib/redesign/config')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_pi_completion_'))
+  fs.mkdirSync(path.join(dir, '.prove_it'), { recursive: true })
+  fs.writeFileSync(path.join(dir, '.prove_it', 'config.json'), JSON.stringify({
+    schema_version: 1,
+    profile_version: PROFILE_VERSION,
+    tasks: {
+      completion_check: {
+        type: 'script',
+        command: './script/test_fast'
+      }
+    },
+    agent_workflows: {
+      pre_tool: [],
+      agent_end: ['completion_check']
+    },
+    adapters: {
+      pi: { enabled: true }
+    }
+  }, null, 2))
+  return dir
 }
 
 describe('pi adapter pre-tool config guard', () => {
@@ -163,5 +215,80 @@ describe('pi adapter pre-tool config guard', () => {
     assert.match(result.systemPrompt, /prove_it methodology/)
     assert.match(result.systemPrompt, /verify claims with evidence/)
     assert.ok(result.systemPrompt.includes(renderMethodologySummary()), 'Pi guidance should render from shared methodology')
+  })
+
+  it('registers a model-callable prove_it_signal tool and persists done in Pi session entries', async () => {
+    const registerPiExtension = require('../lib/adapters/pi/extension')
+    const { createPiStatePort } = require('../lib/adapters/pi/bridge')
+    const { readSignal } = require('../lib/redesign/signal_lifecycle')
+    const repo = tmpRepo()
+    const pi = fakePi()
+    registerPiExtension(pi)
+
+    assert.strictEqual(typeof pi.tools.prove_it_signal.execute, 'function')
+    assert.match(pi.tools.prove_it_signal.description, /completion signal/i)
+
+    const result = await pi.tools.prove_it_signal.execute(
+      'tool-call-1',
+      { signal: 'done', message: 'ready for verification' },
+      undefined,
+      undefined,
+      fakePiCtx(pi, repo)
+    )
+
+    const signal = readSignal(createPiStatePort(pi, fakePiCtx(pi, repo)), null)
+    assert.match(result.content[0].text, /signal "done" recorded/)
+    assert.strictEqual(signal.type, 'done')
+    assert.strictEqual(signal.message, 'ready for verification')
+    assert.strictEqual(pi.entries.at(-1).customType, 'prove_it_state')
+  })
+
+  it('queues a remediation follow-up on failed Pi agent_end verification and preserves done', async () => {
+    const registerPiExtension = require('../lib/adapters/pi/extension')
+    const { createPiStatePort } = require('../lib/adapters/pi/bridge')
+    const { readSignal } = require('../lib/redesign/signal_lifecycle')
+    const repo = tmpCompletionRepo()
+    const pi = fakePi()
+    registerPiExtension(pi)
+    const ctx = fakePiCtx(pi, repo, {
+      taskPort: {
+        run () {
+          return { pass: false, reason: 'reviewer found missing tests' }
+        }
+      }
+    })
+    await pi.tools.prove_it_signal.execute('tool-call-1', { signal: 'done', message: 'ready' }, undefined, undefined, ctx)
+
+    const effect = await pi.handlers.agent_end({ messages: [] }, ctx)
+
+    assert.strictEqual(effect.effect, 'remediation')
+    assert.strictEqual(pi.sentUserMessages.length, 1)
+    assert.match(pi.sentUserMessages[0].content, /reviewer found missing tests/)
+    assert.match(pi.sentUserMessages[0].content, /done signal is preserved/)
+    assert.deepStrictEqual(pi.sentUserMessages[0].options, { deliverAs: 'followUp' })
+    assert.strictEqual(readSignal(createPiStatePort(pi, ctx), null).type, 'done')
+  })
+
+  it('clears done without queuing remediation after successful Pi agent_end verification', async () => {
+    const registerPiExtension = require('../lib/adapters/pi/extension')
+    const { createPiStatePort } = require('../lib/adapters/pi/bridge')
+    const { readSignal } = require('../lib/redesign/signal_lifecycle')
+    const repo = tmpCompletionRepo()
+    const pi = fakePi()
+    registerPiExtension(pi)
+    const ctx = fakePiCtx(pi, repo, {
+      taskPort: {
+        run () {
+          return { pass: true }
+        }
+      }
+    })
+    await pi.tools.prove_it_signal.execute('tool-call-1', { signal: 'done', message: 'ready' }, undefined, undefined, ctx)
+
+    const effect = await pi.handlers.agent_end({ messages: [] }, ctx)
+
+    assert.strictEqual(effect.effect, 'approve')
+    assert.strictEqual(readSignal(createPiStatePort(pi, ctx), null), null)
+    assert.deepStrictEqual(pi.sentUserMessages, [])
   })
 })
