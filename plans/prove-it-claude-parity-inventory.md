@@ -206,6 +206,8 @@ Never wholesale-merge the branch. The current Legacy Runtime dispatcher remains 
 
 ### 13. Disable, enable, and cancel
 
+Issue #21 note: clean Claude SessionStart now renders methodology/context and exports `PROVE_IT_SESSION_ID`, but session disabled sentinels are intentionally not ported in that slice. Disabled-session no-op/reminder parity remains pending for issue #31's session-control slice.
+
 | Legacy behavior | Classification | Clean target | Characterization tests | Missing before risky port |
 | --- | --- | --- | --- | --- |
 | `prove_it disable` writes a session disabled sentinel and prints instructions; requires `PROVE_IT_SESSION_ID`. | Core Session Control + Claude Adapter env integration | Preserve as session control API/CLI. | `test/disable.test.js`; `test/integration/disable.integration.test.js` | Add clean state path test. |

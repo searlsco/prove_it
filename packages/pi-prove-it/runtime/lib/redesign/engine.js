@@ -1,10 +1,14 @@
 const {
   allowEffect,
   approveEffect,
+  batchEffect,
   blockEffect: blockWorkflowEffect,
+  contextInjectionEffect,
+  envUpdateEffect,
   failEffect,
   remediationEffect
 } = require('./effects')
+const { renderCompletionAccountability, renderMethodologySummary } = require('../methodology')
 const { isHardBlock, isRemediation } = require('../adapter_capabilities')
 const {
   parseSignalCommand,
@@ -43,7 +47,10 @@ function defaultDependencies (overrides = {}) {
   return {
     allowEffect,
     approveEffect,
+    batchEffect,
     blockEffect: blockWorkflowEffect,
+    contextInjectionEffect,
+    envUpdateEffect,
     failEffect,
     remediationEffect,
     isMutatingTool,
@@ -78,6 +85,37 @@ function evaluateConfigGuard (task, event, options = {}) {
 
 function preToolPipeline (config) {
   return config?.agent_workflows?.pre_tool || []
+}
+
+function isStartupOrResumeSessionStart (event) {
+  return event?.source?.kind === 'startup' || event?.source?.kind === 'resume'
+}
+
+function renderSessionStartGuidance () {
+  return [
+    renderMethodologySummary(),
+    '',
+    renderCompletionAccountability()
+  ].join('\n')
+}
+
+function runSessionStartWorkflow (_config, event, options = {}) {
+  const dependencies = defaultDependencies(options.dependencies)
+  const effects = [
+    dependencies.contextInjectionEffect(renderSessionStartGuidance(), {
+      source: 'methodology'
+    })
+  ]
+
+  if (event?.sessionId && isStartupOrResumeSessionStart(event)) {
+    effects.push(dependencies.envUpdateEffect({
+      PROVE_IT_SESSION_ID: event.sessionId
+    }, {
+      source: 'session_start'
+    }))
+  }
+
+  return dependencies.batchEffect(effects)
 }
 
 function agentEndPipeline (config) {
@@ -302,7 +340,13 @@ function runWorkflowEngine ({
   const deps = defaultDependencies(dependencies)
 
   let effect
-  if (event?.stage === 'pre_tool') {
+  if (event?.stage === 'session_start') {
+    effect = runSessionStartWorkflow(workflowConfig, event, {
+      adapterCapabilities,
+      dependencies,
+      ports
+    })
+  } else if (event?.stage === 'pre_tool') {
     const signalCommand = parseSignalCommand(event.command)
     if (signalCommand?.valid) {
       const result = setLifecycleSignal(ports.state, event.sessionId, signalCommand.type, signalCommand.message)
@@ -335,8 +379,10 @@ module.exports = {
   evaluateConfigGuard,
   isMutatingTool,
   protectedPathMatch,
+  renderSessionStartGuidance,
   runAgentEndWorkflow,
   runPreToolWorkflow,
+  runSessionStartWorkflow,
   runWorkflowEngine,
   toProjectRelativePath
 }

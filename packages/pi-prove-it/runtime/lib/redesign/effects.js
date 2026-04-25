@@ -8,7 +8,8 @@ const EFFECT_TYPES = Object.freeze({
   ENV_UPDATE: 'env_update',
   STATE_UPDATE: 'state_update',
   OBSERVATION: 'observation',
-  REMEDIATION: 'remediation'
+  REMEDIATION: 'remediation',
+  BATCH: 'batch'
 })
 
 function makeEffect (effect, fields = {}) {
@@ -58,10 +59,15 @@ function remediationEffect (message, fields = {}) {
   return makeEffect(EFFECT_TYPES.REMEDIATION, { message, ...fields })
 }
 
+function batchEffect (effects, fields = {}) {
+  return makeEffect(EFFECT_TYPES.BATCH, { effects: Array.isArray(effects) ? effects : [], ...fields })
+}
+
 module.exports = {
   EFFECT_TYPES,
   allowEffect,
   approveEffect,
+  batchEffect,
   blockEffect,
   contextInjectionEffect,
   envUpdateEffect,

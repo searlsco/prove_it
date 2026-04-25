@@ -13,6 +13,7 @@ const {
   EFFECT_TYPES,
   allowEffect,
   approveEffect,
+  batchEffect,
   blockEffect,
   contextInjectionEffect,
   envUpdateEffect,
@@ -145,7 +146,8 @@ describe('redesign lifecycle events and effects', () => {
       ENV_UPDATE: 'env_update',
       STATE_UPDATE: 'state_update',
       OBSERVATION: 'observation',
-      REMEDIATION: 'remediation'
+      REMEDIATION: 'remediation',
+      BATCH: 'batch'
     })
 
     assert.deepStrictEqual(noopEffect(), { effect: 'noop' })
@@ -158,6 +160,7 @@ describe('redesign lifecycle events and effects', () => {
     assert.deepStrictEqual(stateUpdateEffect({ signal: 'done' }), { effect: 'state_update', state: { signal: 'done' } })
     assert.deepStrictEqual(observationEffect({ command: 'npm test' }), { effect: 'observation', observation: { command: 'npm test' } })
     assert.deepStrictEqual(remediationEffect('run tests'), { effect: 'remediation', message: 'run tests' })
+    assert.deepStrictEqual(batchEffect([allowEffect()]), { effect: 'batch', effects: [{ effect: 'allow' }] })
   })
 
   it('keeps shared event/effect modules independent of adapter protocol APIs', () => {
