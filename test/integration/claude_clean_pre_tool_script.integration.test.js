@@ -14,6 +14,7 @@ const {
   writeConfig
 } = require('./hook-harness')
 const { PROFILE_VERSION } = require('../../lib/redesign/config')
+const { backchannelReadmePath } = require('../../lib/paths')
 
 function writeStrictConfig (dir, { tasks, preTool }) {
   const cfgPath = path.join(dir, '.prove_it', 'config.json')
@@ -83,6 +84,48 @@ describe('Claude clean-runtime PreToolUse script tasks', () => {
     assert.strictEqual(result.exitCode, 0)
     assert.strictEqual(result.output, null, 'passing clean PreToolUse scripts should not emit a Claude permission decision')
     assert.strictEqual(fs.readFileSync(path.join(tmpDir, 'strict.log'), 'utf8'), 'strict-pass\n')
+  })
+
+  it('allows Claude writes to clean-runtime backchannel paths before task denial logic', () => {
+    writeScript(tmpDir, 'fail-pre-tool', 'echo "focused check failed" >&2\nexit 7')
+    writeStrictConfig(tmpDir, {
+      tasks: {
+        fail_pre_tool: { type: 'script', command: './script/fail-pre-tool' }
+      },
+      preTool: ['fail_pre_tool']
+    })
+
+    const result = invokePreTool(tmpDir, {
+      tool_name: 'Write',
+      tool_input: {
+        file_path: backchannelReadmePath(fs.realpathSync(tmpDir), 'clean-pre-tool-session', 'fail_pre_tool'),
+        content: 'PASS unrelated failure'
+      }
+    })
+
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'allow')
+  })
+
+  it('creates Claude backchannel files for strict task failures when appeal is configured', () => {
+    writeScript(tmpDir, 'fail-pre-tool', 'echo "focused check failed" >&2\nexit 7')
+    writeStrictConfig(tmpDir, {
+      tasks: {
+        fail_pre_tool: { type: 'script', command: './script/fail-pre-tool', appeal: { enabled: true, threshold: 1 } }
+      },
+      preTool: ['fail_pre_tool']
+    })
+
+    const result = invokePreTool(tmpDir, {
+      tool_name: 'Write',
+      tool_input: { file_path: 'src/app.js', content: 'module.exports = {}\n' }
+    })
+    const readmePath = backchannelReadmePath(tmpDir, 'clean-pre-tool-session', 'fail_pre_tool')
+
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
+    assert.match(result.output.hookSpecificOutput.permissionDecisionReason, /backchannel\/fail_pre_tool\/README\.md/)
+    assert.strictEqual(fs.existsSync(readmePath), true)
   })
 
   it('hard-blocks Claude PreToolUse when a strict script task fails with useful failure text', () => {

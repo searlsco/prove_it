@@ -76,7 +76,8 @@ describe('clean-runtime reviewer tasks', () => {
         env: { FOO: 'bar' }
       },
       async: true,
-      failure_behavior: 'block'
+      failure_behavior: 'block',
+      appeal: { enabled: true, threshold: 1 }
     })
 
     try {
@@ -87,6 +88,7 @@ describe('clean-runtime reviewer tasks', () => {
       assert.deepStrictEqual(task.provider_options.allowed_tools, ['Read', 'Grep'])
       assert.strictEqual(task.async, true)
       assert.strictEqual(task.failure_behavior, 'block')
+      assert.deepStrictEqual(task.appeal, { enabled: true, threshold: 1 })
     } finally {
       fs.rmSync(repo, { recursive: true, force: true })
     }

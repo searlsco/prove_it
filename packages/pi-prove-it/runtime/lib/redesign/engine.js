@@ -8,6 +8,7 @@ const {
   failEffect,
   remediationEffect
 } = require('./effects')
+const { sanitizeTaskName } = require('../io')
 const { renderCompletionAccountability, renderMethodologySummary } = require('../methodology')
 const { isHardBlock, isRemediation } = require('../adapter_capabilities')
 const {
@@ -151,6 +152,11 @@ function taskRegistry (config) {
 }
 
 const TASK_LIFECYCLE_STATE_KEY = 'task_lifecycle'
+const DEFAULT_APPEAL_THRESHOLDS = Object.freeze({
+  script: 5,
+  agent: 1,
+  reviewer: 1
+})
 
 function readStateValue (statePort, sessionId, key) {
   if (!statePort || !key) return null
@@ -191,11 +197,19 @@ function normalizeTaskLifecycleState (state) {
     normalized.active = { tasks: [] }
   }
   if (!Array.isArray(normalized.active.tasks)) normalized.active.tasks = []
+  if (!normalized.failures || typeof normalized.failures !== 'object' || Array.isArray(normalized.failures)) {
+    normalized.failures = {}
+  }
   return normalized
 }
 
 function writeTaskLifecycleState (context, state) {
   return writeStateValue(context.ports?.state, context.event?.sessionId, TASK_LIFECYCLE_STATE_KEY, normalizeTaskLifecycleState(state))
+}
+
+function preserveLatestFailureState (context, lifecycle) {
+  const latest = normalizeTaskLifecycleState(readTaskLifecycleState(context))
+  return { ...lifecycle, failures: latest.failures }
 }
 
 function lifecycleTaskContext (taskName, task, context) {
@@ -222,6 +236,10 @@ function resolveReviewerRunnerPort (ports = {}) {
   return ports.reviewer || ports.reviewerRunner || null
 }
 
+function resolveBackchannelPort (ports = {}) {
+  return ports.backchannel || ports.backchannelProvider || null
+}
+
 function resolveLifecyclePortForTask (task, context) {
   return isReviewerTask(task) ? resolveReviewerRunnerPort(context.ports) : resolveTaskRunnerPort(context.ports)
 }
@@ -238,6 +256,250 @@ function asyncResultStatus (result) {
   if (result?.skipped || result?.skip) return 'skip'
   if (result?.pass === true || result?.ok === true || result?.effect === 'allow' || result?.effect === 'approve') return 'pass'
   return 'fail'
+}
+
+function taskFailureKey (taskName) {
+  return sanitizeTaskName(taskName || 'task')
+}
+
+function taskTypeForLifecycle (task) {
+  return isReviewerTask(task) ? 'reviewer' : (task?.type || 'script')
+}
+
+function defaultAppealThreshold (task) {
+  return DEFAULT_APPEAL_THRESHOLDS[taskTypeForLifecycle(task)] ?? 1
+}
+
+function appealConfigForTask (task) {
+  if (task?.appeal === false) return { enabled: false, threshold: defaultAppealThreshold(task) }
+  if (task?.appeal && typeof task.appeal === 'object' && !Array.isArray(task.appeal)) {
+    return {
+      enabled: task.appeal.enabled !== false,
+      threshold: task.appeal.threshold ?? defaultAppealThreshold(task)
+    }
+  }
+  return { enabled: true, threshold: defaultAppealThreshold(task) }
+}
+
+function taskFailureState (context, taskName) {
+  const lifecycle = normalizeTaskLifecycleState(readTaskLifecycleState(context))
+  return lifecycle.failures[taskFailureKey(taskName)] || null
+}
+
+function taskIsSuspended (context, taskName) {
+  return taskFailureState(context, taskName)?.status === 'suspended'
+}
+
+function callBackchannelPort (context, names, payload) {
+  const port = resolveBackchannelPort(context.ports)
+  if (!port) return null
+  return invokeTaskPortMethod(port, names, payload, context)
+}
+
+function normalizeBackchannelMetadata (metadata) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null
+  return {
+    available: metadata.available !== false,
+    ...(metadata.kind ? { kind: metadata.kind } : {}),
+    ...(metadata.location ? { location: metadata.location } : {}),
+    ...(metadata.path ? { path: metadata.path } : {}),
+    ...(metadata.appealPath ? { appealPath: metadata.appealPath } : {}),
+    ...(metadata.instructions ? { instructions: metadata.instructions } : {})
+  }
+}
+
+function normalizeAppealRead (appeal) {
+  if (!appeal) return null
+  if (typeof appeal === 'string') return appeal.trim() ? { appealText: appeal, content: appeal } : { empty: true }
+  if (typeof appeal !== 'object' || Array.isArray(appeal)) return { malformed: true, reason: 'backchannel provider returned malformed appeal content' }
+  return {
+    content: appeal.content || appeal.backchannelContent || null,
+    appealText: appeal.appealText || appeal.text || null,
+    empty: appeal.empty === true,
+    malformed: appeal.malformed === true,
+    reason: appeal.reason || appeal.message || null
+  }
+}
+
+function normalizeAppealVerdict (verdict) {
+  if (!verdict) return null
+  if (typeof verdict !== 'object' || Array.isArray(verdict)) return { accepted: false, reason: 'appeal evaluator returned malformed verdict' }
+  return {
+    accepted: verdict.accepted === true || verdict.pass === true || verdict.skip === true,
+    skipped: verdict.skip === true || verdict.skipped === true,
+    rejected: verdict.accepted === false || verdict.pass === false || verdict.rejected === true,
+    reason: verdict.reason || verdict.message || null,
+    verdict
+  }
+}
+
+function appendAppealGuidance (reason, failure) {
+  const backchannel = failure?.backchannel
+  if (!backchannel) return reason
+  const appealPath = backchannel.appealPath || backchannel.path || backchannel.location
+  if (!appealPath) return reason
+  return `${reason}\n\nTo appeal, write your reasoning in:\n${appealPath}`
+}
+
+function writeFailureLifecycleState (context, taskName, failure) {
+  const lifecycle = normalizeTaskLifecycleState(readTaskLifecycleState(context))
+  lifecycle.failures[taskFailureKey(taskName)] = failure
+  writeTaskLifecycleState(context, lifecycle)
+  return failure
+}
+
+function clearFailureLifecycleState (context, taskName) {
+  const lifecycle = normalizeTaskLifecycleState(readTaskLifecycleState(context))
+  const key = taskFailureKey(taskName)
+  const previous = lifecycle.failures[key] || null
+  if (previous) {
+    delete lifecycle.failures[key]
+    writeTaskLifecycleState(context, lifecycle)
+  }
+  callBackchannelPort(context, ['clearFailureChannel', 'clearBackchannel', 'clear'], {
+    taskName,
+    failure: previous,
+    event: context.event,
+    config: context.config,
+    ports: context.ports
+  })
+  return previous
+}
+
+function failurePayload (taskName, task, result, context, failure, mode) {
+  return {
+    taskName,
+    task,
+    result,
+    failure,
+    mode: mode || null,
+    event: context.event,
+    config: context.config,
+    ports: context.ports
+  }
+}
+
+function createOrRefreshFailureChannel (taskName, task, result, context, failure, mode) {
+  const appeal = appealConfigForTask(task)
+  if (!appeal.enabled || failure.count < appeal.threshold) return failure
+  const existing = failure.backchannel || null
+  const created = callBackchannelPort(context, ['createFailureChannel', 'createBackchannel', 'create'], failurePayload(taskName, task, result, context, failure, mode))
+  const metadata = normalizeBackchannelMetadata(created) || existing
+  return metadata ? { ...failure, backchannel: metadata } : failure
+}
+
+function readTaskAppeal (taskName, task, result, context, failure, mode) {
+  const appeal = appealConfigForTask(task)
+  if (!appeal.enabled || failure.count < appeal.threshold) return null
+  return normalizeAppealRead(callBackchannelPort(context, ['readAppeal', 'readBackchannel', 'read'], failurePayload(taskName, task, result, context, failure, mode)))
+}
+
+function suspendTaskForAppeal (taskName, task, result, context, failure, verdict, mode) {
+  const suspended = {
+    ...failure,
+    status: 'suspended',
+    count: 0,
+    appeal: {
+      status: 'accepted',
+      reason: verdict.reason || 'appeal accepted',
+      verdict: verdict.verdict || null
+    }
+  }
+  writeFailureLifecycleState(context, taskName, suspended)
+  callBackchannelPort(context, ['clearFailureChannel', 'clearBackchannel', 'clear'], failurePayload(taskName, task, result, context, suspended, mode))
+  return {
+    status: 'skip',
+    result: { pass: true, skipped: true, reason: `${taskName} suspended by appeal: ${suspended.appeal.reason}`, output: result?.output || '' },
+    reason: `${taskName} suspended by appeal: ${suspended.appeal.reason}`,
+    taskFailure: suspended
+  }
+}
+
+function recordTaskFailure (taskName, task, result, context, mode) {
+  const previous = taskFailureState(context, taskName) || {}
+  const reason = taskResultReason(result, 'task failed')
+  let failure = {
+    ...previous,
+    taskName,
+    taskType: taskTypeForLifecycle(task),
+    status: 'failed',
+    count: (previous.status === 'failed' ? previous.count || 0 : 0) + 1,
+    lastReason: reason,
+    mode: mode || null
+  }
+
+  failure = createOrRefreshFailureChannel(taskName, task, result, context, failure, mode)
+  let failureReason = appendAppealGuidance(taskFailureReason(taskName, task, result, mode), failure)
+  const appeal = readTaskAppeal(taskName, task, result, context, failure, mode)
+
+  if (appeal?.malformed || appeal?.empty) {
+    failure = {
+      ...failure,
+      appeal: {
+        status: 'malformed',
+        reason: appeal.reason || (appeal.empty ? 'backchannel is empty; write appeal text below the final separator' : 'backchannel content could not be parsed')
+      }
+    }
+    writeFailureLifecycleState(context, taskName, failure)
+    return {
+      status: 'fail',
+      reason: `${failureReason}\n\nAppeal not evaluated: ${failure.appeal.reason}`,
+      taskFailure: failure
+    }
+  }
+
+  if (appeal?.appealText) {
+    const verdict = normalizeAppealVerdict(callBackchannelPort(context, ['evaluateAppeal', 'reviewAppeal', 'arbitrateAppeal'], {
+      ...failurePayload(taskName, task, result, context, failure, mode),
+      appealText: appeal.appealText,
+      backchannelContent: appeal.content || null
+    }))
+    if (verdict?.accepted) return suspendTaskForAppeal(taskName, task, result, context, failure, verdict, mode)
+    if (verdict?.rejected) {
+      failure = {
+        ...failure,
+        appeal: {
+          status: 'rejected',
+          reason: verdict.reason || 'appeal rejected',
+          verdict: verdict.verdict || null
+        }
+      }
+      failureReason += `\n\nAppeal denied: ${failure.appeal.reason}`
+    } else {
+      failure = {
+        ...failure,
+        appeal: {
+          status: 'pending',
+          reason: 'appeal evaluator unavailable or inconclusive'
+        }
+      }
+    }
+  }
+
+  writeFailureLifecycleState(context, taskName, failure)
+  return { status: 'fail', reason: failureReason, taskFailure: failure }
+}
+
+function settleTaskLifecycleResult (taskName, task, result, context, mode) {
+  const actualResult = result || { pass: false, reason: 'task produced no result' }
+  const status = asyncResultStatus(actualResult)
+  if (status === 'pass') {
+    clearFailureLifecycleState(context, taskName)
+    return {
+      status,
+      result: actualResult,
+      reason: taskResultReason(actualResult, mode ? `${mode} task passed` : 'task passed')
+    }
+  }
+  if (status === 'skip') {
+    if (isReviewerTask(task)) clearFailureLifecycleState(context, taskName)
+    return {
+      status,
+      result: actualResult,
+      reason: taskResultReason(actualResult, mode ? `${mode} task skipped` : 'task skipped')
+    }
+  }
+  return recordTaskFailure(taskName, task, actualResult, context, mode)
 }
 
 function taskResultReason (result, fallback) {
@@ -339,35 +601,36 @@ function harvestAsyncTasks (context, dependencies, options = {}) {
     const result = harvested.result || { pass: true, skipped: true, reason: 'async task produced no result' }
     const status = asyncResultStatus(result)
 
-    if (status === 'fail') {
-      if (context.event?.stage !== 'agent_end' && options.deferFailures !== false) {
-        const index = lifecycle.async.pending.findIndex(item => item.id === entry.id)
-        if (index >= 0) {
-          lifecycle.async.pending[index] = { ...entry, status: 'failed', result, task }
-          changed = true
-        }
-        continue
+    if (status === 'fail' && context.event?.stage !== 'agent_end' && options.deferFailures !== false) {
+      const index = lifecycle.async.pending.findIndex(item => item.id === entry.id)
+      if (index >= 0) {
+        lifecycle.async.pending[index] = { ...entry, status: 'failed', result, task }
+        changed = true
       }
+      continue
+    }
 
+    const settled = settleTaskLifecycleResult(taskName, task, result, context, 'async')
+    if (settled.status === 'fail') {
       lifecycle.async.pending = pendingWithoutId(lifecycle.async.pending, entry.id)
       changed = true
       consumeHarvestedBackgroundTask(harvested, task, context)
-      blockingFailure = dependencies.blockEffect(taskFailureReason(taskName, task, result, 'async'))
+      blockingFailure = dependencies.blockEffect(settled.reason, { taskFailure: settled.taskFailure })
       break
     }
 
     lifecycle.async.pending = pendingWithoutId(lifecycle.async.pending, entry.id)
     asyncResults.push({
       taskName,
-      status,
-      reason: taskResultReason(result, status === 'skip' ? 'async task skipped' : 'async task passed'),
+      status: settled.status,
+      reason: settled.reason,
       output: result.output || null
     })
     changed = true
     consumeHarvestedBackgroundTask(harvested, task, context)
   }
 
-  if (changed) writeTaskLifecycleState(context, lifecycle)
+  if (changed) writeTaskLifecycleState(context, preserveLatestFailureState(context, lifecycle))
   return { asyncResults, lifecycleWarnings, blockingFailure, harvested: true }
 }
 
@@ -453,17 +716,17 @@ function settleParallelResults (handles, context, dependencies) {
     const taskName = item.taskName || item.task?.name
     const task = item.task || taskRegistry(context.config)[taskName] || { type: 'script' }
     const result = item.result || { pass: true, skipped: true, reason: 'parallel task produced no result' }
-    const status = asyncResultStatus(result)
+    const settled = settleTaskLifecycleResult(taskName, task, result, context, 'parallel')
     parallelResults.push({
       taskName,
-      status,
-      reason: taskResultReason(result, status === 'skip' ? 'parallel task skipped' : 'parallel task passed'),
+      status: settled.status,
+      reason: settled.reason,
       output: result.output || null
     })
-    if (status === 'fail') {
+    if (settled.status === 'fail') {
       return {
         parallelResults,
-        blockingFailure: dependencies.blockEffect(taskFailureReason(taskName, task, result, 'parallel'))
+        blockingFailure: dependencies.blockEffect(settled.reason, { taskFailure: settled.taskFailure })
       }
     }
   }
@@ -486,8 +749,10 @@ function taskRunnerContext (taskName, task, context) {
     statePort: context.ports?.state || null,
     taskPort: context.ports?.task || null,
     reviewerPort: context.ports?.reviewer || null,
+    backchannelPort: context.ports?.backchannel || null,
     effectPort: context.ports?.effect || null,
     observationPort: context.ports?.observations || null,
+    taskFailure: taskFailureState(context, taskName),
     ports: context.ports || {}
   }
 }
@@ -546,13 +811,6 @@ function reviewerTaskFailureReason (taskName, task, result, fallback) {
   return `prove_it: reviewer task "${taskName}" failed. ${detail}${body}`
 }
 
-function scriptTaskBlockEffect (taskName, task, result, dependencies) {
-  if (result?.effect === 'block' || result?.effect === 'fail') {
-    return dependencies.blockEffect(scriptTaskFailureReason(taskName, task, result, 'Task runner returned a blocking result.'))
-  }
-  return dependencies.blockEffect(scriptTaskFailureReason(taskName, task, result, 'Task runner reported failure without a reason.'))
-}
-
 function taskToolMatcherMatches (task, event) {
   if (!task?.matcher) return true
   const toolName = event?.toolName || ''
@@ -592,17 +850,10 @@ function runScriptTask (taskName, task, context, dependencies) {
     }, 'Task runner threw an error.'))
   }
 
-  if (result?.effect === 'allow' || result?.effect === 'approve' || result?.pass === true || result?.ok === true) {
-    return dependencies.allowEffect()
-  }
-
-  if (result?.effect === 'block' || result?.effect === 'fail' || result?.pass === false || result?.ok === false) {
-    return scriptTaskBlockEffect(taskName, task, result, dependencies)
-  }
-
-  return dependencies.blockEffect(
-    scriptTaskFailureReason(taskName, task, result, 'Task runner returned no pass/fail result.')
-  )
+  const normalized = result || { pass: false, reason: 'Task runner returned no pass/fail result.' }
+  const settled = settleTaskLifecycleResult(taskName, task, normalized, context, null)
+  if (settled.status === 'pass' || settled.status === 'skip') return dependencies.allowEffect()
+  return dependencies.blockEffect(settled.reason, { taskFailure: settled.taskFailure })
 }
 
 function reviewerTaskProviderAllowed (task, context) {
@@ -630,22 +881,14 @@ function runReviewerTask (taskName, task, context, dependencies) {
     }, 'Reviewer runner threw an error.'))
   }
 
-  if (result?.skipped || result?.skip) return dependencies.allowEffect()
-  if (result?.effect === 'allow' || result?.effect === 'approve' || result?.pass === true || result?.ok === true) {
-    return dependencies.allowEffect()
+  const normalized = result || { pass: false, reason: 'Reviewer runner returned no pass/fail verdict.' }
+  if (task.failure_behavior === 'warn' && asyncResultStatus(normalized) === 'fail') {
+    return dependencies.allowEffect({ reason: reviewerTaskFailureReason(taskName, task, normalized, 'Reviewer reported a warning.') })
   }
 
-  if (task.failure_behavior === 'warn') {
-    return dependencies.allowEffect({ reason: reviewerTaskFailureReason(taskName, task, result, 'Reviewer reported a warning.') })
-  }
-
-  if (result?.effect === 'block' || result?.effect === 'fail' || result?.pass === false || result?.ok === false) {
-    return dependencies.blockEffect(reviewerTaskFailureReason(taskName, task, result, 'Reviewer reported failure without a reason.'))
-  }
-
-  return dependencies.blockEffect(
-    reviewerTaskFailureReason(taskName, task, result, 'Reviewer runner returned no pass/fail verdict.')
-  )
+  const settled = settleTaskLifecycleResult(taskName, task, normalized, context, null)
+  if (settled.status === 'pass' || settled.status === 'skip') return dependencies.allowEffect()
+  return dependencies.blockEffect(settled.reason, { taskFailure: settled.taskFailure })
 }
 
 function runTaskForResult (taskName, task, context) {
@@ -679,7 +922,8 @@ function completionFailureEffect (effect, context, dependencies) {
   const fields = {
     capability: 'completion_verification',
     enforcement: behavior?.strength || behavior?.mode || null,
-    signalLifecycle
+    signalLifecycle,
+    ...(effect?.taskFailure ? { taskFailure: effect.taskFailure } : {})
   }
 
   if (isHardBlock(behavior)) return dependencies.failEffect(reason, fields)
@@ -704,6 +948,7 @@ function runAgentEndWorkflow (config, event, options = {}) {
   const ports = options.ports || {
     task: options.taskPort || options.taskRunnerPort || null,
     reviewer: options.reviewerPort || options.reviewerRunnerPort || null,
+    backchannel: options.backchannelPort || options.backchannelProviderPort || null,
     effect: options.effectPort || options.effectsPort || null,
     state: options.statePort || null,
     observations: options.observationPort || options.observationsPort || null
@@ -732,6 +977,10 @@ function runAgentEndWorkflow (config, event, options = {}) {
   for (const taskName of agentEndPipeline(config)) {
     const task = tasks[taskName]
     if (!task) continue
+    if (taskIsSuspended(context, taskName)) {
+      recordSkippedTask(context, taskName, task, { reason: 'suspended by appeal', semantics: 'task_lifecycle.suspended' })
+      continue
+    }
     if (!agentEndTaskCanRunForSignal(task, signal)) continue
     const whenResult = evaluateWhen(task.when, context, taskName)
     if (!whenResult.passed) {
@@ -792,6 +1041,7 @@ function runTaskStageWorkflow (config, event, pipeline, options = {}) {
     ports: options.ports || {
       task: options.taskPort || options.taskRunnerPort || null,
       reviewer: options.reviewerPort || options.reviewerRunnerPort || null,
+      backchannel: options.backchannelPort || options.backchannelProviderPort || null,
       effect: options.effectPort || options.effectsPort || null,
       state: options.statePort || null,
       observations: options.observationPort || options.observationsPort || null
@@ -807,6 +1057,10 @@ function runTaskStageWorkflow (config, event, pipeline, options = {}) {
   for (const taskName of pipeline) {
     const task = tasks[taskName]
     if (!task || !taskMatchesEvent(task, event)) continue
+    if (taskIsSuspended(context, taskName)) {
+      recordSkippedTask(context, taskName, task, { reason: 'suspended by appeal', semantics: 'task_lifecycle.suspended' })
+      continue
+    }
     const whenResult = evaluateWhen(task.when, context, taskName)
     if (!whenResult.passed) {
       recordSkippedTask(context, taskName, task, whenResult)
@@ -892,6 +1146,8 @@ function runWorkflowEngine ({
   taskRunnerPort = null,
   reviewerPort = null,
   reviewerRunnerPort = null,
+  backchannelPort = null,
+  backchannelProviderPort = null,
   observationPort = null,
   observationsPort = null,
   dependencies = {}
@@ -901,6 +1157,7 @@ function runWorkflowEngine ({
     state: statePort,
     task: taskPort || taskRunnerPort,
     reviewer: reviewerPort || reviewerRunnerPort,
+    backchannel: backchannelPort || backchannelProviderPort,
     effect: effectPort || effectsPort,
     observations: observationPort || observationsPort
   }
