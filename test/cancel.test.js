@@ -7,7 +7,8 @@ const { spawnSync } = require('child_process')
 
 const {
   writeDispatcherPid,
-  readCancelSentinel
+  readCancelSentinel,
+  getSessionControl
 } = require('../lib/session')
 
 describe('prove_it cancel command', () => {
@@ -53,11 +54,16 @@ describe('prove_it cancel command', () => {
       `Should mention env var in error, got: ${r.stderr}`)
   })
 
-  it('errors when no dispatcher PID file exists', () => {
-    const r = runCancel({ PROVE_IT_SESSION_ID: 'no-such-session' })
-    assert.notStrictEqual(r.status, 0, 'Should exit non-zero')
+  it('reports no active dispatcher without leaving a future cancel request', () => {
+    const sessionId = 'no-such-session'
+    const r = runCancel({ PROVE_IT_SESSION_ID: sessionId })
+    assert.strictEqual(r.status, 0, `Should exit zero for idempotent no-active-work cancel, stderr: ${r.stderr}`)
     assert.ok(r.stderr.includes('no running'),
       `Should say no running tasks, got: ${r.stderr}`)
+    assert.strictEqual(readCancelSentinel(sessionId), false,
+      'Cancel sentinel should not be left behind when no work is active')
+    assert.strictEqual(getSessionControl(sessionId).cancel, null,
+      'Clean session control state should not leave a future cancel request')
   })
 
   it('writes cancel sentinel for the session', () => {
@@ -69,6 +75,8 @@ describe('prove_it cancel command', () => {
     assert.strictEqual(r.status, 0, `Should exit 0, stderr: ${r.stderr}`)
     assert.strictEqual(readCancelSentinel(sessionId), true,
       'Cancel sentinel should exist after cancel')
+    assert.strictEqual(getSessionControl(sessionId).cancel?.requested, true,
+      'Clean session control state should record the cancel request')
   })
 
   it('prints confirmation message', () => {

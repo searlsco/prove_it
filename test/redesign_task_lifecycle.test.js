@@ -5,6 +5,7 @@ const { behaviorForCapability } = require('../lib/adapter_capabilities')
 const { runWorkflowEngine } = require('../lib/redesign/engine')
 const { normalizeLifecycleEvent } = require('../lib/redesign/events')
 const { createMemoryStatePort } = require('../lib/redesign/state_port')
+const { requestSessionCancel } = require('../lib/redesign/session_control')
 
 function config ({ tasks, postTool = [], agentEnd = [], preTool = [] }) {
   return {
@@ -259,6 +260,96 @@ describe('clean-runtime task lifecycle', () => {
     assert.match(effect.reason, /check_a failed/)
     assert.doesNotMatch(effect.reason, /check_b failed/)
     assert.strictEqual(effect.signalLifecycle.action, 'preserve')
+  })
+
+  it('observes clean cancel requests, cancels pending async work, clears the request, and allows the hook', () => {
+    const effectiveConfig = config({ tasks: {} })
+    const statePort = createMemoryStatePort()
+    statePort.writeSessionState('session-123', 'task_lifecycle', {
+      async: {
+        pending: [
+          { id: 'script-bg', taskName: 'background_script', stage: 'post_tool', status: 'pending' },
+          { id: 'review-bg', taskName: 'background_review', taskType: 'reviewer', stage: 'post_tool', status: 'pending' }
+        ]
+      }
+    })
+    requestSessionCancel(statePort, 'session-123')
+    const calls = []
+    const taskPort = {
+      cancelBackgroundTasks (handles) { calls.push(['task-cancel', handles.map(handle => handle.id).join(',')]) },
+      cleanupBackgroundTasks (handles) { calls.push(['task-cleanup', handles.map(handle => handle.id).join(',')]) }
+    }
+    const reviewerPort = {
+      cancelBackgroundTasks (handles) { calls.push(['review-cancel', handles.map(handle => handle.id).join(',')]) },
+      cleanupBackgroundTasks (handles) { calls.push(['review-cleanup', handles.map(handle => handle.id).join(',')]) }
+    }
+
+    const effect = runWorkflowEngine({
+      event: event('PostToolUse'),
+      effectiveConfig,
+      statePort,
+      taskPort,
+      reviewerPort
+    })
+
+    assert.strictEqual(effect.effect, 'allow')
+    assert.match(effect.reason, /Cancelled by user/)
+    assert.deepStrictEqual(calls, [
+      ['task-cancel', 'script-bg'],
+      ['task-cleanup', 'script-bg'],
+      ['review-cancel', 'review-bg'],
+      ['review-cleanup', 'review-bg']
+    ])
+    assert.deepStrictEqual(statePort.readSessionState('session-123', 'task_lifecycle').async.pending, [])
+    assert.strictEqual(statePort.readSessionState('session-123', 'session_control').cancel, null)
+  })
+
+  it('cancels active parallel work through provider hooks when a clean cancel request is observed', () => {
+    const effectiveConfig = config({
+      tasks: {
+        slow_parallel: { type: 'script', command: './script/slow', parallel: true },
+        serial_gate: { type: 'script', command: './script/gate' }
+      },
+      agentEnd: ['slow_parallel', 'serial_gate']
+    })
+    const statePort = createMemoryStatePort()
+    statePort.writeSignal('session-123', { type: 'done', message: 'ready', at: 123 })
+    const calls = []
+    const taskPort = {
+      startParallelTask ({ taskName }) {
+        calls.push(['start', taskName])
+        return { id: 'parallel-1', taskName }
+      },
+      run ({ taskName }) {
+        calls.push(['run', taskName])
+        requestSessionCancel(statePort, 'session-123')
+        return { pass: true, reason: 'serial gate passed' }
+      },
+      cancelTasks (handles) { calls.push(['cancel', handles.map(handle => handle.id).join(',')]) },
+      cleanupTasks (handles) { calls.push(['cleanup', handles.map(handle => handle.id).join(',')]) },
+      settleParallelBatch () {
+        calls.push(['settle'])
+        return []
+      }
+    }
+
+    const effect = runWorkflowEngine({
+      event: event('Stop'),
+      effectiveConfig,
+      adapterCapabilities: claudeCompletionCapabilities(),
+      statePort,
+      taskPort
+    })
+
+    assert.strictEqual(effect.effect, 'approve')
+    assert.match(effect.reason, /Cancelled by user/)
+    assert.deepStrictEqual(calls, [
+      ['start', 'slow_parallel'],
+      ['run', 'serial_gate'],
+      ['cancel', 'parallel-1'],
+      ['cleanup', 'parallel-1']
+    ])
+    assert.strictEqual(statePort.readSessionState('session-123', 'session_control').cancel, null)
   })
 
   it('cancels active parallel work and runs lifecycle cleanup when a later serial task fails', () => {

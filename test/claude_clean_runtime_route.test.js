@@ -3,9 +3,11 @@ const assert = require('node:assert')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const { spawnSync } = require('child_process')
 
 const { invokeHook, isolatedEnv, initGitRepo } = require('./integration/hook-harness')
 const { PROFILE_VERSION } = require('../lib/redesign/config')
+const { disableSessionControl, enableSessionControl } = require('../lib/session')
 
 function tmpRepo () {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_claude_clean_route_'))
@@ -69,7 +71,135 @@ function invokeClaudeSessionStart (repo, input = {}, extraEnv = {}) {
   })
 }
 
+function invokeClaudeStop (repo, input = {}, extraEnv = {}) {
+  return invokeHook('claude:Stop', {
+    hook_event_name: 'Stop',
+    session_id: input.session_id || 'session-1',
+    cwd: repo,
+    ...input
+  }, {
+    cwd: repo,
+    projectDir: repo,
+    env: { ...isolatedEnv(path.join(repo, '.home')), ...extraEnv }
+  })
+}
+
+function runCancelCommand (sessionId, env) {
+  return spawnSync(process.execPath, [path.join(__dirname, '..', 'cli.js'), 'cancel'], {
+    encoding: 'utf8',
+    env: { ...process.env, ...env, PROVE_IT_SESSION_ID: sessionId },
+    timeout: 5000
+  })
+}
+
+function withProveItDir (proveItDir, fn) {
+  const previous = process.env.PROVE_IT_DIR
+  process.env.PROVE_IT_DIR = proveItDir
+  try { return fn() } finally {
+    if (previous === undefined) delete process.env.PROVE_IT_DIR
+    else process.env.PROVE_IT_DIR = previous
+  }
+}
+
+function markCleanSessionDisabled (sessionId, env) {
+  withProveItDir(env.PROVE_IT_DIR, () => disableSessionControl(sessionId))
+}
+
+function markCleanSessionEnabled (sessionId, env) {
+  withProveItDir(env.PROVE_IT_DIR, () => enableSessionControl(sessionId))
+}
+
 describe('Claude clean-runtime hook route', () => {
+  it('disabled clean SessionStart emits a re-enable reminder and still exports the session id', () => {
+    const repo = tmpRepo()
+    writeStrictConfig(repo, true)
+    const sessionId = 'clean-disabled-sessionstart'
+    const env = isolatedEnv(path.join(repo, '.home'))
+    const envFile = path.join(repo, '.claude-env')
+    markCleanSessionDisabled(sessionId, env)
+
+    const result = invokeClaudeSessionStart(repo, { session_id: sessionId, source: 'resume' }, {
+      ...env,
+      CLAUDE_ENV_FILE: envFile
+    })
+
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.stderr, '')
+    assert.ok(result.output, 'disabled SessionStart should emit Claude JSON')
+    assert.match(result.output.systemMessage, /disabled/i)
+    assert.match(result.output.systemMessage, /prove_it enable/)
+    assert.strictEqual(result.output.hookSpecificOutput, undefined)
+    assert.strictEqual(fs.readFileSync(envFile, 'utf8'), `export PROVE_IT_SESSION_ID="${sessionId}"\n`)
+    assert.doesNotMatch(result.stdout, /prove_it methodology:/)
+  })
+
+  it('disabled clean PreToolUse silently no-ops without running clean workflows', () => {
+    const repo = tmpRepo()
+    writeStrictConfig(repo, true)
+    const env = isolatedEnv(path.join(repo, '.home'))
+    markCleanSessionDisabled('session-1', env)
+
+    const result = invokeClaudePreTool(repo, { file_path: '.prove_it/config.json', content: '{}' }, env)
+
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.stdout, '')
+    assert.strictEqual(result.stderr, '')
+    assert.strictEqual(result.output, null)
+  })
+
+  it('cancel with no active clean work does not bypass the next PreToolUse enforcement', () => {
+    const repo = tmpRepo()
+    writeStrictConfig(repo, true)
+    const env = isolatedEnv(path.join(repo, '.home'))
+
+    const cancel = runCancelCommand('session-1', env)
+    const result = invokeClaudePreTool(repo, { file_path: '.prove_it/config.json', content: '{}' }, env)
+
+    assert.strictEqual(cancel.status, 0, `cancel should be idempotent when no work is active, stderr: ${cancel.stderr}`)
+    assert.match(cancel.stderr, /no running dispatcher/)
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
+    assert.match(result.output.hookSpecificOutput.permissionDecisionReason, /protected prove_it config path/)
+  })
+
+  it('clean hooks resume normal workflow enforcement after enable clears disabled state', () => {
+    const repo = tmpRepo()
+    writeStrictConfig(repo, true)
+    const env = isolatedEnv(path.join(repo, '.home'))
+    markCleanSessionDisabled('session-1', env)
+    markCleanSessionEnabled('session-1', env)
+
+    const result = invokeClaudePreTool(repo, { file_path: '.prove_it/config.json', content: '{}' }, env)
+
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.output.hookSpecificOutput.permissionDecision, 'deny')
+    assert.match(result.output.hookSpecificOutput.permissionDecisionReason, /protected prove_it config path/)
+  })
+
+  it('disabled clean Stop silently no-ops without running completion workflows', () => {
+    const repo = tmpRepo()
+    const marker = path.join(repo, 'completion-ran')
+    writeStrictConfig(repo, true, {
+      tasks: {
+        completion_check: {
+          type: 'script',
+          command: `node -e "require('fs').writeFileSync(${JSON.stringify(marker)}, 'ran')" && exit 1`
+        }
+      },
+      agent_workflows: { agent_end: ['completion_check'] }
+    })
+    const env = isolatedEnv(path.join(repo, '.home'))
+    markCleanSessionDisabled('session-1', env)
+
+    const result = invokeClaudeStop(repo, { session_id: 'session-1' }, env)
+
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.stdout, '')
+    assert.strictEqual(result.stderr, '')
+    assert.strictEqual(result.output, null)
+    assert.strictEqual(fs.existsSync(marker), false)
+  })
+
   it('renders SessionStart methodology, exports the session id, records a baseline, and skips legacy workflow config', () => {
     const repo = tmpRepo()
     initGitRepo(repo)
