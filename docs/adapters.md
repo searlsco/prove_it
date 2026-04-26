@@ -27,8 +27,9 @@ Adapter-native files activate their Harnesses:
 
 - Claude: `.claude/settings.json` registers hooks that call `prove_it hook claude:*`.
 - Pi: `.pi/settings.json` or `pi install -l npm:@davemo/pi-prove-it` activates the Pi package.
+- Git: Git 2.54+ local config entries such as `hook.prove-it-pre-commit.command = prove_it hook git:pre-commit` activate strict `git_workflows` when they are present.
 
-`.claude/settings.json` and `.pi/settings.json` are Adapter Artifacts, not workflow config.
+`.claude/settings.json`, `.pi/settings.json`, and Git hook config entries are activation artifacts, not workflow config. Git workflow policy remains in `.prove_it/config.json` under `git_workflows`.
 
 Inspect the effective Project Config with:
 
@@ -48,8 +49,8 @@ prove_it doctor
 
 The Claude Parity Cutover is a hard break from Claude Legacy Config:
 
-- `.claude/prove_it/config.json` is ignored by normal Claude hook dispatch.
-- `.claude/prove_it/config.local.json` is ignored by normal Claude hook dispatch.
+- `.claude/prove_it/config.json` is ignored by normal Claude and Git hook dispatch.
+- `.claude/prove_it/config.local.json` is ignored by normal Claude and Git hook dispatch.
 - `prove_it doctor` reports stale legacy Claude configs as ignored.
 - There is no `.claude/prove_it` → `.prove_it` migration command.
 - There is no supported dual-runtime compatibility mode.
@@ -67,6 +68,8 @@ Claude parity currently covers the product behaviors Justin should be able to va
 - **Phase / plan-file behavior** — `prove_it phase ...` updates phase state, and Claude plan-file mechanics inject Done/phase instructions when plan tooling exposes the required data.
 - **TaskCompleted auto-signaling** — Claude `TaskCompleted` can set a Done Signal automatically when the task subject matches the Done-signal guidance and Done-gated Tasks exist.
 - **Disable/enable/cancel controls** — session-scoped `prove_it disable`, `prove_it enable`, and `prove_it cancel` work through clean Session State and Claude effect rendering.
+
+Git-specific activation is intentionally Git 2.54+ only: strict init configures prove_it-owned `hook.prove-it-pre-commit` / `hook.prove-it-pre-push` config entries for active Git workflows, doctor reports missing or unsupported config hook activation, and strict deinit removes only those prove_it-owned Git config entries. There is no strict `.git/hooks/*` shim fallback.
 
 Claude-specific mechanics remain adapter-owned: Claude hook names, hook JSON schemas, `.claude/settings.json`, `CLAUDE_ENV_FILE`, Claude Stop hard blocks, Claude file history, and Claude backchannel paths.
 

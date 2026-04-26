@@ -126,9 +126,9 @@ prove_it init --adapter pi --adapter claude
 
 | Flag | Default | Effect |
 |------|---------|--------|
-| `--[no-]git-hooks` | on | Install git pre-commit/pre-push hooks |
+| `--[no-]git-hooks` | on | Configure prove_it-owned Git 2.54 config hooks for active Git workflows |
 | `--[no-]default-checks` | on | Include AI coverage review, pre-ship review |
-| `--[no-]automatic-git-hook-merge` | off | Merge with existing git hooks (fails if hooks exist) |
+| `--[no-]automatic-git-hook-merge` | off | Legacy `.git/hooks/*` mode only; strict adapter init does not write or merge hook shim files |
 | `--[no-]overwrite` |—| Overwrite customized config with current defaults |
 
 ## Test scripts
@@ -233,7 +233,7 @@ Strict config layers merge in this order:
 3. project `.prove_it/config.json` (commit this);
 4. developer-local `.prove_it/config.local.json` (gitignored).
 
-After the Claude hard break, `.claude/prove_it/config.json` and `.claude/prove_it/config.local.json` are retired Claude Legacy Config. Normal Claude hook dispatch ignores them as workflow config, and `prove_it doctor` reports them as stale if they are present. Legacy Claude characterization paths remain quarantined behind a test-only oracle guard and are not user-facing runtime behavior.
+After the Claude hard break, `.claude/prove_it/config.json` and `.claude/prove_it/config.local.json` are retired Claude Legacy Config. They are ignored by normal Claude hook dispatch and by normal Git hook dispatch as workflow config, and `prove_it doctor` reports them as stale if they are present. Legacy Claude characterization paths remain quarantined behind a test-only oracle guard and are not user-facing runtime behavior.
 
 ### Source and test globs
 
@@ -257,8 +257,21 @@ After the Claude hard break, `.claude/prove_it/config.json` and `.claude/prove_i
 
 | Event | Purpose | Behavior |
 |-------|---------|----------|
-| `pre-commit` | Validating before commit | **Blocking, fail-fast.** Runs only under Claude Code (`CLAUDECODE` env var)—human commits pass through instantly. |
-| `pre-push` | Validating before push | **Blocking, fail-fast.** Same as pre-commit but triggers on push. |
+| `pre-commit` | Validating before commit | **Blocking, fail-fast.** Runs `git_workflows.pre_commit` from strict `.prove_it/config.json` through the Clean Runtime. Runs only under Claude Code (`CLAUDECODE` env var)—human commits pass through instantly. |
+| `pre-push` | Validating before push | **Blocking, fail-fast.** Runs `git_workflows.pre_push` from strict `.prove_it/config.json` through the Clean Runtime. Same Claude Code guard as pre-commit. |
+
+### Git hook activation
+
+Strict adapter init uses Git 2.54+ config-based hooks instead of writing `.git/hooks/pre-commit` or `.git/hooks/pre-push` shim files. For an active strict Git workflow, `prove_it init --adapter claude` writes local repository config like:
+
+```ini
+[hook "prove-it-pre-commit"]
+  command = prove_it hook git:pre-commit
+  event = pre-commit
+  enabled = true
+```
+
+The workflow policy remains in `.prove_it/config.json` under `git_workflows`; the Git config entry only activates the dispatcher. `prove_it deinit` removes only the prove_it-owned `hook.prove-it-*` Git config entries and leaves unrelated hook config alone. `prove_it doctor` reports whether configured strict Git workflows have active Git config hooks and warns when Git 2.54 config hooks are unavailable. This slice intentionally has no legacy `.git/hooks/*` fallback for strict Git workflows.
 
 ### Task types
 

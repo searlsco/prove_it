@@ -396,6 +396,31 @@ describe('doctor', () => {
     assert.match(result.stdout, /Strict \.prove_it adapters enabled: pi, claude/)
   })
 
+  it('reports Git 2.54 config hook activation for strict Git workflows', () => {
+    writeSettings(tmpHome, correctSettings())
+    const { initStrictProject } = require('../../lib/redesign/init')
+    initStrictProject(tmpRepo, { adapters: ['claude'] })
+
+    let result = run()
+    assert.match(result.stdout, /\[x\] Git config hook active: pre-commit \(hook\.prove-it-pre-commit\)/)
+
+    spawnSync('git', ['config', '--local', '--unset-all', 'hook.prove-it-pre-commit.command'], { cwd: tmpRepo })
+    result = run()
+    assert.match(result.stdout, /\[ \] Git config hook missing: pre-commit \(hook\.prove-it-pre-commit\)/)
+    assert.match(result.stdout, /Git config hook missing for pre-commit/)
+  })
+
+  it('reports unsupported Git versions for strict Git config hooks', () => {
+    writeSettings(tmpHome, correctSettings())
+    const { initStrictProject } = require('../../lib/redesign/init')
+    initStrictProject(tmpRepo, { adapters: ['claude'] })
+
+    const result = run({ PROVE_IT_TEST_GIT_VERSION: '2.53.0' })
+
+    assert.match(result.stdout, /\[!\] Git config hooks unavailable: Git 2\.53\.0 detected; Git 2\.54\+ is required/)
+    assert.match(result.stdout, /Unsupported Git version for config hooks/)
+  })
+
   it('reports legacy Claude config as stale state rather than a fallback runtime source', () => {
     writeSettings(tmpHome, correctSettings())
     writeTeamConfig(tmpRepo, {

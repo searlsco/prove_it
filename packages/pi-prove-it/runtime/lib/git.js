@@ -375,12 +375,13 @@ function whenHasKey (when, key) {
  *   - Explicit resetOnFail on the task overrides the event-based default
  */
 function advanceTaskRef (task, passed, hookEvent, rootDir, sources) {
+  const hasSourceModified = whenHasKey(task.when, 'sourcesModifiedSinceLastRun')
   const hasNetChurn = whenHasKey(task.when, 'linesChanged')
   const hasGrossChurn = whenHasKey(task.when, 'linesWritten')
   const isAgent = task.type === 'agent'
 
   // Gate: only act for agent tasks or churn-tracked tasks
-  if (!isAgent && !hasNetChurn && !hasGrossChurn) return
+  if (!isAgent && !hasSourceModified && !hasNetChurn && !hasGrossChurn) return
 
   const shouldAdvance = passed || (
     task.resetOnFail !== undefined
@@ -390,7 +391,7 @@ function advanceTaskRef (task, passed, hookEvent, rootDir, sources) {
   if (!shouldAdvance) return
 
   // Snapshot working tree for agent tasks or net-churn tasks
-  if (isAgent || hasNetChurn) {
+  if (isAgent || hasSourceModified || hasNetChurn) {
     const snap = snapshotWorkingTree(rootDir, sources)
     if (snap) updateRef(rootDir, sanitizeRefName(task.name), snap)
   }

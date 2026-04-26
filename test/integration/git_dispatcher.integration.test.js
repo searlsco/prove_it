@@ -347,4 +347,91 @@ describe('git dispatcher', () => {
       }
     })
   })
+
+  describe('strict Clean Runtime dispatch', () => {
+    function writeJson (filePath, value) {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true })
+      fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + '\n')
+    }
+
+    function writeStrictConfig (repo, event, task) {
+      const { PROFILE_VERSION } = require('../../lib/redesign/config')
+      const workflowKey = event === 'pre-commit' ? 'pre_commit' : 'pre_push'
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { strict_task: task },
+        git_workflows: { [workflowKey]: ['strict_task'] },
+        adapters: { claude: { enabled: true } }
+      })
+    }
+
+    function writeLegacyFailingConfig (repo) {
+      writeJson(path.join(repo, '.claude', 'prove_it', 'config.json'), {
+        enabled: true,
+        hooks: {
+          git: {
+            'pre-commit': [{ name: 'legacy-pre-commit', type: 'script', command: 'node -e "process.exit(9)"' }],
+            'pre-push': [{ name: 'legacy-pre-push', type: 'script', command: 'node -e "process.exit(9)"' }]
+          }
+        }
+      })
+    }
+
+    function invokeGitHook (repo, event, env = {}) {
+      const cli = path.join(__dirname, '..', '..', 'cli.js')
+      const home = fs.mkdtempSync(path.join(repo, 'home_'))
+      return spawnSync('node', [cli, 'hook', `git:${event}`], {
+        cwd: repo,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          HOME: home,
+          CLAUDECODE: '1',
+          ...env
+        }
+      })
+    }
+
+    for (const event of ['pre-commit', 'pre-push']) {
+      it(`runs passing ${event} script tasks from strict .prove_it config and ignores stale legacy config`, () => {
+        const repo = freshRepo()
+        try {
+          writeStrictConfig(repo, event, {
+            type: 'script',
+            command: 'node -e "require(\'fs\').appendFileSync(\'ran.txt\', \'strict\\n\')"'
+          })
+          writeLegacyFailingConfig(repo)
+
+          const result = invokeGitHook(repo, event)
+
+          assert.strictEqual(result.status, 0, result.stderr)
+          assert.match(result.stderr, /prove_it: all checks passed/)
+          assert.strictEqual(fs.readFileSync(path.join(repo, 'ran.txt'), 'utf8'), 'strict\n')
+        } finally {
+          fs.rmSync(repo, { recursive: true, force: true })
+        }
+      })
+
+      it(`blocks failing ${event} script tasks from strict .prove_it config`, () => {
+        const repo = freshRepo()
+        try {
+          writeStrictConfig(repo, event, {
+            type: 'script',
+            command: 'node -e "console.error(\'strict failed\'); process.exit(7)"'
+          })
+          writeLegacyFailingConfig(repo)
+
+          const result = invokeGitHook(repo, event)
+
+          assert.strictEqual(result.status, 1)
+          assert.match(result.stderr, /prove_it:/)
+          assert.match(result.stderr, /strict_task/)
+          assert.match(result.stderr, /strict failed/)
+        } finally {
+          fs.rmSync(repo, { recursive: true, force: true })
+        }
+      })
+    }
+  })
 })

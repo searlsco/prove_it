@@ -3,6 +3,7 @@ const assert = require('node:assert')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { spawnSync } = require('node:child_process')
 
 const { behaviorForCapability } = require('../lib/adapter_capabilities')
 
@@ -15,6 +16,17 @@ function readJson (filePath) {
 }
 
 describe('redesign adapter-aware init/deinit', () => {
+  function initGitRepo (repo) {
+    spawnSync('git', ['init'], { cwd: repo, encoding: 'utf8' })
+    spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: repo, encoding: 'utf8' })
+    spawnSync('git', ['config', 'user.name', 'Test'], { cwd: repo, encoding: 'utf8' })
+  }
+
+  function gitConfigValues (repo, key) {
+    const result = spawnSync('git', ['config', '--local', '--get-all', key], { cwd: repo, encoding: 'utf8' })
+    return result.status === 0 ? result.stdout.trim().split('\n').filter(Boolean) : []
+  }
+
   it('creates strict .prove_it config with explicit adapters and owned Claude-native settings', () => {
     const { PROFILE_VERSION, validateConfig } = require('../lib/redesign/config')
     const { initStrictProject } = require('../lib/redesign/init')
@@ -201,6 +213,74 @@ describe('redesign adapter-aware init/deinit', () => {
       assert.deepStrictEqual(startedScripts, ['full_tests'])
       assert.deepStrictEqual(startedReviewers, ['done_review'])
       assert.strictEqual(doneEffect.signalLifecycle.action, 'clear')
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('configures Git 2.54 config hooks for owned Git workflow activation', () => {
+    const { initStrictProject } = require('../lib/redesign/init')
+    const repo = tmpRepo()
+
+    try {
+      initGitRepo(repo)
+      const result = initStrictProject(repo, { adapters: ['claude'] })
+      const manifest = readJson(path.join(repo, '.prove_it', 'ownership.json'))
+
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.prove-it-pre-commit.command'), ['prove_it hook git:pre-commit'])
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.prove-it-pre-commit.event'), ['pre-commit'])
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.prove-it-pre-commit.enabled'), ['true'])
+      assert.ok(!fs.existsSync(path.join(repo, '.git', 'hooks', 'pre-commit')), 'strict init must not write legacy hook shim files')
+      assert.ok(manifest.git_hooks.some(hook => hook.name === 'prove-it-pre-commit' && hook.event === 'pre-commit'))
+      assert.ok(result.gitConfigHooks.preCommit.configured)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('configures pre-push Git config hooks when an existing strict workflow declares one', () => {
+    const { PROFILE_VERSION } = require('../lib/redesign/config')
+    const { initStrictProject } = require('../lib/redesign/init')
+    const repo = tmpRepo()
+
+    try {
+      initGitRepo(repo)
+      fs.mkdirSync(path.join(repo, '.prove_it'), { recursive: true })
+      fs.writeFileSync(path.join(repo, '.prove_it', 'config.json'), JSON.stringify({
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { push_check: { type: 'script', command: './script/test' } },
+        git_workflows: { pre_push: ['push_check'] },
+        adapters: { claude: { enabled: true } }
+      }, null, 2) + '\n')
+
+      const result = initStrictProject(repo, { adapters: ['claude'] })
+
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.prove-it-pre-push.command'), ['prove_it hook git:pre-push'])
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.prove-it-pre-push.event'), ['pre-push'])
+      assert.ok(result.gitConfigHooks.prePush.configured)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('deinitializes only prove_it-owned Git config hooks and preserves unrelated hook config', () => {
+    const { initStrictProject, deinitStrictProject } = require('../lib/redesign/init')
+    const repo = tmpRepo()
+
+    try {
+      initGitRepo(repo)
+      spawnSync('git', ['config', '--local', 'hook.unrelated.command', './other-hook'], { cwd: repo, encoding: 'utf8' })
+      spawnSync('git', ['config', '--local', '--add', 'hook.unrelated.event', 'pre-commit'], { cwd: repo, encoding: 'utf8' })
+
+      initStrictProject(repo, { adapters: ['claude'] })
+      const result = deinitStrictProject(repo)
+
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.prove-it-pre-commit.command'), [])
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.prove-it-pre-commit.event'), [])
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.unrelated.command'), ['./other-hook'])
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.unrelated.event'), ['pre-commit'])
+      assert.ok(result.removed.includes('git config hook.prove-it-pre-commit'))
     } finally {
       fs.rmSync(repo, { recursive: true, force: true })
     }

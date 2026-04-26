@@ -122,6 +122,10 @@ function postToolFailurePipeline (config) {
   return config?.agent_workflows?.post_tool_failure || []
 }
 
+function gitWorkflowPipeline (config, stage) {
+  return config?.git_workflows?.[stage] || []
+}
+
 function isStartupOrResumeSessionStart (event) {
   return event?.source?.kind === 'startup' || event?.source?.kind === 'resume'
 }
@@ -1219,6 +1223,10 @@ function runPostToolFailureWorkflow (config, event, options = {}) {
   return runTaskStageWorkflow(config, event, postToolFailurePipeline(config), options)
 }
 
+function runGitWorkflow (config, event, options = {}) {
+  return runTaskStageWorkflow(config, event, gitWorkflowPipeline(config, event?.stage), options)
+}
+
 function emitEffect (effectPort, effect, context) {
   if (!effectPort) return effect
 
@@ -1338,6 +1346,12 @@ function runWorkflowEngine ({
       dependencies,
       ports
     })
+  } else if (event?.stage === 'pre_commit' || event?.stage === 'pre_push') {
+    effect = runGitWorkflow(workflowConfig, event, {
+      adapterCapabilities,
+      dependencies,
+      ports
+    })
   } else {
     effect = deps.allowEffect()
   }
@@ -1352,6 +1366,7 @@ module.exports = {
   protectedPathMatch,
   renderSessionStartGuidance,
   runAgentEndWorkflow,
+  runGitWorkflow,
   runPostToolFailureWorkflow,
   runPostToolWorkflow,
   runPreToolWorkflow,
