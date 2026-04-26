@@ -821,10 +821,16 @@ function recordSkippedTask (context, taskName, task, result) {
 }
 
 function allowWithSkippedTasks (context, dependencies) {
-  if (context.skippedTasks && context.skippedTasks.length > 0) {
-    return dependencies.allowEffect({ skipped: context.skippedTasks })
-  }
-  return dependencies.allowEffect()
+  const fields = {}
+  if (context.skippedTasks && context.skippedTasks.length > 0) fields.skipped = context.skippedTasks
+  if (context.contextParts && context.contextParts.length > 0) fields.reason = context.contextParts.join('\n\n')
+  return Object.keys(fields).length > 0 ? dependencies.allowEffect(fields) : dependencies.allowEffect()
+}
+
+function recordAllowContext (context, effect) {
+  if (!effect?.reason && !effect?.message) return
+  if (!context.contextParts) context.contextParts = []
+  context.contextParts.push(effect.reason || effect.message)
 }
 
 function whenHasSignal (when, signalType) {
@@ -904,7 +910,9 @@ function runScriptTask (taskName, task, context, dependencies) {
 
   const normalized = result || { pass: false, reason: 'Task runner returned no pass/fail result.' }
   const settled = settleTaskLifecycleResult(taskName, task, normalized, context, null)
-  if (settled.status === 'pass' || settled.status === 'skip') return dependencies.allowEffect()
+  if (settled.status === 'pass' || settled.status === 'skip') {
+    return normalized.output ? dependencies.allowEffect({ reason: normalized.output }) : dependencies.allowEffect()
+  }
   return dependencies.blockEffect(settled.reason, { taskFailure: settled.taskFailure })
 }
 
@@ -1116,7 +1124,8 @@ function runTaskStageWorkflow (config, event, pipeline, options = {}) {
       state: options.statePort || null,
       observations: options.observationPort || options.observationsPort || null
     },
-    skippedTasks: []
+    skippedTasks: [],
+    contextParts: []
   }
 
   const canceledBeforeWork = observeCancellationCheckpoint(context, dependencies)
@@ -1161,6 +1170,7 @@ function runTaskStageWorkflow (config, event, pipeline, options = {}) {
         cleanupTaskHandles(parallelBatch, context)
         return effect
       }
+      recordAllowContext(context, effect)
     } else if (task.type === 'script') {
       const effect = runScriptTask(taskName, task, context, dependencies)
       const canceled = observeCancellationCheckpoint(context, dependencies, parallelBatch)
@@ -1170,6 +1180,7 @@ function runTaskStageWorkflow (config, event, pipeline, options = {}) {
         cleanupTaskHandles(parallelBatch, context)
         return effect
       }
+      recordAllowContext(context, effect)
     } else if (isReviewerTask(task)) {
       const effect = runReviewerTask(taskName, task, context, dependencies)
       const canceled = observeCancellationCheckpoint(context, dependencies, parallelBatch)
@@ -1179,6 +1190,7 @@ function runTaskStageWorkflow (config, event, pipeline, options = {}) {
         cleanupTaskHandles(parallelBatch, context)
         return effect
       }
+      recordAllowContext(context, effect)
     }
   }
 

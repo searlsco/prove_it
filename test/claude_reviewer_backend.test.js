@@ -113,6 +113,16 @@ describe('Claude clean-runtime reviewer backend', () => {
     assert.strictEqual(check.prompt, 'Look for fixation.')
   })
 
+  it('represents Claude skill-backed reviewer prompts without legacy promptType in strict config', () => {
+    const check = reviewerTaskToAgentCheck('done-review', {
+      type: 'reviewer',
+      prompt: 'skill:prove-done'
+    })
+
+    assert.strictEqual(check.promptType, 'skill')
+    assert.strictEqual(check.prompt, 'prove-done')
+  })
+
   it('installs a reviewer runner port distinct from the script task port', () => {
     const calls = []
     const port = createClaudeReviewerPort({

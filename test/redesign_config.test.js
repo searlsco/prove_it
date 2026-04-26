@@ -311,6 +311,108 @@ describe('redesign strict .prove_it config/profile model', () => {
     })
   })
 
+  it('selects the Claude parity profile without making Pi inherit Claude-only defaults', () => {
+    const { CLAUDE_PARITY_PROFILE, PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
+    const claudeRepo = tmpDir('prove_it_claude_profile_')
+    const piRepo = tmpDir('prove_it_pi_profile_')
+
+    try {
+      writeJson(path.join(claudeRepo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        profile: 'claude',
+        adapters: { claude: { enabled: true } }
+      })
+      writeJson(path.join(piRepo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        adapters: { pi: { enabled: true } }
+      })
+
+      const claude = loadEffectiveConfig(claudeRepo).effective
+      const pi = loadEffectiveConfig(piRepo).effective
+
+      assert.strictEqual(CLAUDE_PARITY_PROFILE.profile_version, PROFILE_VERSION)
+      assert.deepStrictEqual(claude.agent_workflows.pre_tool, [
+        'protect_prove_it_config',
+        'test_first',
+        'verify_assumptions'
+      ])
+      assert.deepStrictEqual(claude.agent_workflows.post_tool, ['testing_antipatterns_review'])
+      assert.deepStrictEqual(claude.agent_workflows.agent_end, [
+        'fast_tests',
+        'full_tests',
+        'coverage_review',
+        'done_review',
+        'approach_review'
+      ])
+      assert.deepStrictEqual(claude.git_workflows.pre_commit, ['git_full_tests'])
+      assert.deepStrictEqual(claude.tasks.protect_prove_it_config.protected_paths, [
+        '.prove_it/config.json',
+        '.prove_it/config.local.json'
+      ])
+      assert.deepStrictEqual(claude.tasks.full_tests.when, { signal: 'done', sourceFilesEdited: true })
+      assert.strictEqual(claude.tasks.full_tests.parallel, true)
+      assert.strictEqual(claude.tasks.testing_antipatterns_review.type, 'reviewer')
+      assert.strictEqual(claude.tasks.testing_antipatterns_review.provider, 'claude')
+      assert.strictEqual(claude.tasks.testing_antipatterns_review.async, true)
+      assert.strictEqual(claude.tasks.done_review.type, 'reviewer')
+      assert.strictEqual(claude.tasks.done_review.provider, 'claude')
+      assert.strictEqual(claude.tasks.done_review.parallel, true)
+      assert.strictEqual(claude.tasks.approach_review.when.signal, 'stuck')
+
+      assert.deepStrictEqual(pi.agent_workflows.pre_tool, ['protect_prove_it_config'])
+      assert.deepStrictEqual(pi.agent_workflows.post_tool, [])
+      assert.deepStrictEqual(pi.agent_workflows.agent_end, [])
+      assert.ok(!Object.prototype.hasOwnProperty.call(pi.tasks, 'done_review'))
+      assert.strictEqual(pi.profile, 'strict')
+    } finally {
+      fs.rmSync(claudeRepo, { recursive: true, force: true })
+      fs.rmSync(piRepo, { recursive: true, force: true })
+    }
+  })
+
+  it('passes clean profile globs into script task runner context for profile script tasks', () => {
+    const { createScriptTaskPort } = require('../lib/redesign/script_task_port')
+    const { normalizeLifecycleEvent } = require('../lib/redesign/events')
+    const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
+    const repo = tmpDir('prove_it_script_context_')
+
+    try {
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        profile: 'claude',
+        adapters: { claude: { enabled: true } }
+      })
+      const cfg = loadEffectiveConfig(repo).effective
+      let received
+      const port = createScriptTaskPort({
+        runScript (_check, context) {
+          received = context
+          return { pass: true, reason: 'ok', output: '' }
+        }
+      })
+
+      port.run({
+        taskName: 'test_first',
+        task: cfg.tasks.test_first,
+        event: normalizeLifecycleEvent({
+          adapterId: 'claude',
+          rawEventName: 'PreToolUse',
+          rawEvent: { session_id: 'session-1', tool_name: 'Write', tool_input: { file_path: 'src/app.js' } },
+          cwd: repo
+        }),
+        effectiveConfig: cfg
+      })
+
+      assert.deepStrictEqual(received.sources, cfg.globs.source)
+      assert.deepStrictEqual(received.tests, cfg.globs.test)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   it('explain command reports effective pipelines, source layers, lineage, and task shadowing without legacy loading', () => {
     const { PROFILE_VERSION } = require('../lib/redesign/config')
     const { cmdExplain } = require('../lib/commands/explain')
@@ -328,6 +430,7 @@ describe('redesign strict .prove_it config/profile model', () => {
       writeJson(path.join(repo, '.prove_it', 'config.json'), {
         schema_version: 1,
         profile_version: PROFILE_VERSION,
+        profile: 'claude',
         tasks: {
           protect_prove_it_config: { type: 'config_guard' },
           explain_check: { type: 'script', command: 'echo explain', when: { signal: 'done', sourceFilesEdited: true } }
@@ -341,8 +444,11 @@ describe('redesign strict .prove_it config/profile model', () => {
       cmdExplain()
       const explained = JSON.parse(stdout)
 
+      assert.strictEqual(explained.source_layers[0].name, 'claude-parity')
       assert.deepStrictEqual(explained.effective.agent_workflows.pre_tool, [
         'protect_prove_it_config',
+        'test_first',
+        'verify_assumptions',
         'explain_check'
       ])
       assert.deepStrictEqual(explained.source_layers.map(layer => layer.kind), [

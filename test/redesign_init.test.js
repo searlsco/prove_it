@@ -4,6 +4,8 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const { behaviorForCapability } = require('../lib/adapter_capabilities')
+
 function tmpRepo () {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_redesign_init_'))
 }
@@ -26,6 +28,7 @@ describe('redesign adapter-aware init/deinit', () => {
 
       assert.strictEqual(result.config.created, true)
       assert.strictEqual(cfg.profile_version, PROFILE_VERSION)
+      assert.strictEqual(cfg.profile, 'strict')
       assert.strictEqual(cfg.adapters.pi.enabled, true)
       assert.strictEqual(cfg.adapters.claude.enabled, true)
       assert.doesNotThrow(() => validateConfig(cfg, '.prove_it/config.json'))
@@ -57,6 +60,7 @@ describe('redesign adapter-aware init/deinit', () => {
       const cfg = readJson(path.join(repo, '.prove_it', 'config.json'))
       const manifest = readJson(path.join(repo, '.prove_it', 'ownership.json'))
 
+      assert.strictEqual(cfg.profile, 'strict')
       assert.strictEqual(cfg.adapters.pi.enabled, true)
       assert.strictEqual(cfg.adapters.claude.enabled, true)
       assert.ok(manifest.artifacts.some(artifact => artifact.path === '.prove_it/config.json'))
@@ -65,6 +69,138 @@ describe('redesign adapter-aware init/deinit', () => {
       deinitStrictProject(repo)
       assert.ok(!fs.existsSync(path.join(repo, '.prove_it', 'config.json')))
       assert.ok(!fs.existsSync(path.join(repo, '.claude', 'settings.json')))
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('uses the strict profile for multi-adapter init so Pi does not inherit Claude-only defaults', () => {
+    const { loadEffectiveConfig } = require('../lib/redesign/config')
+    const { initStrictProject } = require('../lib/redesign/init')
+    const repo = tmpRepo()
+
+    try {
+      initStrictProject(repo, { adapters: ['pi', 'claude'] })
+      const cfg = loadEffectiveConfig(repo).effective
+
+      assert.strictEqual(cfg.profile, 'strict')
+      assert.deepStrictEqual(cfg.agent_workflows.pre_tool, ['protect_prove_it_config'])
+      assert.deepStrictEqual(cfg.agent_workflows.agent_end, [])
+      assert.ok(!Object.prototype.hasOwnProperty.call(cfg.tasks, 'done_review'))
+      assert.strictEqual(cfg.adapters.pi.enabled, true)
+      assert.strictEqual(cfg.adapters.claude.enabled, true)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('activates Claude parity profile defaults for initialized Claude strict projects', () => {
+    const { loadEffectiveConfig } = require('../lib/redesign/config')
+    const { runWorkflowEngine } = require('../lib/redesign/engine')
+    const { normalizeLifecycleEvent } = require('../lib/redesign/events')
+    const { initStrictProject } = require('../lib/redesign/init')
+    const { createMemoryStatePort } = require('../lib/redesign/state_port')
+    const repo = tmpRepo()
+
+    try {
+      initStrictProject(repo, { adapters: ['claude'] })
+      const explained = loadEffectiveConfig(repo)
+      const cfg = explained.effective
+
+      assert.deepStrictEqual(explained.source_layers[0].kind, 'profile')
+      assert.strictEqual(explained.source_layers[0].name, 'claude-parity')
+      assert.deepStrictEqual(cfg.agent_workflows.pre_tool.slice(0, 2), [
+        'protect_prove_it_config',
+        'test_first'
+      ])
+      assert.strictEqual(cfg.tasks.protect_prove_it_config.type, 'config_guard')
+      assert.strictEqual(cfg.tasks.full_tests.parallel, true)
+      assert.deepStrictEqual(cfg.tasks.full_tests.when, { signal: 'done', sourceFilesEdited: true })
+      assert.strictEqual(cfg.tasks.done_review.type, 'reviewer')
+      assert.strictEqual(cfg.tasks.done_review.provider, 'claude')
+      assert.strictEqual(cfg.tasks.done_review.parallel, true)
+      assert.strictEqual(cfg.tasks.testing_antipatterns_review.type, 'reviewer')
+      assert.strictEqual(cfg.tasks.testing_antipatterns_review.async, true)
+      assert.ok(!fs.existsSync(path.join(repo, '.claude', 'prove_it', 'config.json')))
+
+      const guardEffect = runWorkflowEngine({
+        event: normalizeLifecycleEvent({
+          adapterId: 'claude',
+          rawEventName: 'PreToolUse',
+          rawEvent: { session_id: 'session-guard', tool_name: 'Write', tool_input: { file_path: path.join(repo, '.prove_it', 'config.json') } },
+          cwd: repo
+        }),
+        effectiveConfig: cfg
+      })
+      assert.strictEqual(guardEffect.effect, 'block')
+      assert.match(guardEffect.reason, /\.prove_it\/config\.json/)
+
+      const planEffect = runWorkflowEngine({
+        event: normalizeLifecycleEvent({
+          adapterId: 'claude',
+          rawEventName: 'PreToolUse',
+          rawEvent: { session_id: 'session-plan', tool_name: 'ExitPlanMode', tool_input: { plan: '### 1. Build' } },
+          cwd: repo
+        }),
+        effectiveConfig: cfg,
+        taskPort: {
+          run ({ taskName }) {
+            if (taskName !== 'verify_assumptions') return { pass: true, reason: 'ok', output: '' }
+            return { pass: true, reason: 'verified', output: 'BLOCKING REQUIREMENT: audit every assumption' }
+          }
+        }
+      })
+      assert.strictEqual(planEffect.effect, 'allow')
+      assert.match(planEffect.reason, /BLOCKING REQUIREMENT/)
+
+      const statePort = createMemoryStatePort()
+      statePort.writeSignal('session-done', { type: 'done', message: 'ready', at: 123 })
+      const startedScripts = []
+      const startedReviewers = []
+      const taskPort = {
+        startParallelTask ({ taskName }) {
+          startedScripts.push(taskName)
+          return { id: `${taskName}-parallel` }
+        },
+        settleParallelBatch (handles) {
+          return handles.map(handle => ({ id: handle.id, taskName: handle.taskName, task: handle.task, result: { pass: true, reason: `${handle.taskName} passed` } }))
+        },
+        cleanupTasks () {}
+      }
+      const reviewerPort = {
+        startParallelTask ({ taskName }) {
+          startedReviewers.push(taskName)
+          return { id: `${taskName}-parallel` }
+        },
+        settleParallelBatch (handles) {
+          return handles.map(handle => ({ id: handle.id, taskName: handle.taskName, task: handle.task, result: { pass: true, reason: `${handle.taskName} passed` } }))
+        },
+        cleanupTasks () {}
+      }
+      const doneEffect = runWorkflowEngine({
+        event: normalizeLifecycleEvent({
+          adapterId: 'claude',
+          rawEventName: 'Stop',
+          rawEvent: { session_id: 'session-done' },
+          cwd: repo
+        }),
+        effectiveConfig: cfg,
+        adapterCapabilities: {
+          completion_verification: behaviorForCapability('claude', 'completion_verification')
+        },
+        statePort,
+        taskPort,
+        reviewerPort,
+        observationPort: {
+          facts: {
+            editedFiles: ['src/app.js']
+          }
+        }
+      })
+      assert.strictEqual(doneEffect.effect, 'approve')
+      assert.deepStrictEqual(startedScripts, ['full_tests'])
+      assert.deepStrictEqual(startedReviewers, ['done_review'])
+      assert.strictEqual(doneEffect.signalLifecycle.action, 'clear')
     } finally {
       fs.rmSync(repo, { recursive: true, force: true })
     }
