@@ -187,6 +187,36 @@ describe('redesign strict .prove_it config/profile model', () => {
     }
   })
 
+  it('accepts and rejects strict task when.phase conditions', () => {
+    const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
+    const home = tmpDir('prove_it_home_')
+    const repo = tmpDir('prove_it_repo_')
+
+    try {
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: {
+          implement_only: { type: 'script', command: 'true', when: { phase: 'implement' } }
+        },
+        agent_workflows: { pre_tool: { append: ['implement_only'] } }
+      })
+      assert.strictEqual(loadEffectiveConfig(repo, { homeDir: home }).effective.tasks.implement_only.when.phase, 'implement')
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: {
+          bad_phase: { type: 'script', command: 'true', when: { phase: 'design' } }
+        }
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /tasks\.bad_phase\.when\.phase must be one of unknown, plan, implement, refactor/)
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   it('rejects invalid strict task when condition shapes', () => {
     const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
     const home = tmpDir('prove_it_home_')

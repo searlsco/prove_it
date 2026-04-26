@@ -9,6 +9,7 @@ const { loadProjectConfig, PROFILE_VERSION } = require('../lib/redesign/config')
 const { normalizeLifecycleEvent, normalizePiToolCall } = require('../lib/redesign/events')
 const { runWorkflowEngine } = require('../lib/redesign/engine')
 const { readSignal } = require('../lib/redesign/signal_lifecycle')
+const { readPhase, setPhase } = require('../lib/redesign/phase_state')
 const { createMemoryStatePort } = require('../lib/redesign/state_port')
 
 function tmpRepo (tasks = {
@@ -391,6 +392,190 @@ describe('shared workflow engine', () => {
       assert.match(effect.reason, /tests failed/)
       assert.strictEqual(effect.enforcement, 'hard_block')
       assert.deepStrictEqual(readSignal(statePort, 'session-123'), { type: 'done', message: 'ready', at: 123 })
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('records prove_it phase commands through shared state before task workflow evaluation', () => {
+    const repo = tmpRepo({
+      shouldNotRun: {
+        type: 'script',
+        command: 'exit 1'
+      }
+    }, ['shouldNotRun'])
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const statePort = createMemoryStatePort()
+      const taskPort = { run: () => assert.fail('phase interception should not run script tasks') }
+      const effect = runWorkflowEngine({
+        event: normalizePiToolCall({
+          toolName: 'Bash',
+          input: { command: 'prove_it phase refactor' },
+          session_id: 'session-123'
+        }, { cwd: repo }),
+        effectiveConfig,
+        adapterCapabilities: piCapabilities(),
+        statePort,
+        taskPort
+      })
+
+      assert.strictEqual(effect.effect, 'allow')
+      assert.match(effect.reason, /phase "refactor" recorded/)
+      assert.match(effect.systemMessage, /continue/)
+      assert.strictEqual(readPhase(statePort, 'session-123'), 'refactor')
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('falls through for unknown prove_it phase commands without corrupting phase state', () => {
+    const repo = tmpRepo({
+      bash_task: {
+        type: 'script',
+        command: './script/preflight',
+        matcher: 'Bash'
+      }
+    }, ['bash_task'])
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const statePort = createMemoryStatePort()
+      assert.strictEqual(setPhase(statePort, 'session-123', 'implement', { now: 123 }).ok, true)
+      const calls = []
+      const taskPort = { run: ({ taskName }) => { calls.push(taskName); return { pass: true } } }
+      const effect = runWorkflowEngine({
+        event: normalizePiToolCall({
+          toolName: 'Bash',
+          input: { command: 'prove_it phase design' },
+          session_id: 'session-123'
+        }, { cwd: repo }),
+        effectiveConfig,
+        adapterCapabilities: piCapabilities(),
+        statePort,
+        taskPort
+      })
+
+      assert.strictEqual(effect.effect, 'allow')
+      assert.deepStrictEqual(calls, ['bash_task'])
+      assert.strictEqual(readPhase(statePort, 'session-123'), 'implement')
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('sets plan phase on EnterPlanMode and still runs matching pre_tool tasks', () => {
+    const repo = tmpRepo({
+      plan_entry: {
+        type: 'script',
+        command: './script/plan-entry',
+        matcher: 'EnterPlanMode'
+      }
+    }, ['plan_entry'])
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const statePort = createMemoryStatePort()
+      const calls = []
+      const taskPort = { run: ({ taskName }) => { calls.push(taskName); return { pass: true } } }
+      const effect = runWorkflowEngine({
+        event: normalizeLifecycleEvent({
+          adapterId: 'claude',
+          rawEventName: 'PreToolUse',
+          rawEvent: { tool_name: 'EnterPlanMode', tool_input: {}, session_id: 'session-123' },
+          cwd: repo
+        }),
+        effectiveConfig,
+        statePort,
+        taskPort
+      })
+
+      assert.strictEqual(effect.effect, 'allow')
+      assert.deepStrictEqual(calls, ['plan_entry'])
+      assert.strictEqual(readPhase(statePort, 'session-123'), 'plan')
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('matches tasks gated by the clean phase condition and reports skipped phase mismatches', () => {
+    const repo = tmpRepo({
+      implement_check: {
+        type: 'script',
+        command: './script/implement',
+        when: { phase: 'implement' }
+      },
+      refactor_check: {
+        type: 'script',
+        command: './script/refactor',
+        when: { phase: 'refactor' }
+      }
+    }, ['implement_check', 'refactor_check'])
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const statePort = createMemoryStatePort()
+      assert.strictEqual(setPhase(statePort, 'session-123', 'implement', { now: 123 }).ok, true)
+      const calls = []
+      const taskPort = { run: ({ taskName }) => { calls.push(taskName); return { pass: true } } }
+
+      const effect = runWorkflowEngine({
+        event: normalizePiToolCall({
+          toolName: 'edit',
+          input: { path: 'src/app.js' },
+          session_id: 'session-123'
+        }, { cwd: repo }),
+        effectiveConfig,
+        statePort,
+        taskPort
+      })
+
+      assert.strictEqual(effect.effect, 'allow')
+      assert.deepStrictEqual(calls, ['implement_check'])
+      assert.deepStrictEqual(effect.skipped.map(skip => skip.taskName), ['refactor_check'])
+      assert.match(effect.skipped[0].reason, /phase is "implement", not "refactor"/)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('resets phase to unknown after successful done completion verification only', () => {
+    const repo = tmpCompletionRepo(['completion_check', 'stuck_check'])
+    const cfgPath = path.join(repo, '.prove_it', 'config.json')
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    cfg.tasks.stuck_check = { type: 'script', command: './script/stuck', when: { signal: 'stuck' } }
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2))
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const statePort = createMemoryStatePort()
+      const taskPort = { run: () => ({ pass: true }) }
+      const capabilities = { completion_verification: behaviorForCapability('claude', 'completion_verification') }
+
+      statePort.writeSignal('done-session', { type: 'done', message: null, at: 123 })
+      setPhase(statePort, 'done-session', 'implement', { now: 123 })
+      const doneEffect = runWorkflowEngine({
+        event: agentEndEvent('claude', repo, 'done-session'),
+        effectiveConfig,
+        adapterCapabilities: capabilities,
+        statePort,
+        taskPort
+      })
+      assert.strictEqual(doneEffect.effect, 'approve')
+      assert.strictEqual(readPhase(statePort, 'done-session'), 'unknown')
+
+      statePort.writeSignal('stuck-session', { type: 'stuck', message: null, at: 456 })
+      setPhase(statePort, 'stuck-session', 'refactor', { now: 456 })
+      const stuckEffect = runWorkflowEngine({
+        event: agentEndEvent('claude', repo, 'stuck-session'),
+        effectiveConfig,
+        adapterCapabilities: capabilities,
+        statePort,
+        taskPort
+      })
+      assert.strictEqual(stuckEffect.effect, 'approve')
+      assert.strictEqual(readPhase(statePort, 'stuck-session'), 'refactor')
     } finally {
       fs.rmSync(repo, { recursive: true, force: true })
     }

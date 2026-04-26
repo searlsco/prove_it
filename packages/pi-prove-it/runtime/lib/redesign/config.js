@@ -2,6 +2,8 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
+const { VALID_PHASES } = require('./phase_state')
+
 const CONFIG_DIR = '.prove_it'
 const CONFIG_FILE = 'config.json'
 const LOCAL_CONFIG_FILE = 'config.local.json'
@@ -65,6 +67,7 @@ const PIPELINE_PATCH_KEYS = new Set(['prepend', 'append', 'remove', 'replace_tas
 const TASK_COMMON_KEYS = new Set(['type', 'description', 'matcher', 'triggers', 'when', 'async', 'parallel', 'failure_behavior', 'appeal'])
 const WHEN_KEYS = new Set([
   'signal',
+  'phase',
   'sourceFilesEdited',
   'testFilesEdited',
   'sourcesModifiedSinceLastRun',
@@ -72,6 +75,7 @@ const WHEN_KEYS = new Set([
   'linesWritten'
 ])
 const VALID_WHEN_SIGNALS = new Set(['done', 'stuck', 'idle'])
+const VALID_WHEN_PHASES = new Set(VALID_PHASES)
 const REVIEWER_PROVIDER_OPTION_KEYS = new Set(['max_turns', 'allowed_tools', 'bypass_permissions', 'command', 'env'])
 const VALID_FAILURE_BEHAVIORS = new Set(['block', 'warn'])
 const APPEAL_KEYS = new Set(['enabled', 'threshold'])
@@ -227,6 +231,9 @@ function validateWhenClause (clause, label, filePath) {
 
   if (clause.signal !== undefined && !VALID_WHEN_SIGNALS.has(clause.signal)) {
     throw new Error(`${filePath}: ${label}.signal must be one of ${Array.from(VALID_WHEN_SIGNALS).join(', ')}`)
+  }
+  if (clause.phase !== undefined && !VALID_WHEN_PHASES.has(clause.phase)) {
+    throw new Error(`${filePath}: ${label}.phase must be one of ${Array.from(VALID_WHEN_PHASES).join(', ')}`)
   }
   validateOptionalBoolean(clause.sourceFilesEdited, `${label}.sourceFilesEdited`, filePath)
   validateOptionalBoolean(clause.testFilesEdited, `${label}.testFilesEdited`, filePath)

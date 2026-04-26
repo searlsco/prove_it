@@ -1,4 +1,5 @@
 const { isSourceFile, isTestFile } = require('../globs')
+const { readPhase } = require('./phase_state')
 const { readSignal } = require('./signal_lifecycle')
 const { toProjectRelativePath } = require('./target_paths')
 
@@ -151,6 +152,13 @@ function evaluateSignal (expected, context, taskName) {
   return skipped(taskName, `Skipped because signal "${expected}" is not active`, { evidence: active || null })
 }
 
+function evaluatePhase (expected, context, taskName) {
+  if (expected === undefined) return passed()
+  const current = readPhase(context.ports?.state, context.event?.sessionId)
+  if (current === expected) return passed({ evidence: { phase: current } })
+  return skipped(taskName, `Skipped because phase is "${current}", not "${expected}"`, { evidence: { phase: current } })
+}
+
 function evaluateSourceFilesEdited (expected, context, taskName) {
   if (expected === undefined) return passed()
   const files = editedFiles(context)
@@ -221,6 +229,7 @@ function evaluateWhenClause (when, context, taskName) {
   if (!when) return passed()
   const results = [
     evaluateSignal(when.signal, context, taskName),
+    evaluatePhase(when.phase, context, taskName),
     evaluateSourceFilesEdited(when.sourceFilesEdited, context, taskName),
     evaluateTestFilesEdited(when.testFilesEdited, context, taskName),
     evaluateSourcesModifiedSinceLastRun(when.sourcesModifiedSinceLastRun, context, taskName),
