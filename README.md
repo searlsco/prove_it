@@ -8,13 +8,30 @@
 
 Out-of-the-box, coding agents happily declare work complete before they have proven it: tests may not have run, coverage may be missing, and verification may be hand-wavy.
 
-**prove_it** is a methodology/workflow engine for making agents prove their work. The clean runtime stores workflow intent in strict `.prove_it/config.json` and lets each adapter enforce that workflow according to the harness capabilities it actually has.
+**prove_it** is a methodology/workflow engine for making agents prove their work. The Clean Runtime stores workflow intent in strict `.prove_it/config.json`; that Project Config is the source of truth for Workflow Engine behavior.
 
-Pi is first-class via the `@davemo/pi-prove-it` package. Pi is the fully wired clean-runtime adapter path today. Claude is a fast-follow adapter: the current work added adapter/effect boundaries plus shared signal lifecycle and Stop settlement, but Claude dispatch does not yet generally consume strict `.prove_it/config.json` as its workflow source. Current Claude hard PreToolUse/Stop behavior exists in the old/current Claude path, while Claude strict clean-runtime migration is partial/fast-follow. See [Adapter capabilities](docs/adapters.md) for the honest enforcement matrix.
+Claude Code and Pi are Harnesses. The Claude Adapter and Pi Adapter translate harness-native events into Workflow Engine stages, then render Workflow Engine Effects back to each harness. Adapter mechanics differ by harness capability, but product behavior is described in terms of Methodology, Signals, Tasks, Pipelines, Completion Verification, and Evidence. See [Adapter capabilities](docs/adapters.md) for the current capability matrix.
 
 ## Quick start
 
-Pi-first clean-runtime project:
+Claude Code project with Claude parity behavior:
+
+```bash
+brew install searlsco/tap/prove_it
+cd your-project
+prove_it init --adapter claude
+prove_it doctor
+```
+
+`prove_it init --adapter claude` writes:
+
+- strict `.prove_it/config.json` with `profile: "claude"` — the Workflow Engine source of truth;
+- `.prove_it/ownership.json` — prove_it's ownership manifest for generated artifacts;
+- Claude-native `.claude/settings.json` hook registrations that call `prove_it hook claude:*`.
+
+`.claude/settings.json` activates the Claude Adapter. It is not workflow config.
+
+Pi project:
 
 ```bash
 brew install searlsco/tap/prove_it
@@ -25,7 +42,9 @@ prove_it doctor
 prove_it explain
 ```
 
-Multi-adapter clean-runtime project:
+`prove_it init --adapter pi` writes strict `.prove_it/config.json` with `profile: "strict"` and Pi package activation artifacts.
+
+Multi-adapter project:
 
 ```bash
 prove_it init --adapter pi --adapter claude
@@ -33,45 +52,30 @@ pi install -l npm:@davemo/pi-prove-it
 prove_it doctor
 ```
 
-Current/legacy Claude product setup is still available:
-
-```bash
-prove_it install
-cd your-project && prove_it init
-```
-
-Restart the relevant agent harness after installing adapter-native hooks or packages.
+Multi-adapter init currently keeps `profile: "strict"` so Pi does not inherit Claude-only default mechanics. Restart the relevant Harness after installing adapter-native hooks or packages.
 
 ## What can prove_it do?
 
-prove_it is a config-driven framework for enforcing quality in coding-agent sessions. In the clean runtime, shared workflow config lives under `.prove_it/`; adapter-native files activate Pi or Claude according to each adapter's implemented capability. Pi consumes the clean-runtime path end to end today. Current/legacy Claude task enforcement uses `.claude/prove_it/config.json` while strict clean-runtime Claude enforcement is partial/fast-follow.
+prove_it is a config-driven methodology/workflow engine for enforcing quality in coding-agent sessions. In the Clean Runtime, shared workflow config lives under `.prove_it/`; adapter-native files activate Pi or Claude according to each adapter's implemented capabilities.
 
 Depending on adapter support, prove_it can:
 
-- **Block Claude from stopping** until your tests pass in the old/current Claude path
-- **Block git commits** until a full test suite is green
-- **Run AI reviewers** — independent subagents that audit Claude's work for coverage gaps, logic errors, or security issues
-- **Fire reviews asynchronously** — expensive reviewers run in the background while Claude keeps working, then enforce their verdict on the next stop
-- **Gate tasks on signals** — heavyweight checks fire only when Claude declares a unit of work complete (`prove_it signal done`), or when Claude gets caught in a doom loop (`prove_it signal stuck --message "can't figure out Liquid Glass"`)
-- **Gate tasks on churn** — reviews trigger after N lines changed (net git diff) or N lines written (gross, catches thrashing)
-- **Inject context on session start** — briefs your agent on what prove_it will inspect for and when, along with instructions on how to use it
-- **Guard tool usage** — block specific tool calls (config file edits, dangerous commands) before they execute
-- **Track runs** — skip re-running tasks when code hasn't changed since the last pass (via `when: { sourcesModifiedSinceLastRun: true }`)
+- **Inject Session Start guidance** — brief the Primary Agent on methodology context, configured tasks, Signal instructions, and review/backchannel process.
+- **Protect Workflow Engine config** — hard-block Primary Agent edits to `.prove_it/config.json` and `.prove_it/config.local.json` unless the workflow explicitly allows them.
+- **Guide test-first work** — nudge the Primary Agent toward red-green TDD and assumption verification before implementation.
+- **Gate tasks on Signals** — run heavyweight Tasks only when the Primary Agent sets a `done`, `stuck`, or `idle` Signal.
+- **Run fast/full tests** — run `./script/test_fast` on Completion Verification and `./script/test` when a Done Signal and source edits make the full suite relevant.
+- **Run Reviewer Tasks** — run Done, Stuck/Approach, coverage, and testing-pattern reviewers as configured Tasks, with async/parallel execution where supported.
+- **Support reviewer appeals** — create a Claude backchannel for FAIL verdict appeals, then feed the appeal back into the next review cycle.
+- **Track phases and plans** — support `prove_it phase ...`, phase-aware TDD guidance, and automatic Done/phase instructions in plan files where the Claude Harness exposes the required mechanics.
+- **Auto-signal TaskCompleted work** — for Claude TaskCompleted events whose subject matches Done-signal guidance, set the Done Signal automatically when Done-gated Tasks exist.
+- **Provide session control** — `prove_it disable`, `prove_it enable`, and `prove_it cancel` control the current session without changing Project Config.
+- **Block git commits** — run Git Workflows such as `pre_commit` before commits when configured.
+- **Track evidence** — record script output, reviewer verdicts, Signal lifecycle, and task state so future checks can decide what still needs proof.
 
-Out of the box, current/legacy Claude `prove_it init` generates the Searls-stack of configured tasks:
+`prove_it init --adapter claude` selects the Claude parity profile. The Workflow Engine still reads `.prove_it/config.json`; the Claude Adapter owns the Claude hook API mechanics, including `.claude/settings.json`, `CLAUDE_ENV_FILE`, Claude-specific hook JSON, Claude Stop hard blocks, and Claude backchannel paths.
 
-- **Session briefing** on startup — Claude gets an orientation showing active tasks, signal instructions, and how the review process works
-- **Config lock** on every edit — silently blocks Claude from modifying your prove_it config
-- **TDD enforcement on every edit** — tracks the red-green cycle and nudges Claude to write a failing test before writing source code. Adapts behavior based on the current session phase (see [Session phases](#session-phases)).
-- **TDD guidance in plans** — injects a red-green TDD development approach section into every plan Claude creates
-- **Fast tests on every stop** — runs `./script/test_fast` and blocks until it passes
-- **Full tests on signal** — runs `./script/test` when Claude signals done (and source files were edited)
-- **Async coverage review** — a Haiku-powered `prove-coverage` subagent fires in the background after 541+ net lines of churn, enforced on the next stop
-- **Done review on signal** — an Opus-powered `prove-done` subagent runs a thorough pre-ship review when Claude signals done
-- **Approach review on signal** — a Sonnet-powered `prove-approach` subagent runs when Claude signals stuck, surfacing alternative approaches
-- **Full tests on git commit** — pre-commit hook runs `./script/test` (Claude commits only — human commits pass through)
-
-Every one of these is a config entry you can change, disable, or replace. The framework supports any combination of lifecycle events, conditions, and task types — the default config is just a starting point.
+`prove_it init --adapter pi` selects the strict profile. Pi is first-class, but its Capability Profile differs: Pi can hard-block pre-tool config edits and expose model-callable Signals, while failed Completion Verification is delivered as a remediation follow-up after `turn_end` instead of a Claude Stop hard block.
 
 ## Setup
 
@@ -81,31 +85,34 @@ Every one of these is a config entry you can change, disable, or replace. The fr
 # Install the CLI
 brew install searlsco/tap/prove_it
 
-# Register prove_it hooks in ~/.claude/settings.json
+# Optional: install Claude skills and global Claude hook registration
 prove_it install
 ```
 
 ### Initialize a project
 
-For the clean runtime, initialize strict `.prove_it` config with explicit adapters:
+Initialize strict `.prove_it` Project Config with explicit adapters:
 
 ```bash
 cd your-project
+prove_it init --adapter claude
 prove_it init --adapter pi
 prove_it init --adapter pi --adapter claude
 ```
 
-This writes strict `.prove_it/config.json` plus `.prove_it/ownership.json`. For Pi, enable the package with `pi install -l npm:@davemo/pi-prove-it`. For Claude, `prove_it init --adapter claude` writes Claude-native settings that call `prove_it hook claude:*` for the partial/fast-follow adapter path.
+The adapter flag determines the profile and adapter artifacts:
 
-The clean runtime does not read legacy `.claude/prove_it` config. Legacy `.claude/prove_it/config.json` remains old/current Claude product behavior, not clean-runtime compatibility. Claude dispatch does not yet generally consume strict `.prove_it/config.json` as its workflow source for task enforcement.
+| Command | Project Config | Adapter artifacts |
+|---|---|---|
+| `prove_it init --adapter claude` | `.prove_it/config.json` with `profile: "claude"` | `.claude/settings.json` hook registrations for `prove_it hook claude:*` |
+| `prove_it init --adapter pi` | `.prove_it/config.json` with `profile: "strict"` | Pi package activation artifacts; install `@davemo/pi-prove-it` in Pi |
+| `prove_it init --adapter pi --adapter claude` | `.prove_it/config.json` with `profile: "strict"` | both adapter activations |
 
-For current/legacy Claude setup without explicit adapters:
+`.prove_it/config.json` is the strict source of truth for Workflow Engine config. `.claude/settings.json` is a Claude Adapter Artifact: it activates Claude hooks and contains hook commands, not workflow policy.
 
-```bash
-prove_it init
-```
+The Claude hard break is intentional. Normal `prove_it hook claude:<Event>` dispatch reads strict `.prove_it/config.json` and clean Session State. It ignores stale `.claude/prove_it/config.json` and `.claude/prove_it/config.local.json` as workflow config. There is no `.claude/prove_it` → `.prove_it` migration command and no supported dual-runtime compatibility mode; move retained workflow intent manually into strict `.prove_it` config.
 
-This interactively sets up `.claude/prove_it/config.json`, creates `script/test` and `script/test_fast` stubs if you don't have them, installs git hooks, and generates a starter `.claude/rules/testing.md`. Restart Claude Code and you're live.
+`prove_it doctor` surfaces stale `.claude/prove_it` config files as ignored after the hard break.
 
 ### Non-interactive init
 
@@ -162,43 +169,77 @@ The `trap ... EXIT` pattern ensures results are always recorded, even when `set 
 
 ## Configuration
 
-Clean-runtime prove_it is configured in strict `.prove_it/config.json`; inspect its effective merged form with `prove_it explain`. The strict file uses shared workflow keys (`tasks`, `agent_workflows`, `git_workflows`, and `adapters`) and is covered in [Adapter capabilities](docs/adapters.md). Pi is the fully wired clean-runtime adapter path today; Claude strict clean-runtime migration is partial/fast-follow, so do not treat `.prove_it/config.json` as the full source of truth for Claude task enforcement yet.
+Clean-runtime prove_it is configured in strict `.prove_it/config.json`; inspect its effective merged form with `prove_it explain`.
 
-Current/legacy Claude prove_it is configured with a `hooks` object in `.claude/prove_it/config.json`. Hooks are keyed by type (`claude`, `git`) then by event (`Stop`, `PreToolUse`, `SessionStart`, `pre-commit`, `pre-push`, etc.), with each event mapping to an ordered list of tasks:
+The public config shape is workflow-first:
 
 ```json
 {
-  "enabled": true,
-  "sources": ["src/**/*.js", "lib/**/*.js", "test/**/*.js"],
-  "tests": ["test/**/*.test.js"],
-  "hooks": {
-    "claude": {
-      "Stop": [
-        { "name": "fast-tests", "type": "script", "command": "./script/test_fast" },
-        { "name": "coverage-review", "type": "agent", "prompt": "Check coverage...\n\n{{session_diff}}" }
-      ]
+  "schema_version": 1,
+  "profile_version": "prove_it.strict.v1",
+  "profile": "claude",
+  "globs": {
+    "source": ["src/**/*.js", "test/**/*.js"],
+    "test": ["test/**/*.test.js"]
+  },
+  "tasks": {
+    "protect_prove_it_config": {
+      "type": "config_guard",
+      "protected_paths": [".prove_it/config.json", ".prove_it/config.local.json"]
+    },
+    "fast_tests": {
+      "type": "script",
+      "command": "./script/test_fast",
+      "when": { "sourcesModifiedSinceLastRun": true, "sourceFilesEdited": true }
+    },
+    "full_tests": {
+      "type": "script",
+      "command": "./script/test",
+      "when": { "signal": "done", "sourceFilesEdited": true }
     }
+  },
+  "agent_workflows": {
+    "session_start": [],
+    "pre_tool": ["protect_prove_it_config"],
+    "post_tool": [],
+    "post_tool_failure": [],
+    "agent_end": ["fast_tests", "full_tests"]
+  },
+  "git_workflows": {
+    "pre_commit": [],
+    "pre_push": []
+  },
+  "adapters": {
+    "claude": { "enabled": true },
+    "pi": { "enabled": false }
   }
 }
 ```
 
+Key ideas:
+
+- `tasks` define named units of work.
+- `agent_workflows` and `git_workflows` define Pipelines for normalized Workflow Stages.
+- `adapters` declares which Adapters are active; it does not make adapter-native files into workflow config.
+- `profile: "claude"` selects retained Claude parity defaults. `profile: "strict"` selects the smaller harness-neutral strict defaults.
+- `profile_version` pins built-in profile semantics independently from `schema_version`.
+
 ### Config layers
 
-Config files merge (later overrides earlier):
+Strict config layers merge in this order:
 
-1. `~/.claude/prove_it/config.json`—global defaults
-2. `.claude/prove_it/config.json`—project config (commit this)
-3. `.claude/prove_it/config.local.json`—local overrides (gitignored, per-developer)
+1. built-in Profile (`strict` or `claude`);
+2. optional global `.prove_it` config layer when present;
+3. project `.prove_it/config.json` (commit this);
+4. developer-local `.prove_it/config.local.json` (gitignored).
 
-Hooks merge by task `name`: a task in a descendant config with the same name as one in an ancestor fully replaces the ancestor's task; a task with a new name is appended. Global tasks run first (most general to most specific). Other array fields (like `sources`) replace rather than merge.
+After the Claude hard break, `.claude/prove_it/config.json` and `.claude/prove_it/config.local.json` are retired Claude Legacy Config. Normal Claude hook dispatch ignores them as workflow config, and `prove_it doctor` reports them as stale if they are present. Legacy Claude characterization paths remain quarantined behind a test-only oracle guard and are not user-facing runtime behavior.
 
 ### Source and test globs
 
-`sources` defines which files prove_it considers "your code" — these globs drive conditions like `sourcesModifiedSinceLastRun`, `sourceFilesEdited`, and `linesChanged`. Test files should be included in `sources` so that edits to tests are tracked as source changes.
+`globs.source` defines which files prove_it considers "your code" — these globs drive conditions like `sourcesModifiedSinceLastRun`, `sourceFilesEdited`, and `linesChanged`. Test files should be included in `globs.source` so that edits to tests are tracked as source changes.
 
-`tests` identifies which source files are test files. This drives the `test-first` check, which enforces red-green TDD by tracking whether Claude writes and runs failing tests before implementing source code. See [Session phases](#session-phases) for how enforcement varies by activity. `tests` is typically a subset of `sources` — it doesn't need to be disjoint.
-
-Both `sources` and `tests` are preserved across `prove_it init` / `reinit` when customized, so you won't lose your globs on upgrade.
+`globs.test` identifies which source files are test files. This drives the `test_first` guidance in the Claude parity profile, which tracks whether Claude writes and runs failing tests before implementing source code. See [Session phases](#session-phases) for how enforcement varies by activity. `globs.test` is typically a subset of `globs.source` — it doesn't need to be disjoint.
 
 ### Lifecycle events
 
@@ -206,7 +247,7 @@ Both `sources` and `tests` are preserved across `prove_it init` / `reinit` when 
 
 | Event | Purpose | Behavior |
 |-------|---------|----------|
-| `SessionStart` | Environment setup, injecting context | **Non-blocking.** All tasks run. Output is injected into Claude's context. Use this to inject prompts, announce project state, set environment variables, or run setup scripts. |
+| `SessionStart` | Injecting context | **Non-blocking.** Clean Runtime context is rendered into Claude's session. Use this to announce methodology, configured Tasks, Signals, and review/backchannel process. Strict config does not currently support legacy `env` tasks. |
 | `PreToolUse` | Guarding tool usage | **Blocking, fail-fast.** Tasks run in order; the first failure denies the tool and stops. Use this for config protection, enforcing workflows, or vetting commands. |
 | `Stop` | Verifying completed work | **Blocking, fail-fast.** Tasks run in order; the first failure sends Claude back to fix it. Put cheap tasks first (test suite), expensive ones last (AI reviewer). Async results are harvested before sync tasks run. |
 | `PostToolUse` | Observing tool results | **Non-blocking.** Fires after a tool succeeds. Used by TDD enforcement to detect test passes. Matcher filters by tool name. |
@@ -221,87 +262,67 @@ Both `sources` and `tests` are preserved across `prove_it init` / `reinit` when 
 
 ### Task types
 
-- **`script`**—runs a shell command, fails on non-zero exit
-- **`agent`**—sends a prompt to an AI reviewer, expects PASS/FAIL response (see [Agent tasks](#agent-tasks))
-- **`env`**—runs a command that outputs environment variables, injected into Claude's session (SessionStart only, see [Env tasks](#env-tasks))
+Strict Clean Runtime task types are:
 
-### Task parameters (`params`)
+- **`config_guard`** — blocks edits to protected Project Config / Local Config paths before the tool runs.
+- **`script`** — runs a shell command through the active task provider; a non-zero exit fails the task.
+- **`reviewer`** — asks an active-harness reviewer provider for an independent `PASS`, `FAIL`, or `SKIP` verdict. Use this for Claude parity reviewer tasks.
+- **`agent`** — legacy-compatible reviewer shape accepted by the strict schema for simple prompt/model reviewer tasks. Prefer `reviewer` for new config because it exposes provider selection and provider options.
 
-Script tasks accept a `params` object that is passed to the script as `input.params` in the stdin JSON payload:
+Strict task objects are named by their key under `tasks`; they do not include a `name` field:
 
 ```json
 {
-  "name": "lock-config",
-  "type": "script",
-  "command": "$(prove_it prefix)/libexec/guard-config",
-  "quiet": true,
-  "params": {
-    "paths": [".claude/prove_it/config.json", ".claude/prove_it/config.local.json"]
+  "tasks": {
+    "fast_tests": {
+      "type": "script",
+      "command": "./script/test_fast",
+      "timeout_ms": 300000
+    },
+    "protect_prove_it_config": {
+      "type": "config_guard",
+      "protected_paths": [".prove_it/config.json", ".prove_it/config.local.json"]
+    }
+  },
+  "agent_workflows": {
+    "pre_tool": ["protect_prove_it_config"],
+    "agent_end": ["fast_tests"]
   }
 }
 ```
 
-Scripts read `params` from the parsed stdin JSON alongside `tool_name`, `tool_input`, etc. This is a generic mechanism—any script can use `params` to accept structured configuration without inventing CLI arg parsing.
+Task fields currently accepted by strict config are intentionally narrow:
 
-**guard-config with custom paths:** The built-in `guard-config` script uses `params.paths` to decide which file paths to block. Add your own paths to guard additional files:
+- common: `type`, `description`, `matcher`, `triggers`, `when`, `async`, `parallel`, `failure_behavior`, `appeal`;
+- `config_guard`: `protected_paths`;
+- `script`: `command`, `timeout_ms`;
+- `reviewer`: `intent`, `prompt`, `model`, `provider`, `provider_options`, `timeout_ms`;
+- `agent`: `prompt`, `model`.
+
+Legacy Claude Runtime fields such as `params`, `quiet`, `briefing`, `enabled`, `promptType`, `ruleFile`, `taskEnv`, `taskAllowedTools`, `taskBypassPermissions`, `fileEditingTools`, and `timeout` are not valid strict `.prove_it/config.json` fields. Some underlying behaviors may return later as core or adapter/provider options, but do not document or rely on the legacy spellings for Clean Runtime projects. Use `timeout_ms` for strict task timeouts.
+
+To customize config protection, use `config_guard` instead of the retired `guard-config` script/`params.paths` pattern:
 
 ```json
 {
-  "name": "lock-config",
-  "type": "script",
-  "command": "$(prove_it prefix)/libexec/guard-config",
-  "quiet": true,
-  "params": {
-    "paths": [".claude/prove_it/config.json", ".claude/prove_it/config.local.json", ".env", "credentials/**"]
+  "tasks": {
+    "protect_sensitive_files": {
+      "type": "config_guard",
+      "protected_paths": [
+        ".prove_it/config.json",
+        ".prove_it/config.local.json",
+        ".env",
+        "credentials/**"
+      ]
+    }
+  },
+  "agent_workflows": {
+    "pre_tool": ["protect_sensitive_files"]
   }
 }
 ```
 
-When `params.paths` is omitted, guard-config falls back to blocking prove_it config files by default (backward compatible).
-
-### Task briefing
-
-Tasks can include a `briefing` field — a string that's injected into every SessionStart orientation. This lets infrastructure tasks (like TDD enforcement) provide persistent guidance without being SessionStart tasks themselves.
-
-```json
-{
-  "name": "my-task",
-  "type": "script",
-  "command": "./my-script",
-  "briefing": "Remember to frobnicate the widgets before shipping."
-}
-```
-
-### Disabling individual tasks
-
-Set `enabled: false` on a task to skip it without removing it from config:
-
-```json
-{ "name": "slow-review", "type": "agent", "prompt": "prove-coverage",
-  "promptType": "skill", "enabled": false }
-```
-
-Disabled tasks are logged as SKIP with reason "Disabled".
-
-### Quiet tasks
-
-Set `quiet: true` on a task to suppress all log output except failures:
-
-```json
-{ "name": "lock-config", "type": "script", "command": "$(prove_it prefix)/libexec/guard-config", "quiet": true }
-```
-
-Quiet tasks don't emit SKIP or PASS entries to the session log. FAIL and BOOM entries are always logged. This is useful for high-frequency guards (like `config:lock` on every PreToolUse) that would otherwise flood the monitor.
-
-### Task timeout
-
-Set `timeout` (in milliseconds) to limit how long a task can run:
-
-```json
-{ "name": "slow-tests", "type": "script", "command": "./script/test", "timeout": 300000 }
-```
-
-Tasks have no timeout by default — they run until completion. Set an explicit timeout if you need to guard against runaway processes.
+To disable a task, remove it from the relevant pipeline or override the pipeline with `.prove_it/config.local.json`; strict config does not use legacy `enabled: false`.
 
 ### Matchers and triggers
 
@@ -309,31 +330,37 @@ PreToolUse tasks can filter by tool name and command patterns using `matcher` an
 
 ```json
 {
-  "hooks": {
-    "claude": {
-      "PreToolUse": [
-        {
-          "name": "guard-commits",
-          "type": "script",
-          "command": "./script/check",
-          "matcher": "Bash",
-          "triggers": ["(^|\\s)git\\s+commit\\b"]
-        }
-      ]
+  "tasks": {
+    "guard_commits": {
+      "type": "script",
+      "command": "./script/check",
+      "matcher": "Bash",
+      "triggers": ["(^|\\s)git\\s+commit\\b"]
     }
+  },
+  "agent_workflows": {
+    "pre_tool": ["guard_commits"]
   }
 }
 ```
 
-`matcher` filters by Claude's tool name (`Edit`, `Write`, `Bash`, etc.). `triggers` are regex patterns matched against the tool's command argument. Both are optional—omit them to run on every PreToolUse.
+`matcher` filters by the Adapter's tool name (`Edit`, `Write`, `Bash`, Pi `tool_call` names, etc.). `triggers` are regex patterns matched against the command argument when the Harness exposes one. Both are optional—omit them to run on every Pre Tool event.
 
 ## Conditional tasks (`when`)
 
-Tasks can declare conditions that must be met before they run. This is how you gate expensive reviews on churn thresholds, signal states, or environmental requirements.
+Tasks can declare conditions that must be met before they run. This is how you gate expensive reviews on Signals, churn thresholds, phase state, or session observations.
 
 ```json
-{ "name": "my-check", "type": "script", "command": "./script/check",
-  "when": { "fileExists": ".config" } }
+{
+  "tasks": {
+    "done_review": {
+      "type": "reviewer",
+      "prompt": "skill:prove-done",
+      "provider": "claude",
+      "when": { "signal": "done" }
+    }
+  }
+}
 ```
 
 ### Condition evaluation
@@ -341,101 +368,56 @@ Tasks can declare conditions that must be met before they run. This is how you g
 **Object form — AND.** When `when` is an object, every condition must pass:
 
 ```json
-{ "when": { "envSet": "CLAUDECODE", "linesChanged": 500 } }
+{ "when": { "signal": "done", "sourceFilesEdited": true } }
 ```
 
-Both `envSet` AND `linesChanged` must be true. If either fails, the task is skipped.
+Both the Done Signal and source-file edit observation must be present.
 
 **Array form — OR of ANDs.** When `when` is an array, each element is AND'd internally and any element passing fires the task:
 
 ```json
 {
-  "name": "coverage-review",
-  "type": "agent",
-  "prompt": "prove-coverage",
-  "promptType": "skill",
-  "when": [
-    { "envSet": "CLAUDECODE", "linesChanged": 500 },
-    { "envSet": "CLAUDECODE", "linesWritten": 1000 }
-  ]
+  "tasks": {
+    "coverage_review": {
+      "type": "reviewer",
+      "prompt": "skill:prove-coverage",
+      "provider": "claude",
+      "when": [
+        { "linesChanged": 541 },
+        { "linesWritten": 1000 }
+      ]
+    }
+  }
 }
 ```
 
-The env var must be set in both clauses, but either churn threshold firing is enough to run the review. This is the MongoDB/CSS-selector pattern.
+Either churn threshold firing is enough to run the review.
 
-### Condition reference
+### Strict condition reference
 
 | Condition | Type | Description |
 |-----------|------|-------------|
-| `fileExists` | string | Passes when file exists relative to project root |
-| `envSet` | string | Passes when environment variable is set |
-| `envNotSet` | string | Passes when environment variable is not set |
-| `variablesPresent` | string[] | Passes when all listed template variables resolve to non-empty values |
-| `signal` | string | Passes when the named signal (`done`, `stuck`, `idle`) is active for the current session |
-| `linesChanged` | number | Passes when at least N source lines have changed (additions + deletions) since the task last ran. Git-based—works in both Claude hooks and git hooks. |
-| `linesWritten` | number | Passes when at least N gross lines have been written by the agent since the task last ran. Catches thrashing. Claude Code sessions only. |
-| `sourcesModifiedSinceLastRun` | boolean | Passes when source file mtimes are newer than the last successful run. Works for any task type (script, agent, env). The dispatcher records run data on pass; failures are never cached so the task re-fires until it passes. Tasks without this condition always run (no implicit caching). |
-| `sourceFilesEdited` | boolean | Passes when source files were edited this turn (session-scoped, tool-agnostic). Works on PreToolUse, PostToolUse, and Stop. |
-| `testFilesEdited` | boolean | Passes when test files were edited this turn (session-scoped, tool-agnostic). Works on PreToolUse, PostToolUse, and Stop. |
-| `toolsUsed` | string[] | Passes when any of the listed tools were used this turn |
+| `signal` | `"done"`, `"stuck"`, or `"idle"` | Passes when the named Signal is active for the current session. |
+| `phase` | `"unknown"`, `"plan"`, `"implement"`, or `"refactor"` | Passes when the current clean phase state matches. |
+| `sourceFilesEdited` | boolean | Passes when source files were edited in the current session/turn observations. |
+| `testFilesEdited` | boolean | Passes when test files were edited in the current session/turn observations. |
+| `sourcesModifiedSinceLastRun` | boolean | Passes when configured source globs are newer than this task's last successful run. |
+| `linesChanged` | non-negative integer | Passes when at least N net source lines changed since the task's comparison point. |
+| `linesWritten` | non-negative integer | Passes when at least N gross source lines were written by the Primary Agent. |
+
+Legacy conditions such as `fileExists`, `envSet`, `envNotSet`, `variablesPresent`, `toolsUsed`, and task-level `resetOnFail` are not valid strict Clean Runtime config today.
 
 ### Git-based churn tracking (`linesChanged`)
 
-Each task using `linesChanged` stores a git ref at `refs/worktree/prove_it/<task-name>`. When the condition is evaluated, prove_it diffs the ref against the **working tree** (not just HEAD), filtered to your configured `sources` globs, summing additions and deletions. This means committed, staged, unstaged, and newly-created file changes all count—so Write/Edit tool calls trigger churn immediately without needing a commit. On first run the ref is created at HEAD (bootstrap—returns 0 if the working tree is clean). This is session-independent and worktree-safe. Refs are cleaned up by `prove_it deinit`.
-
-When a task passes or resets, the ref advances to a snapshot of the current working tree state (including untracked source files). This ensures all pending changes are captured—advancing to HEAD alone would be a no-op when churn comes from uncommitted Write/Edit operations.
-
-**`resetOnFail` behavior**: When a task fails, the ref advancement depends on the hook event:
-- **PreToolUse** (default `resetOnFail: true`): The ref advances on failure. Without this, the task deadlocks—it blocks every Write/Edit, including writes to test files that would fix the issue.
-- **Stop / git hooks** (default `resetOnFail: false`): The ref does NOT advance. The agent gets sent back to fix the issue, and the same accumulated churn keeps triggering the review.
-- You can override the default with an explicit `resetOnFail: true` or `resetOnFail: false` on the task.
+`linesChanged` measures net drift (git diff: what changed on disk), filtered to `globs.source`. It counts committed, staged, unstaged, and newly-created source-file changes when the adapter has enough repository context. Broader Worktree isolation for config, state, evidence, and adapter activation is future Platform Capability work.
 
 ### Gross churn tracking (`linesWritten`)
 
-While `linesChanged` measures **net** drift (git diff: what changed on disk), `linesWritten` measures **gross** activity (total lines the agent has written). This catches a different failure mode: thrashing. An agent that writes 500 lines, deletes them, rewrites them differently, and deletes again has written 2000 gross lines but may show 0 net churn. The gross counter catches this.
+`linesWritten` measures gross activity: total lines the Primary Agent has written, even if those lines are later deleted. This catches thrashing. Adapter observation quality can differ by Harness because tool payloads differ.
 
-Gross churn accumulates on every successful PreToolUse for Write/Edit/NotebookEdit to source files. Lines are counted from the tool input (no file I/O needed). The counter is stored as a git blob under `refs/worktree/prove_it/__gross_lines`, with per-task snapshots under `<task>.__gross_lines`. Increment uses compare-and-swap for multi-agent safety—concurrent agents can't lose each other's counts.
+### Session-scoped observations
 
-`resetOnFail` follows the same rules as `linesChanged`.
-
-### Session-scoped conditions
-
-`sourceFilesEdited`, `testFilesEdited`, and `toolsUsed` are **session-scoped**: they track which tools and files each Claude Code session uses, per-turn. After a successful Stop, the tracking resets so the next Stop only fires if new edits occur.
-
-These conditions solve cross-session bleed—unlike `sourcesModifiedSinceLastRun` (which uses global file timestamps), session-scoped conditions ensure Session A's edits don't trigger Session B's reviewers.
-
-**`sourceFilesEdited: true`**—gates a task on source file edits in the current turn:
-
-```json
-{
-  "name": "my-review",
-  "type": "agent",
-  "prompt": "Review the changes...",
-  "when": { "sourceFilesEdited": true }
-}
-```
-
-**`testFilesEdited: true`**—gates a task on test file edits (matched against `tests` globs):
-
-```json
-{
-  "name": "test-integrity",
-  "type": "agent",
-  "prompt": "Review test changes...",
-  "when": { "testFilesEdited": true }
-}
-```
-
-**`toolsUsed: ["XcodeEdit", "Edit"]`**—gates a task on specific tools being used:
-
-```json
-{
-  "name": "xcode-review",
-  "type": "agent",
-  "prompt": "Review Xcode changes...",
-  "when": { "toolsUsed": ["XcodeEdit"] }
-}
-```
+`sourceFilesEdited` and `testFilesEdited` are based on clean Session State observations recorded by the active Adapter. After successful Completion Verification, clean completion state can reset so the next verification only reflects new work.
 
 ### Signals
 
@@ -447,10 +429,16 @@ PreToolUse intercepts the `prove_it signal` command automatically—no extra con
 
 ```json
 {
-  "name": "full-tests",
-  "type": "script",
-  "command": "./script/test",
-  "when": { "signal": "done" }
+  "tasks": {
+    "full_tests": {
+      "type": "script",
+      "command": "./script/test",
+      "when": { "signal": "done" }
+    }
+  },
+  "agent_workflows": {
+    "agent_end": ["full_tests"]
+  }
 }
 ```
 
@@ -463,245 +451,166 @@ prove_it signal idle                         Declare idle / between tasks
 prove_it signal done -m "Ready for review"   Include a message
 ```
 
-## Agent tasks
+## Reviewer tasks
 
-Agent tasks spawn a separate AI process to review Claude's work with an independent PASS/FAIL verdict. This is useful because the reviewing agent has no stake in the code it's judging.
-
-By default, agent tasks use `claude -p` (Claude Code in pipe mode). The reviewer receives a wrapped prompt and must respond with `PASS`, `FAIL`, or `SKIP`.
+Reviewer Tasks ask an active-harness reviewer provider for an independent `PASS`, `FAIL`, or `SKIP` verdict. In the Claude parity profile, reviewer tasks use the Claude reviewer provider by default; the provider runs Claude Code in a reviewer subprocess and maps the result back into the Workflow Engine.
 
 ```json
 {
-  "name": "my-review",
-  "type": "agent",
-  "prompt": "Review recent changes for:\n1. Test coverage gaps\n2. Logic errors or edge cases\n3. Dead code\n\n{{files_changed_since_last_run}}\n\n{{recent_commits}}\n\n{{git_status}}"
+  "tasks": {
+    "coverage_review": {
+      "type": "reviewer",
+      "prompt": "skill:prove-coverage",
+      "provider": "claude",
+      "provider_options": {
+        "max_turns": 20,
+        "allowed_tools": ["Read", "Glob", "Grep", "Bash"],
+        "bypass_permissions": false,
+        "env": {
+          "TURBOCOMMIT_DISABLED": "1"
+        }
+      },
+      "when": { "linesChanged": 541 },
+      "async": true
+    }
+  },
+  "agent_workflows": {
+    "agent_end": ["coverage_review"]
+  }
 }
 ```
 
-### Template variables
+### Skill-backed reviewer prompts
 
-These expand in agent prompts:
-
-| Variable | Contents |
-|----------|----------|
-| `{{staged_diff}}` | `git diff --cached` (staged changes) |
-| `{{staged_files}}` | `git diff --cached --name-only` |
-| `{{working_diff}}` | `git diff` (unstaged changes) |
-| `{{changed_files}}` | `git diff --name-only HEAD` |
-| `{{session_diff}}` | All changes since session baseline (uses Claude Code file-history, falls back to git diff scoped to tracked files) |
-| `{{test_output}}` | Output from the most recent script check |
-| `{{tool_command}}` | The command Claude is trying to run |
-| `{{file_path}}` | The file Claude is trying to edit |
-| `{{project_dir}}` | Project directory |
-| `{{root_dir}}` | Git root directory (may differ from project_dir in monorepos) |
-| `{{session_id}}` | Current Claude Code session ID |
-| `{{git_head}}` | Current HEAD commit SHA |
-| `{{git_status}}` | `git status --short` (staged/modified/untracked files) |
-| `{{recent_commits}}` | `git log --oneline --stat -5` (last 5 commits with file stats) |
-| `{{files_changed_since_last_run}}` | Source files changed since this task's last run (sorted by recency; uses task ref → session baseline → HEAD cascade) |
-| `{{sources}}` | Configured source globs (one per line) |
-| `{{signal_message}}` | Message from the active signal (e.g., from `prove_it signal done -m "message"`) |
-| `{{changes_since_last_run}}` | `git diff --stat` since this task's last run (uses task ref → session baseline → HEAD cascade) |
-
-Conditional blocks are supported: `{{#var}}content{{/var}}` renders only when the variable is non-empty.
-
-### Skill-based prompts
-
-prove_it ships curated reviewer prompts as Claude Code [skills](https://code.claude.com/docs/en/skills). Reference them in your config with `promptType: "skill"`:
+prove_it ships curated reviewer prompts as Claude Code [skills](https://code.claude.com/docs/en/skills). In strict config, reference a skill with a `skill:` prompt value:
 
 ```json
-{ "type": "agent", "promptType": "skill", "prompt": "prove-coverage" }
+{
+  "type": "reviewer",
+  "prompt": "skill:prove-coverage",
+  "provider": "claude"
+}
 ```
+
+The Claude reviewer backend maps that strict value to Claude's skill invocation mechanics. Do not use legacy `promptType: "skill"` in strict `.prove_it/config.json`.
 
 | Skill | What it reviews |
 |-------|----------------|
 | `prove-approach` | Approach viability: detects cognitive fixation, performs root-cause analysis, and surfaces structurally different alternatives. Designed for Sonnet. |
 | `prove-coverage` | Session diffs for test coverage adequacy |
-| `prove-done` | Thorough pre-ship review: correctness, integration, security, tests, omissions. Uses `{{changes_since_last_run}}` for scope. Designed for Opus. |
+| `prove-done` | Thorough pre-ship review: correctness, integration, security, tests, omissions. Uses scoped change evidence for review. Designed for Opus. |
 | `prove-dry` | Codebase-wide duplication review: finds same-behavior implementations and prescribes EXTRACT refactors. Default PASS. |
 | `prove-test-validity` | Test quality review: catches tests that give false confidence (tautological assertions, closed-loop validation, excessive mocking, etc.). Designed for Opus. |
 
-Skills are installed to `~/.claude/skills/<name>/SKILL.md` by `prove_it install`. The prompt body is the skill file with its YAML frontmatter stripped.
+Skills are installed to `~/.claude/skills/<name>/SKILL.md` by `prove_it install`.
 
-### Rule files
+### Provider options
 
-Agent tasks accept a `ruleFile` field that injects the contents of a project-specific rule file into the reviewer prompt. This lets you define testing standards once and apply them to every reviewer:
+Claude reviewer subprocess settings are adapter/provider-owned. Use `provider_options`, not legacy top-level fields:
 
-```json
-{
-  "name": "coverage-review",
-  "type": "agent",
-  "prompt": "prove-coverage",
-  "promptType": "skill",
-  "ruleFile": ".claude/rules/testing.md"
-}
-```
+| Strict field | Replaces legacy concept |
+|---|---|
+| `provider_options.allowed_tools` | `taskAllowedTools` |
+| `provider_options.bypass_permissions` | `taskBypassPermissions` |
+| `provider_options.command` | custom reviewer command for the active provider |
+| `provider_options.env` | reviewer subprocess environment overrides for that task |
+| `provider_options.max_turns` | reviewer turn budget |
 
-The path is resolved relative to the project directory. If the file is missing, the task fails with a clear error—this is intentional so you don't silently run reviews without your rules.
+Active-harness enforcement is intentional. A Claude session must not invoke Codex-shaped reviewers through `gpt-*` model names or `codex exec -` commands. Codex is deferred for future adapter capability discovery and is not documented as an implemented clean-runtime adapter.
 
-`prove_it init` generates a default `.claude/rules/testing.md` with starter rules and a TODO for you to customize. The default agent tasks (`coverage-review`, `done-review`) both point to this file.
+### Reviewer prompt context
 
-### Model selection
-
-Agent tasks accept a `model` field to control which model the reviewer uses:
-
-```json
-{ "name": "coverage-review", "type": "agent",
-  "prompt": "Check test coverage...\n\n{{session_diff}}", "model": "haiku" }
-```
-
-Codex is deferred for future adapter capability discovery and is not documented as an implemented clean-runtime adapter.
-
-When no `model` is set and no custom `command` is provided, prove_it applies defaults:
-
-| Event | Default model | Rationale |
-|-------|--------------|-----------|
-| PreToolUse | `haiku` | Latency-sensitive gate check |
-| Stop | `haiku` | Latency-sensitive review |
-| pre-commit | `sonnet` | Thoroughness matters more |
-| pre-push | `sonnet` | Thoroughness matters more |
-
-You can also set a top-level `model` in config to apply a default across all agent tasks. An explicit `model` on a task always wins. Setting a custom `command` disables default model selection entirely.
-
-### Adversarial cross-platform review
-
-You can use a different AI for each reviewer, so the agent doing the work is checked by a competing model:
-
-```json
-{
-  "name": "commit-review",
-  "type": "agent",
-  "prompt": "Review staged changes for bugs and missing tests.\n\n{{staged_diff}}"
-},
-{
-  "name": "adversarial-review",
-  "type": "agent",
-  "command": "my-reviewer --stdin",
-  "prompt": "Second opinion: look for issues the primary reviewer might miss.\n\n{{staged_diff}}"
-}
-```
-
-The `command` field accepts any CLI that reads a prompt from stdin and writes its response to stdout. Defaults to `claude -p` in the current/legacy Claude task runner.
+The clean reviewer abstraction supplies provider-owned evidence such as session changes, git status, recent commits, Signal messages, and task context where available. The old README documented legacy template variables and `ruleFile`; those legacy config fields are not strict Clean Runtime API today. If you need reusable project-specific reviewer policy now, put it in a custom skill or directly in the reviewer `prompt`/`intent`.
 
 ### Async reviews
 
-Set `async: true` on an agent task to run it in the background:
+Set `async: true` on a reviewer task to run it in the background:
 
 ```json
 {
-  "name": "coverage-review",
-  "type": "agent",
-  "async": true,
-  "promptType": "skill",
-  "prompt": "prove-coverage",
-  "model": "haiku",
-  "when": { "linesChanged": 541 }
+  "tasks": {
+    "coverage_review": {
+      "type": "reviewer",
+      "prompt": "skill:prove-coverage",
+      "provider": "claude",
+      "when": { "linesChanged": 541 },
+      "async": true
+    }
+  }
 }
 ```
 
-Async tasks spawn a detached child process and return immediately, so they don't block Claude from continuing work. The lifecycle is:
-
-1. **Spawn**—prove_it forks a worker and lets the Stop pass
-2. **Run**—the worker runs the reviewer in the background (RUNNING → PASS/FAIL/SKIP)
-3. **Done**—the worker writes its result and logs DONE
-4. **Harvest**—on the next Stop, prove_it reads all pending results *before* running sync tasks
-5. **Enforce**—results are settled: ENFORCED:PASS lets the stop continue, a FAIL blocks just like a sync failure
-
-This means an async FAIL blocks Claude on the *next* stop, not the current one. The default config uses `async: true` for the coverage reviewer.
-
-`async` has no effect on SessionStart (which never blocks). PreToolUse tasks can technically be async, but the usefulness is limited since they run on every tool call.
+Async tasks launch and return immediately. Results are harvested on a later Workflow Stage; a deferred `FAIL` is enforced during Completion Verification.
 
 ### Parallel tasks
 
-Set `parallel: true` on a task to fork it immediately and await it at the end of the current hook invocation:
+Set `parallel: true` on a task to start it immediately and await it at the end of the current Workflow Stage:
 
 ```json
 {
-  "name": "full-tests",
-  "type": "script",
-  "command": "./script/test",
-  "parallel": true,
-  "when": { "signal": "done" }
+  "tasks": {
+    "full_tests": {
+      "type": "script",
+      "command": "./script/test",
+      "parallel": true,
+      "when": { "signal": "done" }
+    },
+    "done_review": {
+      "type": "reviewer",
+      "prompt": "skill:prove-done",
+      "provider": "claude",
+      "parallel": true,
+      "when": { "signal": "done" }
+    }
+  },
+  "agent_workflows": {
+    "agent_end": ["full_tests", "done_review"]
+  }
 }
 ```
 
-Parallel tasks run concurrently with each other and with subsequent serial tasks in the same Stop invocation. The dispatcher forks each parallel task as a child process, continues walking the task list, and awaits all parallel children after the loop completes. This cuts wall-clock time roughly in half when you have multiple independent heavyweight tasks (e.g., a full test suite and an AI reviewer).
-
-**Parallel vs async:**
-
-| | `parallel: true` | `async: true` |
-|---|---|---|
-| **When** | Fork now, await this invocation | Fork now, fire-and-forget |
-| **Enforcement** | Blocks this Stop if task fails | Blocks the *next* Stop |
-| **Use case** | Independent heavyweight tasks that must pass before Claude continues | Background reviews that can enforce later |
-
-`parallel` and `async` are mutually exclusive—setting both is a validation error. `parallel` has no effect on SessionStart (which never blocks). On serial task failure mid-loop, all parallel children are killed immediately.
-
-The default config uses `parallel: true` for `full-tests` and `done-review`.
+`parallel` and `async` are mutually exclusive; setting both is a validation error.
 
 ### Review backchannel
 
-When an agent reviewer FAILs, prove_it creates a backchannel directory where Claude can appeal the decision:
+When a Claude reviewer FAILs and an appeal is configured, prove_it creates a Claude Adapter-owned backchannel directory where Claude can appeal the decision:
 
 ```
 .claude/prove_it/sessions/<session-id>/backchannel/<task-name>/README.md
 ```
 
-The README is pre-populated with the failure reason and instructions. Claude can write a response explaining why the failure doesn't apply (planning work, code isn't theirs, changes are unrelated). On the next review cycle, the reviewer reads the backchannel content before rendering its verdict.
+That path is Claude Adapter-owned Session State, not Workflow Engine config. When a reviewer PASSes or SKIPs, the backchannel lifecycle is reset.
 
-When a reviewer PASSes or SKIPs, the backchannel is cleaned up automatically.
+## Retired legacy task features
 
-## Env tasks
+The Legacy Runtime had additional Claude-only config features such as `env` tasks, `ruleFile`, `promptType`, task-level `quiet`, task-level `enabled`, task-level `briefing`, top-level reviewer tool defaults, and `fileEditingTools`. They are not valid strict `.prove_it/config.json` fields after the Claude hard break. Some may return as explicit core capabilities or adapter/provider options in future slices.
 
-Env tasks run a command during SessionStart and inject the output as environment variables into Claude Code's session. They only run on `startup` and `resume` (not after `/clear` or compaction, where the environment is already set).
+## Built-in task implementations
+
+The Claude parity profile uses first-class strict task types where possible. For example, config protection is a `config_guard` task, not a legacy `guard-config` script with `params.paths`.
+
+Some standalone scripts still exist in `libexec/` for internal/profile use, but strict Project Config should prefer the documented task types and fields. If you configure a `script` task directly, the important strict fields are `command` and optional `timeout_ms`:
 
 ```json
 {
-  "type": "claude",
-  "event": "SessionStart",
-  "tasks": [
-    { "name": "load-env", "type": "env", "command": "./script/load_env.sh" }
-  ]
+  "tasks": {
+    "custom_check": {
+      "type": "script",
+      "command": "./script/custom_check",
+      "timeout_ms": 120000
+    }
+  },
+  "agent_workflows": {
+    "agent_end": ["custom_check"]
+  }
 }
 ```
 
-The command's stdout is parsed as environment variables. Three output formats work:
+## Session Start guidance
 
-```bash
-# .env format
-API_KEY=abc123
-DEBUG=true
+On Claude `SessionStart`, the Claude Adapter renders Clean Runtime context for the Primary Agent. This includes methodology guidance, active Signals, configured Workflow Engine tasks, and review/backchannel instructions where relevant. The output is adapter-rendered from the Effective Config; strict config does not use the legacy task-level `briefing` field.
 
-# export format
-export API_KEY=abc123
-export DEBUG="true"
-```
-
-```
-{"API_KEY": "abc123", "DEBUG": "true"}
-```
-
-Multiple env tasks merge in order—later tasks override earlier ones for the same key. If the command fails or output can't be parsed, the error is reported and execution continues.
-
-## Libexec scripts
-
-prove_it ships standalone scripts in `libexec/` for common infrastructure tasks:
-
-| Script | What it does |
-|--------|-------------|
-| `libexec/guard-config` | Blocks writes to guarded file paths. Uses `params.paths` (glob patterns) from stdin to determine which paths to block. Falls back to hardcoded prove_it config patterns when `params.paths` is absent. |
-| `libexec/briefing` | Renders a session orientation on SessionStart: active tasks, signal instructions, review process overview. |
-
-Configure them as `type: "script"` tasks with `command: "$(prove_it prefix)/libexec/<name>"`. The `$(prove_it prefix)` subshell resolves to prove_it's install directory, so the scripts work regardless of where prove_it is installed. Reviewer prompts are distributed as skills (see [Skill-based prompts](#skill-based-prompts)).
-
-## Session briefing
-
-On every SessionStart, the `libexec/briefing` script renders an orientation that's injected into Claude's context. It shows:
-
-- **Active tasks by event**—what runs on Stop, PreToolUse, git commit, etc.
-- **Signal instructions**—if any tasks are gated on signals, Claude gets explicit instructions to run `prove_it signal done` when a unit of work is complete
-- **Review process**—how FAIL verdicts work, how to use the backchannel to appeal, and that a supervisory process audits appeals
-
-The briefing is generated from your effective config, so it always reflects your actual setup. It filters out the briefing task itself to avoid recursion. If rendering fails, the session continues (briefing failure never blocks).
+Session Start guidance is non-blocking. If guidance rendering fails, the session continues rather than trapping the agent in a startup loop.
 
 ## Session phases
 
@@ -742,11 +651,9 @@ changed unintentionally.
 
 In **plan** mode, there's no enforcement — Claude is designing, not coding.
 
-### Phase briefing
+### Phase guidance
 
-When any task has a `briefing` field, its text is included in every SessionStart
-orientation. The default `inject-tdd-plan` task uses this to remind Claude of the
-TDD workflow regardless of which phase is active.
+The Claude parity profile includes phase-aware TDD guidance through Clean Runtime Session Start context and Pre Tool checks. Strict config does not support the legacy task-level `briefing` field.
 
 ## Monitoring
 
@@ -789,7 +696,7 @@ prove_it monitor <id>        # tail a specific session (prefix match OK)
 |------|---------|
 | `PASS` | Task passed |
 | `FAIL` | Task failed (blocks the action) |
-| `SKIP` | Task skipped (condition not met, disabled, cached, or reviewer said SKIP) |
+| `SKIP` | Task skipped (condition not met, suspended by appeal, cached, or reviewer said SKIP) |
 | `BOOM` | Task crashed (unexpected error—treated as a soft skip unless model is explicitly set) |
 | `EXEC` | Task is executing |
 | `DONE` | Async review complete, waiting for Stop hook to enforce |
@@ -831,86 +738,49 @@ prove_it ships review prompts that can be run manually or automatically:
 
 **Run manually** — invoke any skill as a slash command whenever you want a review. All run as subagents (`context: fork`), so they don't consume your conversation context.
 
-**Run automatically** — configure the same prompts as prove_it agent tasks and they'll fire on lifecycle events. The default config does this: `prove-coverage` runs async after churn thresholds are hit, `prove-done` runs on `prove_it signal done`, and `prove-approach` runs on `prove_it signal stuck`. `prove-test-validity` and `prove-dry` are not in the default config — add them when you want test quality or duplication gating. See [Skill-based prompts](#skill-based-prompts) for config details.
+**Run automatically** — configure the same prompts as strict `reviewer` tasks and they'll fire from Workflow Engine pipelines. The Claude parity profile does this: `prove-coverage` runs async after churn thresholds are hit, `prove-done` runs on `prove_it signal done`, and `prove-approach` runs on `prove_it signal stuck`. `prove-test-validity` and `prove-dry` are available skills but are not enabled by default. See [Skill-backed reviewer prompts](#skill-backed-reviewer-prompts) for config details.
 
-The manual and automatic paths use the same prompt — the difference is who triggers it (you vs. prove_it) and where it runs (Claude Code subagent vs. `claude -p` subprocess). Both produce an independent review outside the working agent's context.
+The manual and automatic paths use the same reviewer intent — the difference is who triggers it (you vs. prove_it) and where it runs (Claude Code subagent vs. the Claude reviewer provider). Both produce an independent review outside the working agent's context.
 
-## Subprocess environment (`taskEnv`)
+## Reviewer subprocess options
 
-When prove_it spawns reviewer subagents or runs script tasks, other hooks installed in your environment (like [turbocommit](https://github.com/searlsco/turbocommit)) may fire inside those subprocesses. Use the top-level `taskEnv` field to set environment variables across all prove_it subprocesses:
-
-```json
-{
-  "taskEnv": {
-    "TURBOCOMMIT_DISABLED": "1"
-  },
-  "hooks": { "claude": { "Stop": ["..."] } }
-}
-```
-
-These variables are merged into the environment of both script tasks and agent reviewer subprocesses. prove_it forces `PROVE_IT_DISABLED` and `PROVE_IT_SKIP_NOTIFY` in all subprocesses to prevent recursion—these cannot be overridden by `taskEnv`. Reviewer subprocesses additionally force `CLAUDECODE` and `LC_ALL`.
-
-**Merge order** (last wins):
-1. `process.env`—inherited base environment
-2. `taskEnv`—your config values
-3. prove_it forced vars—recursion prevention, always win
-
-## Managing subagent permissions
-
-Agent reviewer tasks run `claude -p` in non-interactive mode. In this mode, Claude Code requires explicit permission to use tools—there's nobody at the terminal to approve prompts. By default, prove_it passes `--allowedTools` with a list of common built-in tools ([`DEFAULT_ALLOWED_TOOLS`](https://github.com/searlsco/prove_it/search?q=DEFAULT_ALLOWED_TOOLS)). This covers most use cases.
-
-If your custom agent tasks need tools outside the default list (e.g., MCP tools), you have two options:
-
-**Expand the allowed list** with `taskAllowedTools` in your config:
+Claude reviewer subprocess settings are configured per strict `reviewer` task under `provider_options`. The old top-level fields `taskEnv`, `taskAllowedTools`, and `taskBypassPermissions` are Legacy Runtime config and are not valid strict `.prove_it/config.json` fields.
 
 ```json
 {
-  "taskAllowedTools": ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "WebFetch", "WebSearch", "Task", "NotebookEdit", "mcp__xcode__XcodeBuild"],
-  "hooks": { "claude": { "Stop": ["..."] } }
+  "tasks": {
+    "done_review": {
+      "type": "reviewer",
+      "prompt": "skill:prove-done",
+      "provider": "claude",
+      "provider_options": {
+        "allowed_tools": ["Read", "Glob", "Grep", "Bash", "Task"],
+        "bypass_permissions": false,
+        "env": {
+          "TURBOCOMMIT_DISABLED": "1"
+        },
+        "max_turns": 20
+      }
+    }
+  }
 }
 ```
 
-**Skip permissions entirely** with `taskBypassPermissions`:
+## Adapter observation limits
 
-```json
-{
-  "taskBypassPermissions": true,
-  "hooks": { "claude": { "Stop": ["..."] } }
-}
-```
-
-This passes `--dangerously-skip-permissions` to reviewer subprocesses, giving them access to all tools with no restrictions. prove_it already isolates reviewer subprocesses (`PROVE_IT_DISABLED=1`, no recursion), but the subprocess has full tool access.
-
-When neither field is set, prove_it auto-detects: if your Claude Code settings use `bypassPermissions` mode, reviewers inherit that; otherwise they use the default allowed list.
-
-## Tracking MCP editing tools (`fileEditingTools`)
-
-By default, prove_it tracks Claude's built-in editing tools (`Edit`, `Write`, `NotebookEdit`). If Claude edits files through MCP tools (e.g. Xcode MCP's `XcodeEdit`), add them to `fileEditingTools` so prove_it can track them:
-
-```json
-{
-  "fileEditingTools": ["XcodeEdit"],
-  "sources": ["**/*.swift", "**/*.m"],
-  "hooks": { "claude": { "Stop": ["..."] } }
-}
-```
-
-Tools listed in `fileEditingTools` are tracked alongside the builtins—they participate in `sourceFilesEdited`, `testFilesEdited`, `toolsUsed`, gross churn (`linesWritten`), and the `session_diff` git fallback. For gross churn, line counts are estimated from the longest string value in the tool input.
+The Workflow Engine reasons over normalized observations such as `sourceFilesEdited`, `testFilesEdited`, `linesChanged`, and `linesWritten`. Mapping harness-specific tool payloads into those observations is adapter-owned. The old top-level `fileEditingTools` field is not part of strict config today; future adapter-specific observation settings should live under explicit adapter config once supported.
 
 ## Session management
 
-prove_it stores session data in `~/.claude/prove_it/sessions/`—log files (`.jsonl`), state files (`.json`), and async task directories.
+For Claude sessions, prove_it stores adapter-owned session data in `~/.claude/prove_it/sessions/`—log files (`.jsonl`), state files (`.json`), and async task directories. This is Session State, not Project Config.
 
 **Lazy cleanup**: On every fresh session start (`startup` source), prove_it prunes session files older than 7 days. Pruning is rate-limited to once per 24 hours (tracked via a `.last_prune` marker file), so it adds no overhead to normal operation.
 
-**`format.maxOutputChars`**: Controls the maximum character count for output passed back to Claude Code hooks. Defaults to 12000. Increase if you need longer test output or decrease to save context:
+Output truncation and hook-context formatting are adapter-owned details today; strict `.prove_it/config.json` does not currently expose the legacy `format.maxOutputChars` field.
 
-```json
-{
-  "format": { "maxOutputChars": 20000 },
-  "hooks": { "claude": { "Stop": ["..."] } }
-}
-```
+## Worktrees
+
+Worktree support is future Platform Capability work, not part of the Claude Parity Cutover. The intended direction is isolated boundaries for Project Config, Local Config, Session State, Evidence, reviewer/backchannel artifacts, and adapter activation per Worktree. Do not treat current Claude or Pi adapter-owned paths as the final Worktree boundary model.
 
 ## Commands
 
@@ -918,7 +788,7 @@ prove_it stores session data in `~/.claude/prove_it/sessions/`—log files (`.js
 prove_it install        Register global hooks (~/.claude/settings.json)
 prove_it uninstall      Remove global hooks
 prove_it reinstall      Uninstall and reinstall global hooks
-prove_it init           Set up current project (interactive or with flags)
+prove_it init --adapter <id>  Set up strict .prove_it project config and adapter artifacts
 prove_it deinit         Remove prove_it from current project
 prove_it reinit         Deinit and re-init current repository
 prove_it doctor         Check installation and show effective config
@@ -938,58 +808,37 @@ prove_it --version      Show version
 
 ## Disabling prove_it
 
-prove_it defaults to `enabled: false`—it only runs when explicitly opted in via
-`prove_it install` (global) or `prove_it init` (project). Both write `enabled: true`
-to their respective config files.
+For Clean Runtime projects, prefer session-scoped controls when you need prove_it out of the way temporarily:
 
-When you need to disable it after installation:
-
-### Ignore specific directories
-
-Edit `~/.claude/prove_it/config.json`:
-
-```json
-{
-  "ignoredPaths": ["~/bin", "~/dotfiles"]
-}
+```bash
+! prove_it disable   # silence Pre Tool / Completion Verification hooks for this session
+! prove_it enable    # restore them
+! prove_it cancel    # stop running hook tasks for this session
 ```
 
-### Disable for a project
+This works because the Claude Adapter injects `PROVE_IT_SESSION_ID` into the shell on Session Start. The disabled state is keyed to that session id, so other sessions are unaffected. On resume of a disabled session, Claude receives a reminder to run `! prove_it enable` if you want hooks restored.
 
-For all contributors—edit `.claude/prove_it/config.json`:
-```json
-{ "enabled": false }
-```
-
-For just you—edit `.claude/prove_it/config.local.json`:
-```json
-{ "enabled": false }
-```
-
-### Disable with an environment variable
+For all Harnesses, you can also disable prove_it with an environment variable:
 
 ```bash
 export PROVE_IT_DISABLED=1
 ```
 
-### Disable for the current Claude session only
+To disable an adapter persistently, edit strict `.prove_it/config.json` (or your local `.prove_it/config.local.json`) and set that adapter to `enabled: false`:
 
-When a running Claude session is generating too much noise and you just want
-prove_it out of the way for the rest of the session:
-
-```bash
-! prove_it disable   # silences PreToolUse / Stop / PostToolUse hooks for this session
-! prove_it enable    # restore them
+```json
+{
+  "schema_version": 1,
+  "profile_version": "prove_it.strict.v1",
+  "adapters": {
+    "claude": { "enabled": false }
+  }
+}
 ```
 
-This works because prove_it injects `PROVE_IT_SESSION_ID` into the shell on
-SessionStart. The disabled state is keyed to that session id — other sessions
-(including new Claude windows) are unaffected. On resume of a disabled session,
-you'll see a one-line reminder in your terminal telling you to run
-`! prove_it enable` to restore hooks.
+Do not edit `.claude/prove_it/config.json` or `.claude/prove_it/config.local.json` for Clean Runtime behavior; normal Claude hook dispatch ignores those retired legacy files.
 
-Git hooks (pre-commit, pre-push) are not session-scoped and continue to run.
-Use `git commit --no-verify` if you need to bypass those.
+Git hooks (pre-commit, pre-push) are not session-scoped and continue to run. Use `git commit --no-verify` if you need to bypass those.
 
 ### Catch reviewers up after a big repo change
 
@@ -1020,15 +869,10 @@ prove_it doctor
 - **Hooks not firing**—Restart Claude Code after `prove_it install`
 - **Tests not running**—Check `./script/test` exists and is executable (`chmod +x`)
 - **Hooks running in wrong directories**—prove_it only activates in git repos
-- **Reviews never fire**—The default `when` conditions use churn thresholds (`linesChanged`, `linesWritten`). Reviews only trigger after enough code has been written. Check `prove_it monitor` to see skip reasons with current/threshold counts. If you use MCP tools that edit files (e.g. Xcode MCP's `XcodeEdit`), add them to `fileEditingTools` so all churn tracking works for those tools:
-  ```json
-  {
-    "fileEditingTools": ["XcodeEdit"],
-    "hooks": { "claude": { "Stop": ["..."] } }
-  }
-  ```
+- **Reviews never fire**—The default `when` conditions use churn thresholds (`linesChanged`, `linesWritten`). Reviews only trigger after enough code has been written. Check `prove_it monitor` to see skip reasons with current/threshold counts. If edits happen through a harness tool the adapter does not recognize as file editing, strict config does not yet expose the legacy `fileEditingTools` override; that is future adapter-observation work.
 - **Async reviews not enforcing**—Async results are harvested on the next Stop. If Claude stops work before the async review completes, the result will be enforced on the stop after that. Check `prove_it monitor --verbose` to see RUNNING/DONE status progression.
 - **Hooks hanging or taking too long**—Press escape in Claude Code to dismiss the hook UI, then run `! prove_it cancel` to kill all running tasks for the current session. The hook exits with approve so Claude can continue. This works because prove_it injects `PROVE_IT_SESSION_ID` into your shell environment on session start.
+- **Stale `.claude/prove_it` configs reported**—After the Claude hard break, normal Claude hook dispatch ignores `.claude/prove_it/config.json` and `.claude/prove_it/config.local.json`. Move retained workflow intent into strict `.prove_it/config.json`; there is no migration command or dual-runtime compatibility mode.
 - **Config errors after upgrade**—Run `prove_it reinstall && prove_it reinit` to reset to current defaults
 
 ## Cookbook
@@ -1061,41 +905,37 @@ SCRIPT
 chmod +x ~/bin/prove_it_tasks/prefer_gh_cli_over_fetch
 ```
 
-**2. Add to your global config** (`~/.claude/prove_it/config.json`):
+**2. Add it to strict `.prove_it/config.json`**:
 
 ```json
 {
-  "hooks": {
-    "claude": {
-      "PreToolUse": [
-        {
-          "name": "prefer-gh-cli-over-fetch",
-          "type": "script",
-          "command": "~/bin/prove_it_tasks/prefer_gh_cli_over_fetch",
-          "quiet": true
-        }
-      ]
+  "tasks": {
+    "prefer_gh_cli_over_fetch": {
+      "type": "script",
+      "command": "~/bin/prove_it_tasks/prefer_gh_cli_over_fetch",
+      "matcher": "WebFetch"
     }
+  },
+  "agent_workflows": {
+    "pre_tool": ["prefer_gh_cli_over_fetch"]
   }
 }
 ```
 
-`quiet: true` suppresses log noise on every pass (most tool calls aren't WebFetch).
-
-**How it works:** prove_it pipes hook context (tool name, tool input, session ID) as JSON to script tasks on stdin. The script reads stdin, checks whether the tool is `WebFetch` with a GitHub URL, and exits 1 to deny it. Non-WebFetch tools exit 0 immediately. Because the task has no `matcher`, prove_it sees all tool calls—individual scripts bail early for irrelevant tools.
+**How it works:** prove_it pipes normalized hook context (tool name, tool input, session ID) as JSON to script tasks on stdin. The `matcher` limits the task to `WebFetch`; the script then checks whether the URL is GitHub and exits 1 to deny it.
 
 ## Examples
 
 Clean-runtime examples:
 
 - [`example/pi-strict/`](example/pi-strict/) — Pi-first strict `.prove_it` project using `@davemo/pi-prove-it`.
-- [`example/claude-fast-follow/`](example/claude-fast-follow/) — Claude fast-follow adapter project with strict `.prove_it` artifacts and partial clean-runtime migration notes.
-- [`example/multi-adapter/`](example/multi-adapter/) — Pi + Claude strict `.prove_it` project without implying end-to-end strict Claude workflow enforcement or cross-harness human review gates.
+- [`example/claude-fast-follow/`](example/claude-fast-follow/) — Claude parity project with strict `.prove_it` config. The directory name is historical from the fast-follow phase.
+- [`example/multi-adapter/`](example/multi-adapter/) — Pi + Claude strict `.prove_it` project using `profile: "strict"` so Pi does not inherit Claude-only defaults.
 
-Current/legacy Claude examples:
+Legacy characterization examples retained for test-only oracle coverage:
 
-- [`example/basic/`](example/basic/)
-- [`example/advanced/`](example/advanced/)
+- [`example/basic/`](example/basic/) — retired `.claude/prove_it` config, not recommended for new projects.
+- [`example/advanced/`](example/advanced/) — retired `.claude/prove_it` config, not recommended for new projects.
 
 Human review is downstream/external to prove_it core; examples do not model human approval as a core prove_it gate. Codex is deferred for future adapter capability discovery and is not documented as an implemented clean-runtime adapter.
 

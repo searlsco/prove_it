@@ -1,48 +1,87 @@
-# Adapter capabilities and clean-runtime examples
+# Adapter capabilities and Clean Runtime examples
 
-prove_it is a methodology/workflow engine. The clean runtime defines workflow intent in strict `.prove_it/config.json`; each adapter maps that workflow to the enforcement mechanisms its harness actually supports.
+prove_it is a methodology/workflow engine. The Clean Runtime evaluates strict `.prove_it/config.json` as the Workflow Engine source of truth. Claude Code and Pi are Harnesses; the Claude Adapter and Pi Adapter translate harness-native events into normalized Workflow Stages and render Workflow Engine Effects back to each Harness.
 
-Pi is first-class. Pi is the fully wired clean-runtime adapter path today. Claude is a fast-follow adapter: the current work added adapter/effect boundaries plus shared signal lifecycle and Stop settlement, but Claude dispatch does not yet generally consume strict `.prove_it/config.json` as its workflow source. Current Claude hard PreToolUse/Stop behavior exists in the old/current Claude path, while Claude strict clean-runtime migration is partial/fast-follow. Codex is deferred for future capability discovery and is not documented here as an implemented adapter.
+Adapter mechanics differ by Harness capability, but product behavior should be described in Workflow Engine terms: Project Config, Tasks, Pipelines, Signals, Completion Verification, Session State, Evidence, Hard Blocks, and Remediation.
 
-## Strict clean-runtime setup
+Codex is deferred for future capability discovery and is not documented here as an implemented adapter.
 
-Use explicit adapters for new clean-runtime projects:
+## Strict setup
+
+Use explicit adapters for new projects:
 
 ```bash
+prove_it init --adapter claude
 prove_it init --adapter pi
 prove_it init --adapter pi --adapter claude
 ```
 
-These commands write strict shared config under `.prove_it/`:
+These commands write shared config and ownership records under `.prove_it/`:
 
-- `.prove_it/config.json` — workflow config for the clean runtime.
+- `.prove_it/config.json` — strict Workflow Engine Project Config.
+- `.prove_it/config.local.json` — developer-local strict overrides.
 - `.prove_it/ownership.json` — manifest for prove_it-owned artifacts.
-- `.prove_it/.gitignore` — excludes local clean-runtime overrides such as `config.local.json`.
+- `.prove_it/.gitignore` — excludes local clean-runtime overrides.
 
-The clean runtime does not read legacy `.claude/prove_it` config. Legacy `.claude/prove_it/config.json` remains old/current Claude product behavior, not compatibility input for the clean runtime.
+Adapter-native files activate their Harnesses:
 
-Inspect the effective clean-runtime config with:
+- Claude: `.claude/settings.json` registers hooks that call `prove_it hook claude:*`.
+- Pi: `.pi/settings.json` or `pi install -l npm:@davemo/pi-prove-it` activates the Pi package.
+
+`.claude/settings.json` and `.pi/settings.json` are Adapter Artifacts, not workflow config.
+
+Inspect the effective Project Config with:
 
 ```bash
 prove_it explain
 ```
 
-Check installation and adapter capability diagnostics with:
+Check installation, stale legacy config, and adapter capability diagnostics with:
 
 ```bash
 prove_it doctor
 ```
 
-## Pi-first usage
+## Claude parity behavior
 
-Install the Pi package in a project or globally:
+`prove_it init --adapter claude` writes strict `.prove_it/config.json` with `profile: "claude"` and Claude-native `.claude/settings.json` hook registrations. Normal `prove_it hook claude:<Event>` dispatch uses strict `.prove_it/config.json` and clean Session State.
+
+The Claude Parity Cutover is a hard break from Claude Legacy Config:
+
+- `.claude/prove_it/config.json` is ignored by normal Claude hook dispatch.
+- `.claude/prove_it/config.local.json` is ignored by normal Claude hook dispatch.
+- `prove_it doctor` reports stale legacy Claude configs as ignored.
+- There is no `.claude/prove_it` → `.prove_it` migration command.
+- There is no supported dual-runtime compatibility mode.
+- Legacy Claude characterization paths are quarantined behind a test-only oracle guard and are not user-facing runtime behavior.
+
+Claude parity currently covers the product behaviors Justin should be able to validate manually:
+
+- **Session Start briefing / methodology context** — Claude receives Workflow Engine context at Session Start, including Signals, configured Tasks, and methodology guidance.
+- **Protected `.prove_it` config edits** — Pre Tool config guards hard-block writes to `.prove_it/config.json` and `.prove_it/config.local.json`.
+- **Test-first guidance** — the Claude profile includes TDD-forward guidance and test-first enforcement where configured.
+- **Done/Stuck Signal behavior** — `prove_it signal done`, `stuck`, and `idle` update Session State; passing Completion Verification clears Done, while failing verification preserves it.
+- **Done-gated fast/full tests** — fast tests run on Completion Verification when relevant; full tests run for Done-signaled source edits according to the Claude profile.
+- **Reviewer Tasks** — Done, Stuck/Approach, coverage, and testing-pattern Reviewer Tasks run from Workflow Engine Pipelines with Claude as the reviewer provider.
+- **Backchannel appeals** — failed Claude Reviewer Tasks create adapter-owned backchannel files that Claude can use to appeal a verdict before the next review cycle.
+- **Phase / plan-file behavior** — `prove_it phase ...` updates phase state, and Claude plan-file mechanics inject Done/phase instructions when plan tooling exposes the required data.
+- **TaskCompleted auto-signaling** — Claude `TaskCompleted` can set a Done Signal automatically when the task subject matches the Done-signal guidance and Done-gated Tasks exist.
+- **Disable/enable/cancel controls** — session-scoped `prove_it disable`, `prove_it enable`, and `prove_it cancel` work through clean Session State and Claude effect rendering.
+
+Claude-specific mechanics remain adapter-owned: Claude hook names, hook JSON schemas, `.claude/settings.json`, `CLAUDE_ENV_FILE`, Claude Stop hard blocks, Claude file history, and Claude backchannel paths.
+
+See [`example/claude-fast-follow/`](../example/claude-fast-follow/) for a Claude parity example. The directory name is historical; the README describes the completed hard-break behavior.
+
+## Pi behavior
+
+`prove_it init --adapter pi` writes strict `.prove_it/config.json` with `profile: "strict"`. Install the Pi package in a project or globally:
 
 ```bash
 pi install -l npm:@davemo/pi-prove-it
 # or: pi install npm:@davemo/pi-prove-it
 ```
 
-The package identity is `@davemo/pi-prove-it`. A project-local `.pi/settings.json` can declare it directly:
+A project-local `.pi/settings.json` can declare it directly:
 
 ```json
 {
@@ -50,33 +89,20 @@ The package identity is `@davemo/pi-prove-it`. A project-local `.pi/settings.jso
 }
 ```
 
-The Pi extension currently provides:
+Pi is first-class. Its behavior differs by Capability Profile, not by an experimental support label. The Pi Adapter currently provides:
 
-- methodology prompt injection before the agent starts;
+- methodology prompt injection before the Primary Agent starts;
 - hard pre-tool config guard blocking through Pi `tool_call`;
-- model-callable `prove_it_signal` for shared signal semantics;
-- completion verification from Pi `turn_end`, with `agent_end` settlement as a fallback;
-- remediation follow-up when completion verification fails.
+- model-callable `prove_it_signal` for shared Signal semantics;
+- Pi Session State integration;
+- Completion Verification from Pi `turn_end`, with `agent_end` settlement as a fallback;
+- remediation follow-up when Completion Verification fails.
 
-Pi completion verification is remediation from `turn_end`, not hard Stop parity. When verification fails, prove_it asks Pi to continue and remediate; it does not claim that Pi has Claude-style Stop blocking.
+Pi Completion Verification is remediation from `turn_end`, not Claude-style hard Stop blocking. When verification fails, prove_it asks Pi to continue and remediate; it does not claim that Pi has a hard Stop primitive.
 
 See [`example/pi-strict/`](../example/pi-strict/) for the smallest Pi-first strict `.prove_it` project.
 
-## Claude fast-follow usage
-
-Claude activation is adapter-native: `.claude/settings.json` registers Claude hooks that call `prove_it hook claude:*`, and `.prove_it/config.json` records strict clean-runtime intent for the fast-follow adapter. Do not treat that file as the full source of truth for Claude task enforcement yet.
-
-Claude fast-follow behavior currently includes:
-
-- narrow PreToolUse guard paths through shared effects;
-- Stop signal settlement through the shared lifecycle;
-- Claude protocol output owned by the Claude adapter, because Claude PreToolUse and Stop use different hook output schemas.
-
-Claude dispatch does not yet generally consume strict `.prove_it/config.json` as its workflow source. Current Claude hard PreToolUse/Stop behavior exists in the old/current Claude path, which reads `.claude/prove_it/config.json`; strict clean-runtime Claude migration is partial/fast-follow.
-
-See [`example/claude-fast-follow/`](../example/claude-fast-follow/) for a Claude fast-follow project that shows strict owned artifacts without claiming end-to-end strict workflow enforcement.
-
-## Multi-adapter usage
+## Multi-adapter behavior
 
 A multi-adapter project can enable both Pi and Claude:
 
@@ -85,29 +111,46 @@ prove_it init --adapter pi --adapter claude
 pi install -l npm:@davemo/pi-prove-it
 ```
 
-This is useful when a team uses both harnesses and wants one strict `.prove_it` intent file. Pi consumes that clean-runtime path end to end today; Claude records adapter intent and native hook activation while its strict workflow enforcement remains partial/fast-follow. It should not imply end-to-end strict Claude workflow enforcement, cross-harness reviewers, shared session artifacts, or prove_it-managed human approval.
+Multi-adapter init currently writes `profile: "strict"` so Pi does not inherit Claude-only default mechanics. The generated Project Config enables both adapters, and adapter-native activation files connect each Harness to the same Workflow Engine model.
 
-Human review is downstream/external to prove_it core. Treat human review as a code-review, release, or team policy after prove_it reports its machine-verifiable status.
+This does not imply cross-harness reviewers, shared session artifacts, or prove_it-managed human approval. Human review is downstream/external to prove_it core; treat it as code-review, release, or team policy after prove_it reports its machine-verifiable status.
 
-See [`example/multi-adapter/`](../example/multi-adapter/) for a strict `.prove_it` example with Pi native activation and Claude fast-follow native hook activation.
+See [`example/multi-adapter/`](../example/multi-adapter/) for a strict `.prove_it` example with Pi and Claude activation artifacts.
 
 ## Capability comparison matrix
 
 | Capability | Pi | Claude |
 |---|---|---|
-| Methodology prompt injection | Available before `before_agent_start` | Adapter-specific session context through Claude hooks |
-| Pre-tool config guard | hard block via Pi `tool_call` | hard block in the old/current Claude `PreToolUse` path; strict clean-runtime bridge currently covers narrow guard paths |
-| Post-tool observation | observe-only via Pi `tool_result` | observable through Claude post-tool hooks in the old/current Claude product |
-| Model-callable signals | available through `prove_it_signal` | command-based `prove_it signal ...` through Claude tool use |
-| Session state | available through Pi session state entries | adapter-owned Claude session/log state |
-| Completion verification | remediation after `turn_end` | hard block in the old/current Claude `Stop` path; shared signal settlement exists, but strict `.prove_it` task workflow is not the general source yet |
-| Protocol rendering | Pi extension return values and remediation messages | Claude adapter owns Claude hook JSON output |
+| Context / prompt injection | available before `before_agent_start` | available through Claude Session Start context |
+| Pre-tool config guard | hard block via Pi `tool_call` | hard block via Claude `PreToolUse` |
+| Post-tool observation | observe-only via Pi `tool_result` | observable through Claude post-tool hooks |
+| Model-callable / command Signals | model-callable `prove_it_signal` | command interception for `prove_it signal ...` |
+| Session State | Pi session state entries | Claude adapter-owned filesystem-backed Session State |
+| Completion Verification | remediation after `turn_end` | hard block via Claude `Stop` |
+| Protocol rendering | Pi extension return values and remediation messages | Claude Adapter owns Claude hook JSON output |
 
-The matrix intentionally distinguishes hard block from remediation. A hard block prevents the guarded action or completion in that harness. Remediation means the harness has reached a post-turn or completion lifecycle point, so prove_it queues or asks for follow-up work instead of claiming hard enforcement.
+A hard block prevents the guarded action or completion in that Harness. Remediation means the Harness has reached a post-turn or completion lifecycle point, so prove_it queues or asks for follow-up work instead of claiming hard enforcement.
+
+## Retired legacy config
+
+`.claude/prove_it/config.json` and `.claude/prove_it/config.local.json` are Claude Legacy Config from the Legacy Runtime. They are not Clean Runtime input, they are not merged into the Effective Config, and they are not a fallback when strict `.prove_it/config.json` is missing.
+
+If they remain in a repository, `prove_it doctor` reports them as stale and ignored. Move any retained workflow intent manually into `.prove_it/config.json`.
+
+## Future Platform Capability: worktrees
+
+Worktree support is future Platform Capability work, not part of the Claude Parity Cutover. The intended direction is isolated boundaries for:
+
+- Project Config and Local Config per Worktree;
+- Session State per active Harness session and Worktree;
+- Evidence, reviewer logs, and backchannel files scoped to the correct Worktree;
+- adapter activation artifacts that do not bleed across checkouts.
+
+Do not treat current adapter-specific paths as the final Worktree boundary model.
 
 ## What is not implemented here
 
-- Codex is deferred for future adapter capability discovery. Do not treat Codex as an implemented clean-runtime adapter.
-- Legacy `.claude/prove_it` config is not clean-runtime input.
-- Generated session logs and backchannel artifacts are runtime state, not example source files.
+- Codex support is deferred.
+- A legacy config migration command is not implemented.
+- A dual-runtime compatibility mode is not supported.
 - Human review is downstream/external to prove_it core, not a built-in prove_it gate.

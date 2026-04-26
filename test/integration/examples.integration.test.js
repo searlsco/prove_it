@@ -3,8 +3,42 @@ const assert = require('node:assert')
 const path = require('path')
 const { spawnSync } = require('child_process')
 
+const fs = require('fs')
+
 const EXAMPLE_DIR = path.join(__dirname, '..', '..', 'example')
 const EXAMPLES = ['basic', 'advanced']
+const STRICT_EXAMPLES = {
+  'pi-strict': {
+    profile: 'strict',
+    adapters: { pi: { enabled: true }, claude: { enabled: false } }
+  },
+  'multi-adapter': {
+    profile: 'strict',
+    adapters: { pi: { enabled: true }, claude: { enabled: true } }
+  },
+  'claude-fast-follow': {
+    profile: 'claude',
+    adapters: { pi: { enabled: false }, claude: { enabled: true } }
+  }
+}
+
+describe('strict example configs', () => {
+  for (const [name, expected] of Object.entries(STRICT_EXAMPLES)) {
+    it(`${name} declares the init profile and omits legacy Claude workflow config`, () => {
+      const dir = path.join(EXAMPLE_DIR, name)
+      const config = JSON.parse(fs.readFileSync(path.join(dir, '.prove_it', 'config.json'), 'utf8'))
+
+      assert.deepStrictEqual(config, {
+        schema_version: 1,
+        profile_version: 'prove_it.strict.v1',
+        profile: expected.profile,
+        adapters: expected.adapters
+      })
+      assert.ok(!fs.existsSync(path.join(dir, '.claude', 'prove_it', 'config.json')))
+      assert.ok(!fs.existsSync(path.join(dir, '.claude', 'prove_it', 'config.local.json')))
+    })
+  }
+})
 
 describe('example hook dispatch', () => {
   const supportDir = path.join(EXAMPLE_DIR, 'support')

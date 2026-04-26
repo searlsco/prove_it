@@ -1,6 +1,6 @@
-# Claude fast-follow strict `.prove_it` example
+# Claude parity strict `.prove_it` example
 
-This example shows Claude as a fast-follow adapter with strict `.prove_it` artifacts, without claiming end-to-end strict Claude workflow enforcement.
+This example shows Claude after the Clean Runtime hard break. The directory name is historical from the fast-follow phase; the behavior documented here is the completed Claude Parity Cutover.
 
 ## Create it
 
@@ -10,20 +10,33 @@ prove_it init --adapter claude
 
 ## Files that matter
 
-- `.prove_it/config.json` — strict clean-runtime intent and adapter metadata.
+- `.prove_it/config.json` — strict Workflow Engine Project Config with `profile: "claude"`.
 - `.prove_it/ownership.json` — manifest for prove_it-owned generated files.
-- `.claude/settings.json` — Claude-native hook registrations that call `prove_it hook claude:*`.
+- `.claude/settings.json` — Claude Adapter activation and hook registrations that call `prove_it hook claude:*`.
 
-The clean runtime does not read legacy `.claude/prove_it` config. Legacy `.claude/prove_it/config.json` remains old/current Claude product behavior, not clean-runtime compatibility, so this example intentionally omits it.
+`.claude/settings.json` is not workflow config. It is a Claude-native Adapter Artifact.
 
-## Enforcement model
+## Hard-break behavior
 
-Claude strict clean-runtime migration is partial/fast-follow:
+Normal Claude hook dispatch uses strict `.prove_it/config.json` and clean Session State. It ignores stale `.claude/prove_it/config.json` and `.claude/prove_it/config.local.json` as workflow config. There is no legacy config migration command and no supported dual-runtime compatibility mode.
 
-- narrow PreToolUse guard paths run through shared effects and render Claude-owned protocol output;
-- Stop signal settlement uses shared lifecycle semantics;
-- Claude protocol JSON remains adapter-owned because Claude's hook API has its own schemas.
+`prove_it doctor` reports stale legacy Claude configs as ignored after the hard break.
 
-Claude dispatch does not yet generally consume strict `.prove_it/config.json` as its workflow source. Current Claude hard PreToolUse/Stop behavior exists in the old/current Claude path, which reads `.claude/prove_it/config.json`; this strict example intentionally omits that legacy config because the clean runtime does not read it.
+## Claude parity behavior
+
+This example uses the Claude parity profile so Claude can exercise retained product behavior through the Clean Runtime:
+
+- Session Start briefing and methodology context;
+- protected `.prove_it` config edits;
+- test-first guidance;
+- Done/Stuck Signal behavior;
+- Done-gated fast/full tests;
+- Done, Stuck/Approach, coverage, and testing-pattern Reviewer Tasks;
+- backchannel appeal behavior for reviewer FAILs;
+- phase and plan-file behavior;
+- TaskCompleted auto-signaling;
+- disable/enable/cancel session control.
+
+Claude-specific mechanics remain adapter-owned: hook names, hook JSON schemas, `.claude/settings.json`, `CLAUDE_ENV_FILE`, Claude Stop hard blocks, file-history access, and backchannel file paths.
 
 Human review is downstream/external to prove_it core; this example does not configure human review as a prove_it gate.
