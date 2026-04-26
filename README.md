@@ -308,11 +308,17 @@ Task fields currently accepted by strict config are intentionally narrow:
 
 - common: `type`, `description`, `matcher`, `triggers`, `when`, `async`, `parallel`, `failure_behavior`, `appeal`;
 - `config_guard`: `protected_paths`;
-- `script`: `command`, `timeout_ms`;
+- `script`: `command`, `params`, `env`, `timeout_ms`;
 - `reviewer`: `intent`, `prompt`, `model`, `provider`, `provider_options`, `timeout_ms`;
 - `agent`: `prompt`, `model`.
 
-Legacy Claude Runtime fields such as `params`, `quiet`, `briefing`, `enabled`, `promptType`, `ruleFile`, `taskEnv`, `taskAllowedTools`, `taskBypassPermissions`, `fileEditingTools`, and `timeout` are not valid strict `.prove_it/config.json` fields. Some underlying behaviors may return later as core or adapter/provider options, but do not document or rely on the legacy spellings for Clean Runtime projects. Use `timeout_ms` for strict task timeouts.
+Strict `script` task execution options are clean Workflow Engine capabilities:
+
+- `params` must be a JSON object and is passed to the script task on stdin as `input.params`.
+- `env` must be an object whose values are strings and is applied only to that task's process.
+- `timeout_ms` is the strict timeout field; legacy `timeout` is not accepted.
+
+Legacy Claude Runtime fields such as `quiet`, `briefing`, `enabled`, `promptType`, `ruleFile`, `taskEnv`, `taskAllowedTools`, `taskBypassPermissions`, `fileEditingTools`, and `timeout` are not valid strict `.prove_it/config.json` fields. Some underlying behaviors may return later as core or adapter/provider options, but do not document or rely on the legacy spellings for Clean Runtime projects. Use `timeout_ms` for strict task timeouts.
 
 To customize config protection, use `config_guard` instead of the retired `guard-config` script/`params.paths` pattern:
 
@@ -596,13 +602,13 @@ That path is Claude Adapter-owned Session State, not Workflow Engine config. Whe
 
 ## Retired legacy task features
 
-The Legacy Runtime had additional Claude-only config features such as `env` tasks, `ruleFile`, `promptType`, task-level `quiet`, task-level `enabled`, task-level `briefing`, top-level reviewer tool defaults, and `fileEditingTools`. They are not valid strict `.prove_it/config.json` fields after the Claude hard break. Some may return as explicit core capabilities or adapter/provider options in future slices.
+The Legacy Runtime had additional Claude-only config features such as `env` tasks, `ruleFile`, `promptType`, task-level `quiet`, task-level `enabled`, task-level `briefing`, top-level reviewer tool defaults, and `fileEditingTools`. They are not valid strict `.prove_it/config.json` fields after the Claude hard break. Strict `script` task `params`, task-local `env`, and `timeout_ms` are clean core execution options, not legacy compatibility aliases.
 
 ## Built-in task implementations
 
 The Claude parity profile uses first-class strict task types where possible. For example, config protection is a `config_guard` task, not a legacy `guard-config` script with `params.paths`.
 
-Some standalone scripts still exist in `libexec/` for internal/profile use, but strict Project Config should prefer the documented task types and fields. If you configure a `script` task directly, the important strict fields are `command` and optional `timeout_ms`:
+Some standalone scripts still exist in `libexec/` for internal/profile use, but strict Project Config should prefer the documented task types and fields. If you configure a `script` task directly, the strict core execution options are `command`, optional structured `params`, optional task-local string `env`, and optional `timeout_ms`:
 
 ```json
 {
@@ -610,6 +616,12 @@ Some standalone scripts still exist in `libexec/` for internal/profile use, but 
     "custom_check": {
       "type": "script",
       "command": "./script/custom_check",
+      "params": {
+        "mode": "strict"
+      },
+      "env": {
+        "TURBOCOMMIT_DISABLED": "1"
+      },
       "timeout_ms": 120000
     }
   },
@@ -618,6 +630,8 @@ Some standalone scripts still exist in `libexec/` for internal/profile use, but 
   }
 }
 ```
+
+prove_it pipes normalized execution context to script tasks as JSON on stdin. Along with harness event details, script input includes `params` when configured, `target_paths`, effective `sources` and `tests` globs, and cwd/project/root fields. Task-local `env` is applied to the subprocess environment rather than included in stdin.
 
 ## Session Start guidance
 

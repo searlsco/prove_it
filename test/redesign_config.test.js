@@ -150,6 +150,59 @@ describe('redesign strict .prove_it config/profile model', () => {
     }
   })
 
+  it('accepts strict script task params, env, and timeout_ms and rejects invalid shapes', () => {
+    const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
+    const home = tmpDir('prove_it_home_')
+    const repo = tmpDir('prove_it_repo_')
+
+    try {
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: {
+          custom_check: {
+            type: 'script',
+            command: './script/check',
+            params: { mode: 'strict', nested: { ok: true }, paths: ['src/**/*.js'] },
+            env: { TURBOCOMMIT_DISABLED: '1', MODE: 'strict' },
+            timeout_ms: 120000
+          }
+        },
+        agent_workflows: { pre_tool: { append: ['custom_check'] } }
+      })
+      assert.deepStrictEqual(loadEffectiveConfig(repo, { homeDir: home }).effective.tasks.custom_check, {
+        type: 'script',
+        command: './script/check',
+        params: { mode: 'strict', nested: { ok: true }, paths: ['src/**/*.js'] },
+        env: { TURBOCOMMIT_DISABLED: '1', MODE: 'strict' },
+        timeout_ms: 120000
+      })
+
+      for (const [label, params] of [['array', []], ['string', 'strict'], ['null', null]]) {
+        writeJson(path.join(repo, '.prove_it', 'config.json'), {
+          schema_version: 1,
+          profile_version: PROFILE_VERSION,
+          tasks: { bad_params: { type: 'script', command: './script/check', params } }
+        })
+        assert.throws(
+          () => loadEffectiveConfig(repo, { homeDir: home }),
+          /tasks\.bad_params\.params must be an object/,
+          `expected ${label} params to be rejected`
+        )
+      }
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { bad_env: { type: 'script', command: './script/check', env: { FLAG: true } } }
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /tasks\.bad_env\.env\.FLAG must be a string/)
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   it('accepts strict task when conditions and preserves them in explain diagnostics', () => {
     const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
     const home = tmpDir('prove_it_home_')
@@ -372,7 +425,7 @@ describe('redesign strict .prove_it config/profile model', () => {
     }
   })
 
-  it('passes clean profile globs into script task runner context for profile script tasks', () => {
+  it('passes strict script task inputs and effective context into the script task provider', () => {
     const { createScriptTaskPort } = require('../lib/redesign/script_task_port')
     const { normalizeLifecycleEvent } = require('../lib/redesign/events')
     const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
@@ -383,31 +436,54 @@ describe('redesign strict .prove_it config/profile model', () => {
         schema_version: 1,
         profile_version: PROFILE_VERSION,
         profile: 'claude',
+        tasks: {
+          test_first: {
+            type: 'script',
+            command: './script/check',
+            params: { mode: 'strict' },
+            env: { TASK_LOCAL: 'yes' },
+            timeout_ms: 1234
+          }
+        },
         adapters: { claude: { enabled: true } }
       })
       const cfg = loadEffectiveConfig(repo).effective
-      let received
+      let receivedCheck
+      let receivedContext
       const port = createScriptTaskPort({
-        runScript (_check, context) {
-          received = context
+        runScript (check, context) {
+          receivedCheck = check
+          receivedContext = context
           return { pass: true, reason: 'ok', output: '' }
         }
+      })
+      const event = normalizeLifecycleEvent({
+        adapterId: 'claude',
+        rawEventName: 'PreToolUse',
+        rawEvent: { session_id: 'session-1', tool_name: 'Write', tool_input: { file_path: 'src/app.js' } },
+        cwd: repo,
+        projectDir: repo,
+        rootDir: repo
       })
 
       port.run({
         taskName: 'test_first',
         task: cfg.tasks.test_first,
-        event: normalizeLifecycleEvent({
-          adapterId: 'claude',
-          rawEventName: 'PreToolUse',
-          rawEvent: { session_id: 'session-1', tool_name: 'Write', tool_input: { file_path: 'src/app.js' } },
-          cwd: repo
-        }),
+        event,
         effectiveConfig: cfg
       })
 
-      assert.deepStrictEqual(received.sources, cfg.globs.source)
-      assert.deepStrictEqual(received.tests, cfg.globs.test)
+      assert.strictEqual(receivedCheck.name, 'test_first')
+      assert.deepStrictEqual(receivedCheck.params, { mode: 'strict' })
+      assert.strictEqual(receivedCheck.timeout, 1234)
+      assert.deepStrictEqual(receivedContext.configEnv, { TASK_LOCAL: 'yes' })
+      assert.strictEqual(receivedContext.normalizedEvent, event)
+      assert.deepStrictEqual(receivedContext.targetPaths, ['src/app.js'])
+      assert.strictEqual(receivedContext.cwd, repo)
+      assert.strictEqual(receivedContext.projectDir, repo)
+      assert.strictEqual(receivedContext.rootDir, repo)
+      assert.deepStrictEqual(receivedContext.sources, cfg.globs.source)
+      assert.deepStrictEqual(receivedContext.tests, cfg.globs.test)
     } finally {
       fs.rmSync(repo, { recursive: true, force: true })
     }

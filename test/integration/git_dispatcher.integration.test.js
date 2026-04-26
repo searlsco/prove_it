@@ -394,12 +394,35 @@ describe('git dispatcher', () => {
     }
 
     for (const event of ['pre-commit', 'pre-push']) {
-      it(`runs passing ${event} script tasks from strict .prove_it config and ignores stale legacy config`, () => {
+      it(`runs passing ${event} script tasks from strict .prove_it config with params and task-local env while ignoring stale legacy config`, () => {
         const repo = freshRepo()
         try {
+          const probePath = path.join(repo, 'git-probe.js')
+          fs.writeFileSync(probePath, `#!/usr/bin/env node
+const fs = require('fs')
+const input = JSON.parse(fs.readFileSync(0, 'utf8'))
+function ok (condition, message) {
+  if (!condition) {
+    console.error(message)
+    process.exit(1)
+  }
+}
+ok(input.hook_event_name === '${event}', 'missing git hook event')
+ok(input.adapter_id === 'git', 'missing git adapter id')
+ok(input.workflow_stage === '${event === 'pre-commit' ? 'pre_commit' : 'pre_push'}', 'missing workflow stage')
+ok(input.params && input.params.mode === 'strict', 'missing params')
+ok(process.env.GIT_TASK_LOCAL_ENV === 'available', 'missing task-local env')
+ok(Array.isArray(input.sources), 'missing source globs')
+ok(Array.isArray(input.tests), 'missing test globs')
+fs.appendFileSync('ran.txt', 'strict\\n')
+`)
+          fs.chmodSync(probePath, 0o755)
           writeStrictConfig(repo, event, {
             type: 'script',
-            command: 'node -e "require(\'fs\').appendFileSync(\'ran.txt\', \'strict\\n\')"'
+            command: './git-probe.js',
+            params: { mode: 'strict' },
+            env: { GIT_TASK_LOCAL_ENV: 'available' },
+            timeout_ms: 120000
           })
           writeLegacyFailingConfig(repo)
 

@@ -1,11 +1,15 @@
 const { describe, it } = require('node:test')
 const assert = require('node:assert')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
 const { behaviorForCapability } = require('../lib/adapter_capabilities')
 const { runWorkflowEngine } = require('../lib/redesign/engine')
 const { normalizeLifecycleEvent } = require('../lib/redesign/events')
 const { createMemoryStatePort } = require('../lib/redesign/state_port')
 const { requestSessionCancel } = require('../lib/redesign/session_control')
+const { asyncSnapshotForTask } = require('../lib/redesign/script_task_port')
 
 function config ({ tasks, postTool = [], agentEnd = [], preTool = [] }) {
   return {
@@ -41,6 +45,71 @@ function claudeCompletionCapabilities () {
 }
 
 describe('clean-runtime task lifecycle', () => {
+  it('preserves params, task-local env, and timeout_ms in async script task snapshots', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_async_snapshot_'))
+    try {
+      const task = {
+        type: 'script',
+        command: './script/check',
+        params: { mode: 'strict' },
+        env: { TASK_LOCAL: 'yes' },
+        timeout_ms: 3210
+      }
+      const snapshot = asyncSnapshotForTask({
+        taskName: 'background_check',
+        task,
+        event: event('PostToolUse'),
+        effectiveConfig: config({ tasks: { background_check: task }, postTool: ['background_check'] })
+      }, { asyncDir: tmpDir })
+      const payload = JSON.parse(fs.readFileSync(snapshot.contextFilePath, 'utf8'))
+
+      assert.strictEqual(payload.task.name, 'background_check')
+      assert.deepStrictEqual(payload.task.params, { mode: 'strict' })
+      assert.strictEqual(payload.task.timeout, 3210)
+      assert.deepStrictEqual(payload.context.configEnv, { TASK_LOCAL: 'yes' })
+      assert.strictEqual(payload.context.normalizedEvent.stage, 'post_tool')
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves params, task-local env, and timeout_ms in parallel script task provider contexts', () => {
+    const task = {
+      type: 'script',
+      command: './script/parallel',
+      params: { mode: 'strict' },
+      env: { TASK_LOCAL: 'yes' },
+      timeout_ms: 6543,
+      parallel: true
+    }
+    const effectiveConfig = config({ tasks: { parallel_check: task }, agentEnd: ['parallel_check'] })
+    const statePort = createMemoryStatePort()
+    statePort.writeSignal('session-123', { type: 'done', message: 'ready', at: 123 })
+    let received
+    const taskPort = {
+      startParallelTask (context) {
+        received = context
+        return { id: 'parallel-1', taskName: context.taskName, task: context.task }
+      },
+      settleParallelBatch (handles) {
+        return handles.map(handle => ({ id: handle.id, taskName: handle.taskName, task: handle.task, result: { pass: true, reason: 'ok' } }))
+      }
+    }
+
+    runWorkflowEngine({
+      event: event('Stop'),
+      effectiveConfig,
+      adapterCapabilities: claudeCompletionCapabilities(),
+      statePort,
+      taskPort
+    })
+
+    assert.strictEqual(received.taskName, 'parallel_check')
+    assert.deepStrictEqual(received.task.params, { mode: 'strict' })
+    assert.deepStrictEqual(received.task.env, { TASK_LOCAL: 'yes' })
+    assert.strictEqual(received.task.timeout_ms, 6543)
+  })
+
   it('launches async tasks through the task port and records pending lifecycle state', () => {
     const effectiveConfig = config({
       tasks: {

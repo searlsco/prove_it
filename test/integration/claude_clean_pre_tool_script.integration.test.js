@@ -193,7 +193,7 @@ describe('Claude clean-runtime PreToolUse script tasks', () => {
     assert.match(result.output.hookSpecificOutput.permissionDecisionReason, /Script not found: \.\/script\/not-there/)
   })
 
-  it('honors matcher and trigger filters while giving scripts normalized Claude event, command, cwd, target paths, adapter id, and session id', () => {
+  it('honors matcher and trigger filters while giving scripts normalized Claude event, params, env, command, cwd, target paths, adapter id, and session id', () => {
     createFile(tmpDir, 'script/context-probe', `#!/usr/bin/env node
 const fs = require('fs')
 const input = JSON.parse(fs.readFileSync(0, 'utf8'))
@@ -207,9 +207,15 @@ ok(input.hook_event_name === 'PreToolUse', 'missing hook event')
 ok(input.adapter_id === 'claude', 'missing adapter id')
 ok(input.session_id === 'clean-pre-tool-session', 'missing session id')
 ok(typeof input.cwd === 'string' && input.cwd.endsWith(process.cwd().split('/').pop()), 'missing cwd')
+ok(typeof input.project_dir === 'string' && input.project_dir.endsWith(process.cwd().split('/').pop()), 'missing project dir')
+ok(typeof input.root_dir === 'string' && input.root_dir.endsWith(process.cwd().split('/').pop()), 'missing root dir')
 ok(input.tool_name === 'Bash', 'missing tool name')
 ok(input.command === 'printf hi > src/app.js', 'missing command')
 ok(Array.isArray(input.target_paths) && input.target_paths.includes('src/app.js'), 'missing target path')
+ok(Array.isArray(input.sources), 'missing source globs')
+ok(Array.isArray(input.tests), 'missing test globs')
+ok(input.params && input.params.mode === 'strict', 'missing params')
+ok(process.env.TASK_LOCAL_ENV === 'available', 'missing task-local env')
 ok(input.normalized_event && input.normalized_event.stage === 'pre_tool', 'missing normalized event stage')
 ok(input.normalized_event && input.normalized_event.adapterId === 'claude', 'missing normalized event adapter')
 fs.appendFileSync('context.log', 'ran\\n')
@@ -221,7 +227,10 @@ fs.appendFileSync('context.log', 'ran\\n')
           type: 'script',
           command: './script/context-probe',
           matcher: 'Bash',
-          triggers: ['src/app\\.js']
+          triggers: ['src/app\\.js'],
+          params: { mode: 'strict' },
+          env: { TASK_LOCAL_ENV: 'available' },
+          timeout_ms: 120000
         }
       },
       preTool: ['context_probe']
