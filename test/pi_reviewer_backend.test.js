@@ -1,14 +1,14 @@
 const { describe, it } = require('node:test')
 const assert = require('node:assert')
 
-const { createPiTaskPort, runPiReviewerTask } = require('../lib/adapters/pi/task_port')
+const { createPiReviewerPort, createPiTaskPort, runPiReviewerTask } = require('../lib/adapters/pi/task_port')
 
 describe('Pi reviewer backend', () => {
   it('uses the active Pi harness defaults for reviewer tasks', () => {
     const calls = []
     const result = runPiReviewerTask({
       taskName: 'coverage-review',
-      task: { type: 'agent', prompt: 'Review test coverage.' },
+      task: { type: 'reviewer', prompt: 'Review test coverage.' },
       event: { rootDir: '/repo', cwd: '/repo' }
     }, {
       runner (command, options) {
@@ -17,7 +17,18 @@ describe('Pi reviewer backend', () => {
       }
     })
 
-    assert.deepStrictEqual(result, { pass: true, reason: 'coverage is sufficient', output: 'PASS: coverage is sufficient\n' })
+    assert.deepStrictEqual(result, {
+      pass: true,
+      reason: 'coverage is sufficient',
+      output: 'PASS: coverage is sufficient\n',
+      verdict: {
+        status: 'pass',
+        reason: 'coverage is sufficient',
+        body: null,
+        evidence: 'PASS: coverage is sufficient\n',
+        transcript: null
+      }
+    })
     assert.strictEqual(calls.length, 1)
     assert.match(calls[0].command, /^pi -p --no-session\b/)
     assert.doesNotMatch(calls[0].command, /claude|codex/)
@@ -31,7 +42,7 @@ describe('Pi reviewer backend', () => {
     let command
     const result = runPiReviewerTask({
       taskName: 'explicit-review',
-      task: { type: 'agent', prompt: 'Review this.', model: 'anthropic/claude-sonnet-4-5:high' },
+      task: { type: 'reviewer', prompt: 'Review this.', model: 'anthropic/claude-sonnet-4-5:high' },
       event: { rootDir: '/repo' }
     }, {
       runner (cmd) {
@@ -64,8 +75,22 @@ describe('Pi reviewer backend', () => {
     })
 
     assert.deepStrictEqual(port.run({ taskName: 'tests', task: { type: 'script', command: './script/test' } }), { pass: true, reason: 'script ok' })
-    assert.deepStrictEqual(port.run({ taskName: 'review', task: { type: 'agent', prompt: 'Review.' } }), { pass: true, reason: 'review ok' })
+    assert.deepStrictEqual(port.run({ taskName: 'review', task: { type: 'reviewer', prompt: 'Review.' } }), { pass: true, reason: 'review ok' })
+    assert.deepStrictEqual(port.run({ taskName: 'legacy-agent-review', task: { type: 'agent', prompt: 'Review.' } }), { pass: true, reason: 'review ok' })
     assert.deepStrictEqual(scriptCalls, ['tests'])
-    assert.deepStrictEqual(reviewerCalls, ['review'])
+    assert.deepStrictEqual(reviewerCalls, ['review', 'legacy-agent-review'])
+  })
+
+  it('exposes a reviewer provider port for the workflow engine active-harness path', () => {
+    const calls = []
+    const port = createPiReviewerPort(null, { cwd: '/repo' }, {
+      reviewer (context) {
+        calls.push([context.taskName, context.piContext.cwd])
+        return { pass: true, reason: 'pi review ok' }
+      }
+    })
+
+    assert.deepStrictEqual(port.run({ taskName: 'review', task: { type: 'reviewer', prompt: 'Review.' } }), { pass: true, reason: 'pi review ok' })
+    assert.deepStrictEqual(calls, [['review', '/repo']])
   })
 })

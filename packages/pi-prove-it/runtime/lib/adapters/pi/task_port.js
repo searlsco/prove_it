@@ -14,7 +14,7 @@ function rootDirFromContext (context = {}) {
 }
 
 function buildPiReviewerPrompt (context) {
-  return `${context.task.prompt}${REVIEWER_VERDICT_INSTRUCTIONS}`
+  return `${context.task.prompt || context.task.intent || ''}${REVIEWER_VERDICT_INSTRUCTIONS}`
 }
 
 function piReviewerCommand (task = {}) {
@@ -67,24 +67,47 @@ function runPiReviewerTask (context, options = {}) {
       pass: true,
       skipped: true,
       reason: verdict.reason,
-      output
+      output,
+      verdict: {
+        status: 'skip',
+        reason: verdict.reason,
+        body: null,
+        evidence: output || null,
+        transcript: null
+      }
     }
   }
   return {
     pass: verdict.pass,
     reason: verdict.reason,
     output,
-    ...(verdict.body ? { body: verdict.body } : {})
+    ...(verdict.body ? { body: verdict.body } : {}),
+    verdict: {
+      status: verdict.pass ? 'pass' : 'fail',
+      reason: verdict.reason,
+      body: verdict.body || null,
+      evidence: verdict.body || output || null,
+      transcript: null
+    }
+  }
+}
+
+function createPiReviewerPort (pi = null, ctx = {}, options = {}) {
+  const reviewer = options.reviewer || ((context) => runPiReviewerTask(context, options))
+  return {
+    run (context) {
+      return reviewer({ ...context, pi, piContext: ctx })
+    }
   }
 }
 
 function createPiTaskPort (pi = null, ctx = {}, options = {}) {
   const scriptPort = options.scriptPort || createScriptTaskPort(options)
-  const reviewer = options.reviewer || ((context) => runPiReviewerTask(context, options))
+  const reviewerPort = createPiReviewerPort(pi, ctx, options)
 
   return {
     run (context) {
-      if (context.task?.type === 'agent') return reviewer({ ...context, pi, piContext: ctx })
+      if (context.task?.type === 'agent' || context.task?.type === 'reviewer') return reviewerPort.run(context)
       return scriptPort.run(context)
     }
   }
@@ -93,6 +116,7 @@ function createPiTaskPort (pi = null, ctx = {}, options = {}) {
 module.exports = {
   REVIEWER_VERDICT_INSTRUCTIONS,
   buildPiReviewerPrompt,
+  createPiReviewerPort,
   createPiTaskPort,
   piReviewerCommand,
   runPiReviewerTask

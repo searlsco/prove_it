@@ -62,7 +62,7 @@ const GLOBS_KEYS = new Set(['source', 'test'])
 const AGENT_WORKFLOW_KEYS = new Set(['session_start', 'pre_tool', 'post_tool', 'post_tool_failure', 'agent_end'])
 const GIT_WORKFLOW_KEYS = new Set(['pre_commit', 'pre_push'])
 const PIPELINE_PATCH_KEYS = new Set(['prepend', 'append', 'remove', 'replace_tasks'])
-const TASK_COMMON_KEYS = new Set(['type', 'description', 'matcher', 'triggers', 'when', 'async', 'parallel'])
+const TASK_COMMON_KEYS = new Set(['type', 'description', 'matcher', 'triggers', 'when', 'async', 'parallel', 'failure_behavior'])
 const WHEN_KEYS = new Set([
   'signal',
   'sourceFilesEdited',
@@ -72,10 +72,15 @@ const WHEN_KEYS = new Set([
   'linesWritten'
 ])
 const VALID_WHEN_SIGNALS = new Set(['done', 'stuck', 'idle'])
+const REVIEWER_PROVIDER_OPTION_KEYS = new Set(['max_turns', 'allowed_tools', 'bypass_permissions', 'command', 'env'])
+const VALID_FAILURE_BEHAVIORS = new Set(['block', 'warn'])
+const VALID_REVIEWER_PROVIDERS = new Set(['claude', 'pi', 'codex'])
+
 const TASK_TYPE_KEYS = {
   config_guard: new Set(['protected_paths']),
   script: new Set(['command', 'timeout_ms']),
-  agent: new Set(['prompt', 'model'])
+  agent: new Set(['prompt', 'model']),
+  reviewer: new Set(['intent', 'prompt', 'model', 'provider', 'provider_options', 'timeout_ms'])
 }
 const TASK_TYPES = new Set(Object.keys(TASK_TYPE_KEYS))
 const ADAPTER_KEYS = new Set(['pi', 'claude', 'codex'])
@@ -125,6 +130,28 @@ function validateOptionalNonNegativeInteger (value, label, filePath) {
   if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
     throw new Error(`${filePath}: ${label} must be a non-negative integer`)
   }
+}
+
+function validateOptionalStringMap (value, label, filePath) {
+  if (value === undefined) return
+  assertPlainObject(value, label, filePath)
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item !== 'string') {
+      throw new Error(`${filePath}: ${label}.${key} must be a string`)
+    }
+  }
+}
+
+function validateReviewerProviderOptions (options, label, filePath) {
+  if (options === undefined) return undefined
+  assertPlainObject(options, label, filePath)
+  assertKnownKeys(options, REVIEWER_PROVIDER_OPTION_KEYS, label, filePath)
+  validateOptionalNonNegativeInteger(options.max_turns, `${label}.max_turns`, filePath)
+  if (options.allowed_tools !== undefined) validateStringArray(options.allowed_tools, `${label}.allowed_tools`, filePath)
+  validateOptionalBoolean(options.bypass_permissions, `${label}.bypass_permissions`, filePath)
+  validateOptionalString(options.command, `${label}.command`, filePath)
+  validateOptionalStringMap(options.env, `${label}.env`, filePath)
+  return clone(options)
 }
 
 function mergeObject (base, patch) {
@@ -219,6 +246,9 @@ function validateTask (name, task, filePath) {
   if (task.triggers !== undefined) validateStringArray(task.triggers, `tasks.${name}.triggers`, filePath)
   validateOptionalBoolean(task.async, `tasks.${name}.async`, filePath)
   validateOptionalBoolean(task.parallel, `tasks.${name}.parallel`, filePath)
+  if (task.failure_behavior !== undefined && !VALID_FAILURE_BEHAVIORS.has(task.failure_behavior)) {
+    throw new Error(`${filePath}: tasks.${name}.failure_behavior must be one of ${Array.from(VALID_FAILURE_BEHAVIORS).join(', ')}`)
+  }
   if (task.async === true && task.parallel === true) {
     throw new Error(`${filePath}: tasks.${name} cannot be both async and parallel`)
   }
@@ -240,6 +270,19 @@ function validateTask (name, task, filePath) {
       throw new Error(`${filePath}: tasks.${name}.prompt must be a non-empty string`)
     }
     validateOptionalString(task.model, `tasks.${name}.model`, filePath)
+  } else if (task.type === 'reviewer') {
+    if ((typeof task.prompt !== 'string' || task.prompt.length === 0) && (typeof task.intent !== 'string' || task.intent.length === 0)) {
+      throw new Error(`${filePath}: tasks.${name} must define a non-empty prompt or intent`)
+    }
+    validateOptionalString(task.intent, `tasks.${name}.intent`, filePath)
+    validateOptionalString(task.prompt, `tasks.${name}.prompt`, filePath)
+    validateOptionalString(task.model, `tasks.${name}.model`, filePath)
+    validateOptionalString(task.provider, `tasks.${name}.provider`, filePath)
+    if (task.provider !== undefined && !VALID_REVIEWER_PROVIDERS.has(task.provider)) {
+      throw new Error(`${filePath}: tasks.${name}.provider must be one of ${Array.from(VALID_REVIEWER_PROVIDERS).join(', ')}`)
+    }
+    validateOptionalNonNegativeInteger(task.timeout_ms, `tasks.${name}.timeout_ms`, filePath)
+    validateReviewerProviderOptions(task.provider_options, `tasks.${name}.provider_options`, filePath)
   }
 
   return clone(task)
