@@ -11,7 +11,7 @@ describe('example hook dispatch', () => {
   const shimPath = path.join(supportDir, 'prove_it')
   const testBinDir = path.join(__dirname, '..', 'bin')
   const fixturesDir = path.join(__dirname, '..', 'fixtures')
-  const dispatchEnv = { ...process.env, PATH: `${fixturesDir}:${testBinDir}:${process.env.PATH}`, PROVE_IT_DISABLED: '', PROVE_IT_DIR: path.join(supportDir, '_no_global') }
+  const dispatchEnv = { ...process.env, NODE_ENV: 'test', PATH: `${fixturesDir}:${testBinDir}:${process.env.PATH}`, PROVE_IT_DISABLED: '', PROVE_IT_DIR: path.join(supportDir, '_no_global'), PROVE_IT_LEGACY_CLAUDE_ORACLE: '1', PROVE_IT_TEST_LEGACY_CLAUDE_ORACLE: '1' }
 
   for (const name of EXAMPLES) {
     describe(name, () => {

@@ -211,16 +211,21 @@ describe('Claude clean-runtime TaskCompleted auto-signaling', () => {
     assert.strictEqual(getSignal('clean-tc-stop-verification').type, 'done')
   })
 
-  it('retains legacy TaskCompleted behavior when no strict .prove_it config exists', () => {
+  it('does not fall back to legacy TaskCompleted behavior when no strict .prove_it config exists', () => {
     writeConfig(tmpDir, makeConfig({
       claude: {
         Stop: [{ name: 'legacy-gated', type: 'script', command: 'echo legacy', when: { signal: 'done' } }]
       }
     }))
 
-    const result = invokeTaskCompleted(tmpDir, 'clean-tc-legacy-oracle', 'Run `prove_it signal done`', env)
+    const result = invokeTaskCompleted(tmpDir, 'clean-tc-legacy-oracle', 'Run `prove_it signal done`', {
+      ...env,
+      PROVE_IT_LEGACY_CLAUDE_ORACLE: '1'
+    })
 
     assert.strictEqual(result.exitCode, 0)
-    assert.strictEqual(getSignal('clean-tc-legacy-oracle').type, 'done')
+    assert.strictEqual(result.stdout, '')
+    assert.strictEqual(result.stderr, '')
+    assert.strictEqual(getSignal('clean-tc-legacy-oracle'), null)
   })
 })

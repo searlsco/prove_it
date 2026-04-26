@@ -396,6 +396,24 @@ describe('doctor', () => {
     assert.match(result.stdout, /Strict \.prove_it adapters enabled: pi, claude/)
   })
 
+  it('reports legacy Claude config as stale state rather than a fallback runtime source', () => {
+    writeSettings(tmpHome, correctSettings())
+    writeTeamConfig(tmpRepo, {
+      enabled: true,
+      sources: ['**/*.js'],
+      hooks: {}
+    })
+    fs.writeFileSync(path.join(tmpRepo, '.claude', 'prove_it', 'config.local.json'), JSON.stringify({ enabled: false }))
+
+    const result = run()
+
+    assert.match(result.stdout, /Stale legacy Claude config present: \.claude\/prove_it\/config\.json/)
+    assert.match(result.stdout, /Stale legacy Claude config present: \.claude\/prove_it\/config\.local\.json/)
+    assert.match(result.stdout, /Normal Claude hook dispatch ignores this file after the hard break/)
+    assert.match(result.stdout, /legacy \.claude\/prove_it config is not a fallback runtime source/)
+    assert.match(result.stdout, /Stale legacy Claude config ignored by normal hooks/)
+  })
+
   it('surfaces adapter capability diagnostics without changing install checks', () => {
     writeSettings(tmpHome, correctSettings())
     writeTeamConfig(tmpRepo, {
@@ -436,18 +454,10 @@ describe('doctor', () => {
   it('summary', () => {
     // All checks passed
     writeSettings(tmpHome, correctSettings())
-    writeTeamConfig(tmpRepo, {
-      enabled: true,
-      sources: ['src/**/*.js'],
-      hooks: {}
-    })
-    spawnSync('git', ['add', '.claude/prove_it/config.json'], { cwd: tmpRepo, stdio: 'ignore' })
-    spawnSync('git', ['commit', '-m', 'add config'], { cwd: tmpRepo, stdio: 'ignore' })
+    const { initStrictProject } = require('../../lib/redesign/init')
+    initStrictProject(tmpRepo, { adapters: ['claude'] })
     fs.mkdirSync(path.join(tmpRepo, 'script'), { recursive: true })
     fs.writeFileSync(path.join(tmpRepo, 'script', 'test'), '#!/bin/bash\nexit 0\n')
-    const proveItGitignore = path.join(tmpRepo, '.claude', 'prove_it', '.gitignore')
-    fs.mkdirSync(path.dirname(proveItGitignore), { recursive: true })
-    fs.writeFileSync(proveItGitignore, 'sessions/\nconfig.local.json\n')
     for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-done', 'prove-dry', 'prove-test-validity', 'prove-testing-patterns', 'prove-ui-design']) {
       const skillDir = path.join(tmpHome, '.claude', 'skills', name)
       fs.mkdirSync(skillDir, { recursive: true })
