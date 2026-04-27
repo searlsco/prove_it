@@ -11,7 +11,8 @@ function scriptCheckFromTask (taskName, task) {
   return {
     ...task,
     name: taskName,
-    timeout: task.timeout_ms
+    timeout: task.timeout_ms,
+    ...(task.output === 'failures_only' ? { quiet: true } : {})
   }
 }
 

@@ -3,6 +3,7 @@ const assert = require('node:assert')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { spawnSync } = require('node:child_process')
 
 const { behaviorForCapability } = require('../lib/adapter_capabilities')
 const { runWorkflowEngine } = require('../lib/redesign/engine')
@@ -45,6 +46,46 @@ function claudeCompletionCapabilities () {
 }
 
 describe('clean-runtime task lifecycle', () => {
+  it('suppresses routine async worker PASS and DONE logs for failures-only script tasks', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_async_worker_quiet_'))
+    const proveItDir = path.join(tmpDir, 'prove_it_home')
+    try {
+      fs.mkdirSync(path.join(tmpDir, 'script'), { recursive: true })
+      fs.writeFileSync(path.join(tmpDir, 'script', 'pass'), '#!/usr/bin/env bash\necho routine async output\n')
+      fs.chmodSync(path.join(tmpDir, 'script', 'pass'), 0o755)
+      const task = { type: 'script', command: './script/pass', output: 'failures_only' }
+      const snapshot = asyncSnapshotForTask({
+        taskName: 'quiet_background_check',
+        task,
+        event: normalizeLifecycleEvent({
+          adapterId: 'claude',
+          rawEventName: 'PostToolUse',
+          rawEvent: { session_id: 'quiet-async-session' },
+          cwd: tmpDir,
+          projectDir: tmpDir,
+          rootDir: tmpDir
+        }),
+        effectiveConfig: config({ tasks: { quiet_background_check: task }, postTool: ['quiet_background_check'] })
+      }, { asyncDir: path.join(tmpDir, 'async') })
+
+      const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'lib', 'async_worker.js'), snapshot.contextFilePath], {
+        cwd: tmpDir,
+        encoding: 'utf8',
+        env: { ...process.env, PROVE_IT_DIR: proveItDir }
+      })
+
+      assert.strictEqual(result.status, 0, result.stderr)
+      assert.ok(fs.existsSync(snapshot.resultPath), 'async worker should still write the result record')
+      const logPath = path.join(proveItDir, 'sessions', 'quiet-async-session.jsonl')
+      const log = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : ''
+      assert.doesNotMatch(log, /PASS/)
+      assert.doesNotMatch(log, /DONE/)
+      assert.doesNotMatch(log, /routine async output/)
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   it('preserves params, task-local env, and timeout_ms in async script task snapshots', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_async_snapshot_'))
     try {
@@ -202,6 +243,32 @@ describe('clean-runtime task lifecycle', () => {
     assert.deepStrictEqual(statePort.readSessionState('session-123', 'task_lifecycle').async.pending, [])
   })
 
+  it('suppresses harvested async pass results for failures-only tasks without hiding failures', () => {
+    const effectiveConfig = config({ tasks: { background_check: { type: 'script', command: './script/background', output: 'failures_only' } } })
+    const statePort = createMemoryStatePort()
+    statePort.writeSessionState('session-123', 'task_lifecycle', {
+      async: { pending: [{ id: 'bg-1', taskName: 'background_check', stage: 'post_tool', status: 'pending' }] }
+    })
+    const taskPort = {
+      harvestBackgroundTasks () {
+        return [{ id: 'bg-1', taskName: 'background_check', task: effectiveConfig.tasks.background_check, result: { pass: true, reason: 'background passed', output: 'looks good' } }]
+      },
+      consumeBackgroundTask () {}
+    }
+
+    const effect = runWorkflowEngine({
+      event: event('PostToolUse'),
+      effectiveConfig,
+      statePort,
+      taskPort
+    })
+
+    assert.strictEqual(effect.effect, 'allow')
+    assert.deepStrictEqual(effect.asyncResults, [])
+    assert.strictEqual(effect.routineOutputSuppressed, true)
+    assert.deepStrictEqual(statePort.readSessionState('session-123', 'task_lifecycle').async.pending, [])
+  })
+
   it('holds harvested async failures on non-completion stages and enforces them at completion verification', () => {
     const effectiveConfig = config({ tasks: {} })
     const statePort = createMemoryStatePort()
@@ -262,6 +329,36 @@ describe('clean-runtime task lifecycle', () => {
       reason: 'result record expired'
     }])
     assert.deepStrictEqual(statePort.readSessionState('session-123', 'task_lifecycle').async.pending, [])
+  })
+
+  it('suppresses successful failures-only parallel lifecycle results while preserving completion success', () => {
+    const effectiveConfig = config({
+      tasks: {
+        quiet_parallel: { type: 'script', command: './script/quiet', output: 'failures_only', parallel: true }
+      },
+      agentEnd: ['quiet_parallel']
+    })
+    const statePort = createMemoryStatePort()
+    statePort.writeSignal('session-123', { type: 'done', message: 'ready', at: 123 })
+    const taskPort = {
+      startParallelTask ({ taskName }) { return { id: taskName, taskName } },
+      settleParallelBatch (handles) {
+        return handles.map(handle => ({ id: handle.id, taskName: handle.taskName, result: { pass: true, reason: `${handle.taskName} passed`, output: 'routine pass output' } }))
+      }
+    }
+
+    const effect = runWorkflowEngine({
+      event: event('Stop'),
+      effectiveConfig,
+      adapterCapabilities: claudeCompletionCapabilities(),
+      statePort,
+      taskPort
+    })
+
+    assert.strictEqual(effect.effect, 'approve')
+    assert.strictEqual(effect.parallelResults, undefined)
+    assert.strictEqual(effect.routineOutputSuppressed, true)
+    assert.strictEqual(effect.signalLifecycle.action, 'clear')
   })
 
   it('settles parallel task batches in one completion invocation and clears done when they pass', () => {

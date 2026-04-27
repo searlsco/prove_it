@@ -436,6 +436,25 @@ fs.appendFileSync('ran.txt', 'strict\\n')
         }
       })
 
+      it(`suppresses routine pass output for failures-only ${event} tasks`, () => {
+        const repo = freshRepo()
+        try {
+          writeStrictConfig(repo, event, {
+            type: 'script',
+            command: 'node -e "console.log(\'routine pass details\')"',
+            output: 'failures_only'
+          })
+
+          const result = invokeGitHook(repo, event)
+
+          assert.strictEqual(result.status, 0, result.stderr)
+          assert.strictEqual(result.stderr, '')
+          assert.doesNotMatch(result.stdout, /routine pass details/)
+        } finally {
+          fs.rmSync(repo, { recursive: true, force: true })
+        }
+      })
+
       it(`blocks failing ${event} script tasks from strict .prove_it config`, () => {
         const repo = freshRepo()
         try {

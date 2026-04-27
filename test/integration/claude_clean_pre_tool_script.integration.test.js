@@ -86,6 +86,25 @@ describe('Claude clean-runtime PreToolUse script tasks', () => {
     assert.strictEqual(fs.readFileSync(path.join(tmpDir, 'strict.log'), 'utf8'), 'strict-pass\n')
   })
 
+  it('suppresses routine Claude context for passing failures-only script tasks', () => {
+    writeScript(tmpDir, 'noisy-pass', 'echo "routine pass details"')
+    writeStrictConfig(tmpDir, {
+      tasks: {
+        noisy_pass: { type: 'script', command: './script/noisy-pass', output: 'failures_only' }
+      },
+      preTool: ['noisy_pass']
+    })
+
+    const result = invokePreTool(tmpDir, {
+      tool_name: 'Read',
+      tool_input: { file_path: 'README.md' }
+    })
+
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.output, null)
+    assert.doesNotMatch(result.stderr, /routine pass details/)
+  })
+
   it('allows Claude writes to clean-runtime backchannel paths before task denial logic', () => {
     writeScript(tmpDir, 'fail-pre-tool', 'echo "focused check failed" >&2\nexit 7')
     writeStrictConfig(tmpDir, {

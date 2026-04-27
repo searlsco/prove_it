@@ -168,6 +168,25 @@ describe('clean-runtime reviewer tasks', () => {
     }
   })
 
+  it('keeps non-blocking reviewer failure output visible for failures-only tasks', () => {
+    const effectiveConfig = config({
+      tasks: {
+        review: { type: 'reviewer', prompt: 'Review this.', failure_behavior: 'warn', output: 'failures_only' }
+      },
+      agentEnd: [],
+      postTool: ['review']
+    })
+
+    const effect = runWorkflowEngine({
+      event: normalizeLifecycleEvent({ adapterId: 'claude', rawEventName: 'PostToolUse', rawEvent: { session_id: 'session-123' }, cwd: process.cwd() }),
+      effectiveConfig,
+      reviewerPort: { run: () => ({ pass: false, reason: 'non-blocking advisory' }) }
+    })
+
+    assert.strictEqual(effect.effect, 'allow')
+    assert.match(effect.reason, /non-blocking advisory/)
+  })
+
   it('honors reviewer failure_behavior warn as non-blocking lifecycle output', () => {
     const effectiveConfig = config({
       tasks: {

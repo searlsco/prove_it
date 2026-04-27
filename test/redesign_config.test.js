@@ -150,6 +150,43 @@ describe('redesign strict .prove_it config/profile model', () => {
     }
   })
 
+  it('accepts strict task output policies and rejects invalid policy values', () => {
+    const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
+    const home = tmpDir('prove_it_home_')
+    const repo = tmpDir('prove_it_repo_')
+
+    try {
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: {
+          normal_check: { type: 'script', command: './script/check', output: 'default' },
+          quiet_check: { type: 'script', command: './script/check', output: 'failures_only' },
+          quiet_guard: { type: 'config_guard', protected_paths: ['.prove_it/config.json'], output: 'failures_only' }
+        },
+        agent_workflows: { pre_tool: { append: ['normal_check', 'quiet_check', 'quiet_guard'] } }
+      })
+
+      const tasks = loadEffectiveConfig(repo, { homeDir: home }).effective.tasks
+      assert.strictEqual(tasks.normal_check.output, 'default')
+      assert.strictEqual(tasks.quiet_check.output, 'failures_only')
+      assert.strictEqual(tasks.quiet_guard.output, 'failures_only')
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { bad_output: { type: 'script', command: './script/check', output: 'quiet' } }
+      })
+      assert.throws(
+        () => loadEffectiveConfig(repo, { homeDir: home }),
+        /tasks\.bad_output\.output must be one of default, failures_only/
+      )
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   it('accepts strict script task params, env, and timeout_ms and rejects invalid shapes', () => {
     const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
     const home = tmpDir('prove_it_home_')
@@ -442,7 +479,8 @@ describe('redesign strict .prove_it config/profile model', () => {
             command: './script/check',
             params: { mode: 'strict' },
             env: { TASK_LOCAL: 'yes' },
-            timeout_ms: 1234
+            timeout_ms: 1234,
+            output: 'failures_only'
           }
         },
         adapters: { claude: { enabled: true } }
@@ -476,6 +514,7 @@ describe('redesign strict .prove_it config/profile model', () => {
       assert.strictEqual(receivedCheck.name, 'test_first')
       assert.deepStrictEqual(receivedCheck.params, { mode: 'strict' })
       assert.strictEqual(receivedCheck.timeout, 1234)
+      assert.strictEqual(receivedCheck.quiet, true)
       assert.deepStrictEqual(receivedContext.configEnv, { TASK_LOCAL: 'yes' })
       assert.strictEqual(receivedContext.normalizedEvent, event)
       assert.deepStrictEqual(receivedContext.targetPaths, ['src/app.js'])

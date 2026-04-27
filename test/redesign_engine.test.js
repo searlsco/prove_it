@@ -152,6 +152,78 @@ describe('shared workflow engine', () => {
     }
   })
 
+  it('suppresses routine pass output for failures-only script tasks without hiding failures', () => {
+    const repo = tmpRepo({
+      quiet_preflight: {
+        type: 'script',
+        command: './script/preflight',
+        output: 'failures_only'
+      }
+    }, ['quiet_preflight'])
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const event = normalizePiToolCall({
+        toolName: 'edit',
+        input: { path: 'src/app.js' }
+      }, { cwd: repo })
+
+      const passEffect = runWorkflowEngine({
+        event,
+        effectiveConfig,
+        adapterCapabilities: piCapabilities(),
+        taskPort: { run: () => ({ pass: true, reason: 'passed', output: 'noisy pass details' }) }
+      })
+      assert.strictEqual(passEffect.effect, 'allow')
+      assert.strictEqual(passEffect.reason, undefined)
+      assert.strictEqual(passEffect.routineOutputSuppressed, true)
+
+      const failEffect = runWorkflowEngine({
+        event,
+        effectiveConfig,
+        adapterCapabilities: piCapabilities(),
+        taskPort: { run: () => ({ pass: false, reason: 'important failure' }) }
+      })
+      assert.strictEqual(failEffect.effect, 'block')
+      assert.match(failEffect.reason, /quiet_preflight/)
+      assert.match(failEffect.reason, /important failure/)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('suppresses skipped-task context for failures-only tasks', () => {
+    const repo = tmpRepo({
+      quiet_skip: {
+        type: 'config_guard',
+        output: 'failures_only',
+        when: { phase: 'refactor' }
+      }
+    }, ['quiet_skip'])
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const statePort = createMemoryStatePort()
+      assert.strictEqual(setPhase(statePort, 'session-123', 'implement', { now: 123 }).ok, true)
+      const effect = runWorkflowEngine({
+        event: normalizePiToolCall({
+          toolName: 'edit',
+          input: { path: 'src/app.js' },
+          session_id: 'session-123'
+        }, { cwd: repo }),
+        effectiveConfig,
+        statePort,
+        taskPort: { run: () => assert.fail('phase-gated tasks should skip') }
+      })
+
+      assert.strictEqual(effect.effect, 'allow')
+      assert.strictEqual(effect.skipped, undefined)
+      assert.strictEqual(effect.routineOutputSuppressed, true)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   it('emits block with an actionable reason when a Pi pre_tool script task fails', () => {
     const repo = tmpRepo({
       preflight: {
@@ -369,6 +441,10 @@ describe('shared workflow engine', () => {
     const repo = tmpCompletionRepo()
 
     try {
+      const cfgPath = path.join(repo, '.prove_it', 'config.json')
+      const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+      raw.tasks.completion_check.output = 'failures_only'
+      fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2))
       const effectiveConfig = loadProjectConfig(repo)
       const statePort = createMemoryStatePort()
       statePort.writeSignal('session-123', { type: 'done', message: 'ready', at: 123 })

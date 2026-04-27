@@ -306,7 +306,7 @@ Strict task objects are named by their key under `tasks`; they do not include a 
 
 Task fields currently accepted by strict config are intentionally narrow:
 
-- common: `type`, `description`, `matcher`, `triggers`, `when`, `async`, `parallel`, `failure_behavior`, `appeal`;
+- common: `type`, `description`, `matcher`, `triggers`, `when`, `async`, `parallel`, `failure_behavior`, `appeal`, `output`;
 - `config_guard`: `protected_paths`;
 - `script`: `command`, `params`, `env`, `timeout_ms`;
 - `reviewer`: `intent`, `prompt`, `model`, `provider`, `provider_options`, `timeout_ms`;
@@ -318,7 +318,30 @@ Strict `script` task execution options are clean Workflow Engine capabilities:
 - `env` must be an object whose values are strings and is applied only to that task's process.
 - `timeout_ms` is the strict timeout field; legacy `timeout` is not accepted.
 
-Legacy Claude Runtime fields such as `quiet`, `briefing`, `enabled`, `promptType`, `ruleFile`, `taskEnv`, `taskAllowedTools`, `taskBypassPermissions`, `fileEditingTools`, and `timeout` are not valid strict `.prove_it/config.json` fields. Some underlying behaviors may return later as core or adapter/provider options, but do not document or rely on the legacy spellings for Clean Runtime projects. Use `timeout_ms` for strict task timeouts.
+### Task output policy
+
+Tasks default to current routine output behavior. High-frequency tasks can opt into a core output policy:
+
+```json
+{
+  "tasks": {
+    "test_first": {
+      "type": "script",
+      "command": "$(prove_it prefix)/libexec/test-first",
+      "output": "failures_only"
+    }
+  }
+}
+```
+
+Accepted values are:
+
+- `"default"` — preserve routine pass/skip/log output behavior.
+- `"failures_only"` — suppress routine pass output, skipped-task context, and routine task logs while keeping failures, crashes, remediation, completion verification blocks, and backchannel instructions visible.
+
+The policy is Workflow Engine behavior and applies across adapters that render engine effects, including Claude, Git, and Pi runtime paths.
+
+Legacy Claude Runtime fields such as `quiet`, `briefing`, `enabled`, `promptType`, `ruleFile`, `taskEnv`, `taskAllowedTools`, `taskBypassPermissions`, `fileEditingTools`, and `timeout` are not valid strict `.prove_it/config.json` fields. Use `output: "failures_only"` for clean failures-only task output and `timeout_ms` for strict task timeouts.
 
 To customize config protection, use `config_guard` instead of the retired `guard-config` script/`params.paths` pattern:
 
@@ -602,7 +625,7 @@ That path is Claude Adapter-owned Session State, not Workflow Engine config. Whe
 
 ## Retired legacy task features
 
-The Legacy Runtime had additional Claude-only config features such as `env` tasks, `ruleFile`, `promptType`, task-level `quiet`, task-level `enabled`, task-level `briefing`, top-level reviewer tool defaults, and `fileEditingTools`. They are not valid strict `.prove_it/config.json` fields after the Claude hard break. Strict `script` task `params`, task-local `env`, and `timeout_ms` are clean core execution options, not legacy compatibility aliases.
+The Legacy Runtime had additional Claude-only config features such as `env` tasks, `ruleFile`, `promptType`, task-level `quiet`, task-level `enabled`, task-level `briefing`, top-level reviewer tool defaults, and `fileEditingTools`. They are not valid strict `.prove_it/config.json` fields after the Claude hard break. Strict `script` task `params`, task-local `env`, `timeout_ms`, and task `output` policy are clean core options, not legacy compatibility aliases.
 
 ## Built-in task implementations
 

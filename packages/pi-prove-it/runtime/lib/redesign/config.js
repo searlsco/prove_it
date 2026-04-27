@@ -184,7 +184,7 @@ const GLOBS_KEYS = new Set(['source', 'test'])
 const AGENT_WORKFLOW_KEYS = new Set(['session_start', 'pre_tool', 'post_tool', 'post_tool_failure', 'agent_end'])
 const GIT_WORKFLOW_KEYS = new Set(['pre_commit', 'pre_push'])
 const PIPELINE_PATCH_KEYS = new Set(['prepend', 'append', 'remove', 'replace_tasks'])
-const TASK_COMMON_KEYS = new Set(['type', 'description', 'matcher', 'triggers', 'when', 'async', 'parallel', 'failure_behavior', 'appeal'])
+const TASK_COMMON_KEYS = new Set(['type', 'description', 'matcher', 'triggers', 'when', 'async', 'parallel', 'failure_behavior', 'appeal', 'output'])
 const WHEN_KEYS = new Set([
   'signal',
   'phase',
@@ -198,6 +198,7 @@ const VALID_WHEN_SIGNALS = new Set(['done', 'stuck', 'idle'])
 const VALID_WHEN_PHASES = new Set(VALID_PHASES)
 const REVIEWER_PROVIDER_OPTION_KEYS = new Set(['max_turns', 'allowed_tools', 'bypass_permissions', 'command', 'env'])
 const VALID_FAILURE_BEHAVIORS = new Set(['block', 'warn'])
+const VALID_OUTPUT_POLICIES = new Set(['default', 'failures_only'])
 const APPEAL_KEYS = new Set(['enabled', 'threshold'])
 const VALID_REVIEWER_PROVIDERS = new Set(['claude', 'pi', 'codex'])
 const VALID_PROFILE_SELECTORS = new Set(Object.keys(PROFILE_BY_SELECTOR))
@@ -388,6 +389,9 @@ function validateTask (name, task, filePath) {
   validateOptionalBoolean(task.parallel, `tasks.${name}.parallel`, filePath)
   if (task.failure_behavior !== undefined && !VALID_FAILURE_BEHAVIORS.has(task.failure_behavior)) {
     throw new Error(`${filePath}: tasks.${name}.failure_behavior must be one of ${Array.from(VALID_FAILURE_BEHAVIORS).join(', ')}`)
+  }
+  if (task.output !== undefined && !VALID_OUTPUT_POLICIES.has(task.output)) {
+    throw new Error(`${filePath}: tasks.${name}.output must be one of ${Array.from(VALID_OUTPUT_POLICIES).join(', ')}`)
   }
   if (task.async === true && task.parallel === true) {
     throw new Error(`${filePath}: tasks.${name} cannot be both async and parallel`)
