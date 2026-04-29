@@ -15,6 +15,17 @@ function readJson (filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'))
 }
 
+function withGitConfigHookSupport (fn) {
+  const previous = process.env.PROVE_IT_TEST_GIT_VERSION
+  process.env.PROVE_IT_TEST_GIT_VERSION = '2.54.0'
+  try {
+    return fn()
+  } finally {
+    if (previous === undefined) delete process.env.PROVE_IT_TEST_GIT_VERSION
+    else process.env.PROVE_IT_TEST_GIT_VERSION = previous
+  }
+}
+
 describe('redesign adapter-aware init/deinit', () => {
   function initGitRepo (repo) {
     spawnSync('git', ['init'], { cwd: repo, encoding: 'utf8' })
@@ -218,7 +229,7 @@ describe('redesign adapter-aware init/deinit', () => {
     }
   })
 
-  it('configures Git 2.54 config hooks for owned Git workflow activation', () => {
+  it('configures Git 2.54 config hooks for owned Git workflow activation', () => withGitConfigHookSupport(() => {
     const { initStrictProject } = require('../lib/redesign/init')
     const repo = tmpRepo()
 
@@ -236,9 +247,9 @@ describe('redesign adapter-aware init/deinit', () => {
     } finally {
       fs.rmSync(repo, { recursive: true, force: true })
     }
-  })
+  }))
 
-  it('configures pre-push Git config hooks when an existing strict workflow declares one', () => {
+  it('configures pre-push Git config hooks when an existing strict workflow declares one', () => withGitConfigHookSupport(() => {
     const { PROFILE_VERSION } = require('../lib/redesign/config')
     const { initStrictProject } = require('../lib/redesign/init')
     const repo = tmpRepo()
@@ -262,9 +273,9 @@ describe('redesign adapter-aware init/deinit', () => {
     } finally {
       fs.rmSync(repo, { recursive: true, force: true })
     }
-  })
+  }))
 
-  it('deinitializes only prove_it-owned Git config hooks and preserves unrelated hook config', () => {
+  it('deinitializes only prove_it-owned Git config hooks and preserves unrelated hook config', () => withGitConfigHookSupport(() => {
     const { initStrictProject, deinitStrictProject } = require('../lib/redesign/init')
     const repo = tmpRepo()
 
@@ -284,7 +295,7 @@ describe('redesign adapter-aware init/deinit', () => {
     } finally {
       fs.rmSync(repo, { recursive: true, force: true })
     }
-  })
+  }))
 
   it('deinitializes only manifest-owned artifacts and preserves modified files', () => {
     const { initStrictProject, deinitStrictProject } = require('../lib/redesign/init')

@@ -18,5 +18,11 @@ jobs:
         with:
           node-version: latest
 
+      - name: Show tool versions
+        run: |
+          node --version
+          npm --version
+          git --version
+
       - name: Run tests
         run: ./script/test
