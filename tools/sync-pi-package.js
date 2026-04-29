@@ -25,6 +25,7 @@ const RUNTIME_FILES = [
   'lib/redesign/reviewer_context_files.js',
   'lib/redesign/script_task_port.js',
   'lib/redesign/session_control.js',
+  'lib/redesign/session_env.js',
   'lib/redesign/signal_lifecycle.js',
   'lib/redesign/state_port.js',
   'lib/redesign/target_paths.js',

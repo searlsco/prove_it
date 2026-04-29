@@ -247,7 +247,7 @@ After the Claude hard break, `.claude/prove_it/config.json` and `.claude/prove_i
 
 | Event | Purpose | Behavior |
 |-------|---------|----------|
-| `SessionStart` | Injecting context | **Non-blocking.** Clean Runtime context is rendered into Claude's session. Use this to announce methodology, configured Tasks, Signals, and review/backchannel process. Strict config does not currently support legacy `env` tasks. |
+| `SessionStart` | Injecting context and session env | **Non-blocking.** Clean Runtime context is rendered into Claude's session. Strict `session_env` tasks can emit env-update effects on `startup` / `resume`; the Claude Adapter delivers them through `CLAUDE_ENV_FILE`. Legacy `type: "env"` tasks remain retired. |
 | `PreToolUse` | Guarding tool usage | **Blocking, fail-fast.** Tasks run in order; the first failure denies the tool and stops. Use this for config protection, enforcing workflows, or vetting commands. |
 | `Stop` | Verifying completed work | **Blocking, fail-fast.** Tasks run in order; the first failure sends Claude back to fix it. Put cheap tasks first (test suite), expensive ones last (AI reviewer). Async results are harvested before sync tasks run. |
 | `PostToolUse` | Observing tool results | **Non-blocking.** Fires after a tool succeeds. Used by TDD enforcement to detect test passes. Matcher filters by tool name. |
@@ -279,6 +279,7 @@ Strict Clean Runtime task types are:
 
 - **`config_guard`** — blocks edits to protected Project Config / Local Config paths before the tool runs.
 - **`script`** — runs a shell command through the active task provider; a non-zero exit fails the task.
+- **`session_env`** — runs only from `agent_workflows.session_start` on SessionStart `startup` / `resume`, parses env vars from command output, and emits clean `env_update` effects.
 - **`reviewer`** — asks an active-harness reviewer provider for an independent `PASS`, `FAIL`, or `SKIP` verdict. Use this for Claude parity reviewer tasks.
 - **`agent`** — legacy-compatible reviewer shape accepted by the strict schema for simple prompt/model reviewer tasks. Prefer `reviewer` for new config because it exposes provider selection and provider options.
 
@@ -309,6 +310,7 @@ Task fields currently accepted by strict config are intentionally narrow:
 - common: `type`, `description`, `matcher`, `triggers`, `when`, `async`, `parallel`, `failure_behavior`, `appeal`, `output`;
 - `config_guard`: `protected_paths`;
 - `script`: `command`, `params`, `env`, `timeout_ms`;
+- `session_env`: `type`, optional `description`, plus `command`, `params`, `env`, `timeout_ms`;
 - `reviewer`: `intent`, `prompt`, `model`, `provider`, `provider_options`, `timeout_ms`, `context_files`;
 - `agent`: `prompt`, `model`.
 
@@ -643,7 +645,7 @@ That path is Claude Adapter-owned Session State, not Workflow Engine config. Whe
 
 ## Retired legacy task features
 
-The Legacy Runtime had additional Claude-only config features such as `env` tasks, `ruleFile`, `promptType`, task-level `quiet`, task-level `enabled`, task-level `briefing`, top-level reviewer tool defaults, and `fileEditingTools`. They are not valid strict `.prove_it/config.json` fields after the Claude hard break. Strict reviewer `context_files`, `script` task `params`, task-local `env`, `timeout_ms`, and task `output` policy are clean core options, not legacy compatibility aliases.
+The Legacy Runtime had additional Claude-only config features such as legacy `type: "env"` tasks, `ruleFile`, `promptType`, task-level `quiet`, task-level `enabled`, task-level `briefing`, top-level reviewer tool defaults, and `fileEditingTools`. They are not valid strict `.prove_it/config.json` fields after the Claude hard break. Strict `session_env`, reviewer `context_files`, `script` task `params`, task-local `env`, `timeout_ms`, and task `output` policy are clean core options, not legacy compatibility aliases.
 
 ## Built-in task implementations
 
@@ -678,7 +680,26 @@ prove_it pipes normalized execution context to script tasks as JSON on stdin. Al
 
 On Claude `SessionStart`, the Claude Adapter renders Clean Runtime context for the Primary Agent. This includes methodology guidance, active Signals, configured Workflow Engine tasks, and review/backchannel instructions where relevant. The output is adapter-rendered from the Effective Config; strict config does not use the legacy task-level `briefing` field.
 
-Session Start guidance is non-blocking. If guidance rendering fails, the session continues rather than trapping the agent in a startup loop.
+Projects that need session environment variables can define a strict `session_env` task and reference it from `agent_workflows.session_start`:
+
+```json
+{
+  "tasks": {
+    "load_session_env": {
+      "type": "session_env",
+      "command": "./script/session-env",
+      "timeout_ms": 1000
+    }
+  },
+  "agent_workflows": {
+    "session_start": ["load_session_env"]
+  }
+}
+```
+
+The command runs from the project root on Claude SessionStart `startup` / `resume` only. It may print either a JSON object (`{"FOO":"bar"}`) or shell/dotenv lines (`export FOO=bar`, `FOO="bar"`). Variable names must match `^[A-Za-z_][A-Za-z0-9_]*$` and values must be strings. Successful parsed values become clean `env_update` effects; the Claude Adapter owns delivery by appending shell exports to `CLAUDE_ENV_FILE`. Other adapters must explicitly support session env delivery or report a degradation; they do not use Claude env-file mechanics.
+
+Session Start guidance and env loading are non-blocking. Empty output is a no-op context note. Command failures, parse failures, or missing `CLAUDE_ENV_FILE` are reported as SessionStart diagnostics and do not trap the agent in a startup loop.
 
 ## Session phases
 

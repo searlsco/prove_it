@@ -235,6 +235,104 @@ describe('redesign strict .prove_it config/profile model', () => {
     }
   })
 
+  it('accepts strict session_env tasks only in SessionStart and rejects invalid shapes', () => {
+    const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
+    const home = tmpDir('prove_it_home_')
+    const repo = tmpDir('prove_it_repo_')
+
+    try {
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: {
+          load_session_env: {
+            type: 'session_env',
+            command: './script/session-env',
+            params: { mode: 'dev' },
+            env: { BOOTSTRAP: '1' },
+            timeout_ms: 1000
+          }
+        },
+        agent_workflows: { session_start: { append: ['load_session_env'] } }
+      })
+      assert.deepStrictEqual(loadEffectiveConfig(repo, { homeDir: home }).effective.tasks.load_session_env, {
+        type: 'session_env',
+        command: './script/session-env',
+        params: { mode: 'dev' },
+        env: { BOOTSTRAP: '1' },
+        timeout_ms: 1000
+      })
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { legacy_env: { type: 'env', command: './script/session-env' } }
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /tasks\.legacy_env\.type must be one of/)
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { misplaced: { type: 'session_env', command: './script/session-env' } },
+        agent_workflows: { pre_tool: { append: ['misplaced'] } }
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /session_env task "misplaced" may only be used in agent_workflows\.session_start/)
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { script_start: { type: 'script', command: './script/check' } },
+        agent_workflows: { session_start: { append: ['script_start'] } }
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /agent_workflows\.session_start task "script_start" must be type session_env/)
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { bad_command: { type: 'session_env', command: '' } }
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /tasks\.bad_command\.command must be a non-empty string/)
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { non_string_command: { type: 'session_env', command: ['nope'] } }
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /tasks\.non_string_command\.command must be a non-empty string/)
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { bad_timeout: { type: 'session_env', command: './script/session-env', timeout_ms: -1 } }
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /tasks\.bad_timeout\.timeout_ms must be a non-negative integer/)
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { bad_params: { type: 'session_env', command: './script/session-env', params: [] } }
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /tasks\.bad_params\.params must be an object/)
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { bad_env: { type: 'session_env', command: './script/session-env', env: { FLAG: true } } }
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /tasks\.bad_env\.env\.FLAG must be a string/)
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { bad_field: { type: 'session_env', command: './script/session-env', matcher: 'Bash' } }
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /unknown tasks\.bad_field key "matcher"/)
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   it('accepts strict script task params, env, and timeout_ms and rejects invalid shapes', () => {
     const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
     const home = tmpDir('prove_it_home_')

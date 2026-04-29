@@ -244,6 +244,91 @@ describe('Claude clean-runtime hook route', () => {
     assert.ok(state.started_at)
   })
 
+  it('runs clean session_env tasks and writes JSON plus shell vars through CLAUDE_ENV_FILE', () => {
+    const repo = tmpRepo()
+    const envFile = path.join(repo, '.claude-env')
+    fs.mkdirSync(path.join(repo, 'script'), { recursive: true })
+    fs.writeFileSync(path.join(repo, 'script', 'json-env'), '#!/usr/bin/env bash\necho \'{"FOO":"bar","API_BASE_URL":"http://localhost:3000"}\'\n')
+    fs.writeFileSync(path.join(repo, 'script', 'shell-env'), '#!/usr/bin/env bash\necho \'export QUOTED="hello world"\'\necho PLAIN=value\n')
+    fs.chmodSync(path.join(repo, 'script', 'json-env'), 0o755)
+    fs.chmodSync(path.join(repo, 'script', 'shell-env'), 0o755)
+    writeStrictConfig(repo, true, {
+      tasks: {
+        json_env: { type: 'session_env', command: './script/json-env' },
+        shell_env: { type: 'session_env', command: './script/shell-env' }
+      },
+      agent_workflows: { session_start: ['json_env', 'shell_env'] }
+    })
+
+    const result = invokeClaudeSessionStart(repo, { session_id: 'session-1', source: 'startup' }, {
+      CLAUDE_ENV_FILE: envFile
+    })
+
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.stderr, '')
+    const envContent = fs.readFileSync(envFile, 'utf8')
+    assert.match(envContent, /export PROVE_IT_SESSION_ID="session-1"/)
+    assert.match(envContent, /export FOO="bar"/)
+    assert.match(envContent, /export API_BASE_URL="http:\/\/localhost:3000"/)
+    assert.match(envContent, /export QUOTED="hello world"/)
+    assert.match(envContent, /export PLAIN="value"/)
+    assert.match(result.output.hookSpecificOutput.additionalContext, /set env vars: PROVE_IT_SESSION_ID/)
+    assert.match(result.output.hookSpecificOutput.additionalContext, /set env vars: FOO, API_BASE_URL/)
+    assert.match(result.output.hookSpecificOutput.additionalContext, /set env vars: QUOTED, PLAIN/)
+  })
+
+  it('reports clean session_env command and parse failures as non-blocking SessionStart diagnostics', () => {
+    const repo = tmpRepo()
+    fs.mkdirSync(path.join(repo, 'script'), { recursive: true })
+    fs.writeFileSync(path.join(repo, 'script', 'bad-env'), '#!/usr/bin/env bash\necho \'{"123BAD":"nope"}\'\n')
+    fs.writeFileSync(path.join(repo, 'script', 'fail-env'), '#!/usr/bin/env bash\necho command failed >&2\nexit 9\n')
+    fs.chmodSync(path.join(repo, 'script', 'bad-env'), 0o755)
+    fs.chmodSync(path.join(repo, 'script', 'fail-env'), 0o755)
+    writeStrictConfig(repo, true, {
+      tasks: {
+        bad_env: { type: 'session_env', command: './script/bad-env' },
+        fail_env: { type: 'session_env', command: './script/fail-env' }
+      },
+      agent_workflows: { session_start: ['bad_env', 'fail_env'] }
+    })
+
+    const result = invokeClaudeSessionStart(repo, { session_id: 'session-1', source: 'startup' })
+
+    assert.strictEqual(result.exitCode, 0)
+    assert.strictEqual(result.stderr, '')
+    assert.match(result.output.hookSpecificOutput.additionalContext, /session_env task "bad_env" failed to parse output/)
+    assert.match(result.output.hookSpecificOutput.additionalContext, /invalid variable name "123BAD"/)
+    assert.match(result.output.hookSpecificOutput.additionalContext, /session_env task "fail_env" failed/)
+    assert.match(result.output.hookSpecificOutput.additionalContext, /command failed/)
+    assert.match(result.output.systemMessage, /session_env task "bad_env" failed to parse output/)
+    assert.match(result.output.systemMessage, /session_env task "fail_env" failed/)
+  })
+
+  it('does not run clean session_env tasks for clear or compact SessionStart sources', () => {
+    const repo = tmpRepo()
+    const marker = path.join(repo, 'session-env-ran')
+    fs.mkdirSync(path.join(repo, 'script'), { recursive: true })
+    fs.writeFileSync(path.join(repo, 'script', 'session-env'), `#!/usr/bin/env bash\ntouch ${JSON.stringify(marker)}\necho FOO=bar\n`)
+    fs.chmodSync(path.join(repo, 'script', 'session-env'), 0o755)
+    writeStrictConfig(repo, true, {
+      tasks: { load_env: { type: 'session_env', command: './script/session-env' } },
+      agent_workflows: { session_start: ['load_env'] }
+    })
+
+    const clear = invokeClaudeSessionStart(repo, { session_id: 'clear-session', source: 'clear' }, {
+      CLAUDE_ENV_FILE: path.join(repo, '.clear-env')
+    })
+    const compact = invokeClaudeSessionStart(repo, { session_id: 'compact-session', source: 'compact' }, {
+      CLAUDE_ENV_FILE: path.join(repo, '.compact-env')
+    })
+
+    assert.strictEqual(clear.exitCode, 0)
+    assert.strictEqual(compact.exitCode, 0)
+    assert.strictEqual(fs.existsSync(marker), false)
+    assert.strictEqual(fs.existsSync(path.join(repo, '.clear-env')), false)
+    assert.strictEqual(fs.existsSync(path.join(repo, '.compact-env')), false)
+  })
+
   it('escapes SessionStart env-file values as Claude-owned shell exports', () => {
     const repo = tmpRepo()
     writeStrictConfig(repo, true)

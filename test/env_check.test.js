@@ -32,6 +32,12 @@ describe('parseEnvOutput', () => {
       assert.ok(parseError.includes('must be a string'))
     })
 
+    it('errors on invalid JSON variable names', () => {
+      const { vars, parseError } = parseEnvOutput('{"123BAD": "nope"}')
+      assert.deepStrictEqual(vars, {})
+      assert.ok(parseError.includes('invalid variable name'))
+    })
+
     it('errors on JSON array', () => {
       const { vars, parseError } = parseEnvOutput('["FOO"]')
       assert.deepStrictEqual(vars, {})

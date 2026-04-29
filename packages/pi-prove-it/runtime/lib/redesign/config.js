@@ -203,9 +203,11 @@ const APPEAL_KEYS = new Set(['enabled', 'threshold'])
 const VALID_REVIEWER_PROVIDERS = new Set(['claude', 'pi', 'codex'])
 const VALID_PROFILE_SELECTORS = new Set(Object.keys(PROFILE_BY_SELECTOR))
 
+const SESSION_ENV_COMMON_KEYS = new Set(['type', 'description'])
 const TASK_TYPE_KEYS = {
   config_guard: new Set(['protected_paths']),
   script: new Set(['command', 'params', 'env', 'timeout_ms']),
+  session_env: new Set(['command', 'params', 'env', 'timeout_ms']),
   agent: new Set(['prompt', 'model']),
   reviewer: new Set(['intent', 'prompt', 'model', 'provider', 'provider_options', 'timeout_ms', 'context_files'])
 }
@@ -384,7 +386,9 @@ function validateTask (name, task, filePath) {
     throw new Error(`${filePath}: tasks.${name}.type must be one of ${Array.from(TASK_TYPES).join(', ')}`)
   }
 
-  const allowed = new Set([...TASK_COMMON_KEYS, ...TASK_TYPE_KEYS[task.type]])
+  const allowed = task.type === 'session_env'
+    ? new Set([...SESSION_ENV_COMMON_KEYS, ...TASK_TYPE_KEYS[task.type]])
+    : new Set([...TASK_COMMON_KEYS, ...TASK_TYPE_KEYS[task.type]])
   assertKnownKeys(task, allowed, `tasks.${name}`, filePath)
   validateOptionalString(task.description, `tasks.${name}.description`, filePath)
   validateOptionalString(task.matcher, `tasks.${name}.matcher`, filePath)
@@ -407,7 +411,7 @@ function validateTask (name, task, filePath) {
     if (task.protected_paths !== undefined) {
       validateStringArray(task.protected_paths, `tasks.${name}.protected_paths`, filePath)
     }
-  } else if (task.type === 'script') {
+  } else if (task.type === 'script' || task.type === 'session_env') {
     if (typeof task.command !== 'string' || task.command.length === 0) {
       throw new Error(`${filePath}: tasks.${name}.command must be a non-empty string`)
     }
@@ -650,6 +654,14 @@ function validateTaskReferences (effective) {
       for (const taskName of pipeline) {
         if (!Object.prototype.hasOwnProperty.call(effective.tasks, taskName)) {
           throw new Error(`effective config: ${groupName}.${stage} references unknown task "${taskName}"`)
+        }
+        const task = effective.tasks[taskName]
+        if (groupName === 'agent_workflows' && stage === 'session_start') {
+          if (task.type !== 'session_env') {
+            throw new Error(`effective config: agent_workflows.session_start task "${taskName}" must be type session_env`)
+          }
+        } else if (task.type === 'session_env') {
+          throw new Error(`effective config: session_env task "${taskName}" may only be used in agent_workflows.session_start`)
         }
       }
     }

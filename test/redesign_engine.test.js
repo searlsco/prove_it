@@ -974,6 +974,112 @@ describe('shared workflow engine', () => {
     }
   })
 
+  it('runs clean session_env tasks on startup/resume and emits parsed env_update effects without blocking', () => {
+    const repo = tmpRepo({
+      json_env: { type: 'session_env', command: './script/json-env' },
+      shell_env: { type: 'session_env', command: './script/shell-env' },
+      bad_env: { type: 'session_env', command: './script/bad-env' },
+      failing_env: { type: 'session_env', command: './script/failing-env' }
+    }, [], [])
+    const cfgPath = path.join(repo, '.prove_it', 'config.json')
+    const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    raw.agent_workflows.session_start = ['json_env', 'shell_env', 'bad_env', 'failing_env']
+    fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2))
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const calls = []
+      const event = normalizeLifecycleEvent({
+        adapterId: 'claude',
+        rawEventName: 'SessionStart',
+        rawEvent: { session_id: 'session-123', source: 'startup' },
+        cwd: repo
+      })
+      const effect = runWorkflowEngine({
+        event,
+        effectiveConfig,
+        adapterCapabilities: { session_env: { supported: true } },
+        taskPort: {
+          runSessionEnvTask ({ taskName }) {
+            calls.push(taskName)
+            if (taskName === 'json_env') return { pass: true, stdout: '{"FOO":"bar"}' }
+            if (taskName === 'shell_env') return { pass: true, stdout: 'export API_BASE_URL="http://localhost:3000"' }
+            if (taskName === 'bad_env') return { pass: true, stdout: '{"123BAD":"nope"}' }
+            return { pass: false, exitCode: 7, stdout: '', stderr: 'boom' }
+          }
+        }
+      })
+
+      assert.strictEqual(effect.effect, 'batch')
+      assert.deepStrictEqual(calls, ['json_env', 'shell_env', 'bad_env', 'failing_env'])
+      const envUpdates = effect.effects.filter(item => item.effect === 'env_update').map(item => item.env)
+      assert.deepStrictEqual(envUpdates, [
+        { PROVE_IT_SESSION_ID: 'session-123' },
+        { FOO: 'bar' },
+        { API_BASE_URL: 'http://localhost:3000' }
+      ])
+      const diagnostics = effect.effects.map(item => item.context || item.reason || item.message || '').join('\n')
+      assert.match(diagnostics, /session_env task "bad_env" failed to parse output/)
+      assert.match(diagnostics, /invalid variable name "123BAD"/)
+      assert.match(diagnostics, /session_env task "failing_env" failed/)
+      assert.match(diagnostics, /boom/)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('skips session_env tasks on clear and reports non-Claude SessionStart env degradation clearly', () => {
+    const repo = tmpRepo({
+      load_env: { type: 'session_env', command: './script/session-env' }
+    }, [], [])
+    const cfgPath = path.join(repo, '.prove_it', 'config.json')
+    const raw = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    raw.agent_workflows.session_start = ['load_env']
+    fs.writeFileSync(cfgPath, JSON.stringify(raw, null, 2))
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      let calls = 0
+      const taskPort = {
+        runSessionEnvTask () {
+          calls += 1
+          return { pass: true, stdout: 'FOO=bar' }
+        }
+      }
+
+      const clear = runWorkflowEngine({
+        event: normalizeLifecycleEvent({
+          adapterId: 'claude',
+          rawEventName: 'SessionStart',
+          rawEvent: { session_id: 'clear-session', source: 'clear' },
+          cwd: repo
+        }),
+        effectiveConfig,
+        adapterCapabilities: { session_env: { supported: true } },
+        taskPort
+      })
+      assert.strictEqual(calls, 0)
+      assert.strictEqual(clear.effects.some(item => item.effect === 'env_update'), false)
+
+      const pi = runWorkflowEngine({
+        event: normalizeLifecycleEvent({
+          adapterId: 'pi',
+          rawEventName: 'before_agent_start',
+          rawEvent: { source: 'startup' },
+          cwd: repo
+        }),
+        effectiveConfig,
+        adapterCapabilities: {},
+        taskPort
+      })
+      assert.strictEqual(calls, 0)
+      assert.strictEqual(pi.effects.some(item => item.effect === 'env_update' && item.env.FOO === 'bar'), false)
+      assert.match(pi.effects.map(item => item.context || '').join('\n'), /adapter "pi" does not support session_env delivery/)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   it('does not import Claude hook protocol rendering in the shared engine', () => {
     const source = fs.readFileSync(path.join(__dirname, '../lib/redesign/engine.js'), 'utf8')
 
