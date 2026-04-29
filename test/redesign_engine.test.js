@@ -777,6 +777,59 @@ describe('shared workflow engine', () => {
     }
   })
 
+  it('uses Claude adapter file-editing tool config for direct edited-file event fallback only on Claude events', () => {
+    const repo = tmpRepo({
+      source_check: {
+        type: 'script',
+        command: './script/source',
+        when: { sourceFilesEdited: true }
+      }
+    }, ['source_check'])
+    const cfgPath = path.join(repo, '.prove_it', 'config.json')
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'))
+    cfg.globs = { source: ['src/**/*.js'], test: ['test/**/*.test.js'] }
+    cfg.adapters.claude = {
+      enabled: true,
+      file_editing_tools: ['mcp__filesystem__write_file']
+    }
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2))
+
+    try {
+      const effectiveConfig = loadProjectConfig(repo)
+      const calls = []
+      const taskPort = { run: ({ taskName }) => { calls.push(taskName); return { pass: true } } }
+
+      const claudeEffect = runWorkflowEngine({
+        event: normalizeLifecycleEvent({
+          adapterId: 'claude',
+          rawEventName: 'PreToolUse',
+          rawEvent: {
+            tool_name: 'MCP__FILESYSTEM__WRITE_FILE',
+            tool_input: { file_path: 'src/app.js' }
+          },
+          cwd: repo
+        }),
+        effectiveConfig,
+        taskPort
+      })
+      const piEffect = runWorkflowEngine({
+        event: normalizePiToolCall({
+          toolName: 'mcp__filesystem__write_file',
+          input: { path: 'src/app.js' }
+        }, { cwd: repo }),
+        effectiveConfig,
+        taskPort
+      })
+
+      assert.deepStrictEqual(calls, ['source_check'])
+      assert.strictEqual(claudeEffect.effect, 'allow')
+      assert.strictEqual(piEffect.effect, 'allow')
+      assert.deepStrictEqual(piEffect.skipped.map(skip => skip.taskName), ['source_check'])
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   it('uses injected observation facts for edited-file conditions when adapter observation recording is not present', () => {
     const repo = tmpRepo({
       source_check: {

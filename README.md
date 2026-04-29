@@ -836,7 +836,24 @@ Claude reviewer subprocess settings are configured per strict `reviewer` task un
 
 ## Adapter observation limits
 
-The Workflow Engine reasons over normalized observations such as `sourceFilesEdited`, `testFilesEdited`, `linesChanged`, and `linesWritten`. Mapping harness-specific tool payloads into those observations is adapter-owned. The old top-level `fileEditingTools` field is not part of strict config today; future adapter-specific observation settings should live under explicit adapter config once supported.
+The Workflow Engine reasons over normalized observations such as `sourceFilesEdited`, `testFilesEdited`, `linesChanged`, and `linesWritten`. Mapping harness-specific tool names and payloads into those observations is adapter-owned.
+
+Claude's strict adapter config can add extra file-editing tool names for MCP or harness-specific edit tools:
+
+```json
+{
+  "adapters": {
+    "claude": {
+      "enabled": true,
+      "file_editing_tools": ["mcp__filesystem__write_file", "XcodeEdit"]
+    }
+  }
+}
+```
+
+Tool names are matched case-insensitively. Built-in Claude editing tools (`Edit`, `Write`, `MultiEdit`, and notebook edit variants) continue to work without config. Configured Claude tools use the existing generic target-path extraction and gross line-count heuristics; if no target path is detectable, prove_it records the same missing-target-path observation instead of guessing.
+
+This is Claude Adapter observation config, not Workflow Engine task config. The old top-level `fileEditingTools` field remains retired and invalid in strict `.prove_it/config.json`. Pi and Codex adapter schemas do not accept Claude-only `file_editing_tools`.
 
 ## Session management
 
@@ -937,7 +954,7 @@ prove_it doctor
 - **Hooks not firing**—Restart Claude Code after `prove_it install`
 - **Tests not running**—Check `./script/test` exists and is executable (`chmod +x`)
 - **Hooks running in wrong directories**—prove_it only activates in git repos
-- **Reviews never fire**—The default `when` conditions use churn thresholds (`linesChanged`, `linesWritten`). Reviews only trigger after enough code has been written. Check `prove_it monitor` to see skip reasons with current/threshold counts. If edits happen through a harness tool the adapter does not recognize as file editing, strict config does not yet expose the legacy `fileEditingTools` override; that is future adapter-observation work.
+- **Reviews never fire**—The default `when` conditions use churn thresholds (`linesChanged`, `linesWritten`). Reviews only trigger after enough code has been written. Check `prove_it monitor` to see skip reasons with current/threshold counts. If Claude edits happen through an MCP or harness-specific tool, add its Claude tool name under `adapters.claude.file_editing_tools`; do not use the retired top-level `fileEditingTools` field.
 - **Async reviews not enforcing**—Async results are harvested on the next Stop. If Claude stops work before the async review completes, the result will be enforced on the stop after that. Check `prove_it monitor --verbose` to see RUNNING/DONE status progression.
 - **Hooks hanging or taking too long**—Press escape in Claude Code to dismiss the hook UI, then run `! prove_it cancel` to kill all running tasks for the current session. The hook exits with approve so Claude can continue. This works because prove_it injects `PROVE_IT_SESSION_ID` into your shell environment on session start.
 - **Stale `.claude/prove_it` configs reported**—After the Claude hard break, normal Claude hook dispatch ignores `.claude/prove_it/config.json` and `.claude/prove_it/config.local.json`. Move retained workflow intent into strict `.prove_it/config.json`; there is no migration command or dual-runtime compatibility mode.

@@ -172,6 +172,128 @@ describe('Claude clean-runtime observation recording', () => {
     }
   })
 
+  it('records configured Claude adapter file-editing tools as source/test edits with gross lines written', () => {
+    const repo = tmpRepo()
+    const env = envFor(repo)
+    writeStrictConfig(repo, {
+      adapters: {
+        claude: {
+          enabled: true,
+          file_editing_tools: ['mcp__filesystem__write_file']
+        }
+      }
+    })
+
+    try {
+      invokeClaudeHook(repo, 'PostToolUse', {
+        tool_name: 'mcp__filesystem__write_file',
+        tool_input: { file_path: 'src/app.js', content: 'one\ntwo\nthree' },
+        tool_response: { stdout: 'wrote source' }
+      }, env)
+      invokeClaudeHook(repo, 'PostToolUse', {
+        tool_name: 'MCP__FILESYSTEM__WRITE_FILE',
+        tool_input: { path: 'test/app.test.js', content: 'alpha\nbeta\ngamma' },
+        tool_response: { stdout: 'wrote test' }
+      }, env)
+
+      const observations = readState(env).observations
+      assert.deepStrictEqual(observations.editedFiles, ['src/app.js', 'test/app.test.js'])
+      assert.deepStrictEqual(observations.classifiedFiles['src/app.js'], {
+        path: 'src/app.js', source: true, test: false, unrelated: false
+      })
+      assert.deepStrictEqual(observations.classifiedFiles['test/app.test.js'], {
+        path: 'test/app.test.js', source: false, test: true, unrelated: false
+      })
+      assert.strictEqual(observations.fileEdits.length, 2)
+      assert.strictEqual(observations.churn.grossLinesWritten, 6)
+      assert.strictEqual(observations.toolResults[0].missingTargetPath, undefined)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('lets configured Claude edit tools satisfy source/test/linesWritten when gates', () => {
+    const repo = tmpRepo()
+    const env = envFor(repo)
+    writeStrictConfig(repo, {
+      tasks: {
+        mcp_gate: {
+          type: 'script',
+          command: 'echo "mcp gate ran" && exit 1',
+          when: { sourceFilesEdited: true, testFilesEdited: true, linesWritten: 6 }
+        }
+      },
+      agent_workflows: {
+        pre_tool: [],
+        post_tool: [],
+        post_tool_failure: [],
+        agent_end: ['mcp_gate']
+      },
+      adapters: {
+        claude: {
+          enabled: true,
+          file_editing_tools: ['mcp__filesystem__write_file']
+        }
+      }
+    })
+
+    try {
+      invokeClaudeHook(repo, 'PreToolUse', {
+        tool_name: 'Bash',
+        tool_input: { command: 'prove_it signal done --message ready' }
+      }, env)
+      invokeClaudeHook(repo, 'PostToolUse', {
+        tool_name: 'mcp__filesystem__write_file',
+        tool_input: { file_path: 'src/app.js', content: 'one\ntwo\nthree' },
+        tool_response: { stdout: 'wrote source' }
+      }, env)
+      invokeClaudeHook(repo, 'PostToolUse', {
+        tool_name: 'mcp__filesystem__write_file',
+        tool_input: { file_path: 'test/app.test.js', content: 'alpha\nbeta\ngamma' },
+        tool_response: { stdout: 'wrote test' }
+      }, env)
+
+      const result = invokeClaudeHook(repo, 'Stop', {}, env)
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(result.output.decision, 'block')
+      assert.match(result.output.reason, /mcp_gate/)
+      assert.match(result.output.reason, /mcp gate ran/)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves missing-target-path behavior for configured Claude edit tools with no detectable path', () => {
+    const repo = tmpRepo()
+    const env = envFor(repo)
+    writeStrictConfig(repo, {
+      adapters: {
+        claude: {
+          enabled: true,
+          file_editing_tools: ['mcp__filesystem__write_file']
+        }
+      }
+    })
+
+    try {
+      invokeClaudeHook(repo, 'PostToolUse', {
+        tool_name: 'mcp__filesystem__write_file',
+        tool_input: { content: 'missing\npath' },
+        tool_response: { stdout: 'no path in payload' }
+      }, env)
+
+      const observations = readState(env).observations
+      assert.strictEqual(observations.toolResults.length, 1)
+      assert.strictEqual(observations.toolResults[0].missingTargetPath, true)
+      assert.deepStrictEqual(observations.editedFiles, [])
+      assert.deepStrictEqual(observations.fileEdits, [])
+      assert.strictEqual(observations.churn.grossLinesWritten, 0)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   it('uses recorded observation facts in later clean when conditions', () => {
     const repo = tmpRepo()
     const env = envFor(repo)

@@ -393,6 +393,63 @@ describe('redesign strict .prove_it config/profile model', () => {
     }
   })
 
+  it('accepts Claude adapter file-editing observation tools and keeps them Claude-scoped', () => {
+    const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
+    const home = tmpDir('prove_it_home_')
+    const repo = tmpDir('prove_it_repo_')
+
+    try {
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        adapters: {
+          claude: {
+            enabled: true,
+            file_editing_tools: ['mcp__filesystem__write_file', 'XcodeEdit']
+          }
+        }
+      })
+
+      assert.deepStrictEqual(loadEffectiveConfig(repo, { homeDir: home }).effective.adapters.claude, {
+        enabled: true,
+        file_editing_tools: ['mcp__filesystem__write_file', 'XcodeEdit']
+      })
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        adapters: { claude: { enabled: true, file_editing_tools: 'mcp__filesystem__write_file' } }
+      })
+      assert.throws(
+        () => loadEffectiveConfig(repo, { homeDir: home }),
+        /adapters\.claude\.file_editing_tools must be an array of strings/
+      )
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        adapters: { claude: { enabled: true, file_editing_tools: ['Write', 42] } }
+      })
+      assert.throws(
+        () => loadEffectiveConfig(repo, { homeDir: home }),
+        /adapters\.claude\.file_editing_tools must be an array of strings/
+      )
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        adapters: { pi: { enabled: true, file_editing_tools: ['pi_write'] } }
+      })
+      assert.throws(
+        () => loadEffectiveConfig(repo, { homeDir: home }),
+        /unknown adapters\.pi key "file_editing_tools"/
+      )
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   it('strictly rejects unknown fields, legacy hook-shaped config, and invalid task references', () => {
     const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
     const home = tmpDir('prove_it_home_')
@@ -407,6 +464,13 @@ describe('redesign strict .prove_it config/profile model', () => {
         agent_workflows: {}
       })
       assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /unknown top-level key "hooks"/)
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        fileEditingTools: ['mcp__filesystem__write_file']
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /unknown top-level key "fileEditingTools"/)
 
       writeJson(path.join(repo, '.prove_it', 'config.json'), {
         schema_version: 1,

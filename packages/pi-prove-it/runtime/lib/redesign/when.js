@@ -78,15 +78,30 @@ function factFiles (facts) {
   ].map(file => isObject(file) ? (file.path || file.file_path || file.filePath) : file)
 }
 
-function eventEditedFiles (event) {
-  const toolName = String(event?.toolName || '').toLowerCase()
-  if (!EDITING_TOOLS.has(toolName)) return []
+function isClaudeEvent (event) {
+  return String(event?.adapterId || event?.adapter || '').toLowerCase() === 'claude'
+}
+
+function configuredClaudeEditingTools (context) {
+  if (!isClaudeEvent(context.event)) return []
+  return asArray(context.config?.adapters?.claude?.file_editing_tools)
+    .filter(tool => typeof tool === 'string')
+    .map(tool => tool.toLowerCase())
+}
+
+function isEditingTool (toolName, context) {
+  const normalized = String(toolName || '').toLowerCase()
+  return EDITING_TOOLS.has(normalized) || configuredClaudeEditingTools(context).includes(normalized)
+}
+
+function eventEditedFiles (event, context) {
+  if (!isEditingTool(event?.toolName, context)) return []
   return asArray(event?.targetPaths)
 }
 
 function editedFiles (context) {
   const facts = observationFacts(context)
-  const files = [...eventEditedFiles(context.event), ...factFiles(facts)]
+  const files = [...eventEditedFiles(context.event, context), ...factFiles(facts)]
   return relativePaths(files, context.event?.rootDir || context.event?.cwd || process.cwd())
 }
 
