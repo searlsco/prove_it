@@ -75,6 +75,8 @@ Depending on adapter support, prove_it can:
 
 `prove_it init --adapter claude` selects the Claude parity profile. The Workflow Engine still reads `.prove_it/config.json`; the Claude Adapter owns the Claude hook API mechanics, including `.claude/settings.json`, `CLAUDE_ENV_FILE`, Claude-specific hook JSON, Claude Stop hard blocks, and Claude backchannel paths.
 
+To validate a Claude clean-runtime project end-to-end, use the [Claude parity acceptance harness](docs/claude-parity-acceptance.md).
+
 `prove_it init --adapter pi` selects the Pi methodology profile. Pi is first-class, but its Capability Profile differs: Pi can hard-block pre-tool config edits, expose model-callable Signals, and run Done-gated fast/full script verification from `turn_end`; failed Completion Verification is delivered as a remediation follow-up instead of a Claude Stop hard block.
 
 ## Setup
@@ -1093,7 +1095,7 @@ chmod +x ~/bin/prove_it_tasks/prefer_gh_cli_over_fetch
 Clean-runtime examples:
 
 - [`example/pi-strict/`](example/pi-strict/) — Pi-first strict `.prove_it` project using `@davemo/pi-prove-it`.
-- [`example/claude-fast-follow/`](example/claude-fast-follow/) — Claude parity project with strict `.prove_it` config. The directory name is historical from the fast-follow phase.
+- [`example/claude-fast-follow/`](example/claude-fast-follow/) — Claude parity project with strict `.prove_it` config. The directory name is historical from the fast-follow phase. For cutover validation, see the [Claude parity acceptance harness](docs/claude-parity-acceptance.md).
 - [`example/multi-adapter/`](example/multi-adapter/) — Pi + Claude strict `.prove_it` project using `profile: "strict"` so Pi does not inherit Claude-only defaults.
 
 Legacy characterization examples retained for test-only oracle coverage:

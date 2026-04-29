@@ -73,7 +73,7 @@ Git-specific activation is intentionally Git 2.54+ only: strict init configures 
 
 Claude-specific mechanics remain adapter-owned: Claude hook names, hook JSON schemas, `.claude/settings.json`, `CLAUDE_ENV_FILE`, Claude Stop hard blocks, Claude file history, and Claude backchannel paths.
 
-See [`example/claude-fast-follow/`](../example/claude-fast-follow/) for a Claude parity example. The directory name is historical; the README describes the completed hard-break behavior.
+See [`example/claude-fast-follow/`](../example/claude-fast-follow/) for a Claude parity example. The directory name is historical; the README describes the completed hard-break behavior. To validate a project against the cutover target, use the [Claude parity acceptance harness](claude-parity-acceptance.md).
 
 ## Pi behavior
 
