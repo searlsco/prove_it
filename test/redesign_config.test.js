@@ -150,6 +150,54 @@ describe('redesign strict .prove_it config/profile model', () => {
     }
   })
 
+  it('accepts strict reviewer context_files and rejects invalid shapes', () => {
+    const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
+    const home = tmpDir('prove_it_home_')
+    const repo = tmpDir('prove_it_repo_')
+
+    try {
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: {
+          review: {
+            type: 'reviewer',
+            prompt: 'Review this.',
+            provider: 'claude',
+            context_files: ['.prove_it/rules/testing.md', 'docs/review-guidelines.md']
+          }
+        }
+      })
+      assert.deepStrictEqual(loadEffectiveConfig(repo, { homeDir: home }).effective.tasks.review.context_files, [
+        '.prove_it/rules/testing.md',
+        'docs/review-guidelines.md'
+      ])
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { bad_context: { type: 'reviewer', prompt: 'Review this.', context_files: '.prove_it/rules/testing.md' } }
+      })
+      assert.throws(
+        () => loadEffectiveConfig(repo, { homeDir: home }),
+        /tasks\.bad_context\.context_files must be an array of strings/
+      )
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { bad_entry: { type: 'reviewer', prompt: 'Review this.', context_files: ['docs/review.md', 42] } }
+      })
+      assert.throws(
+        () => loadEffectiveConfig(repo, { homeDir: home }),
+        /tasks\.bad_entry\.context_files must be an array of strings/
+      )
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   it('accepts strict task output policies and rejects invalid policy values', () => {
     const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
     const home = tmpDir('prove_it_home_')

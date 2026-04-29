@@ -38,6 +38,29 @@ describe('Pi reviewer backend', () => {
     assert.match(calls[0].options.input, /PASS, FAIL, or SKIP/)
   })
 
+  it('includes reviewer context_files in the Pi prompt in deterministic order', () => {
+    let prompt
+    const result = runPiReviewerTask({
+      taskName: 'context-review',
+      task: { type: 'reviewer', prompt: 'Review this.' },
+      contextFiles: [
+        { path: '.prove_it/rules/testing.md', content: 'Testing standards first.\n' },
+        { path: 'docs/review.md', content: 'Review standards second.\n' }
+      ],
+      event: { rootDir: '/repo' }
+    }, {
+      runner (_command, options) {
+        prompt = options.input
+        return { code: 0, stdout: 'PASS: context used\n', stderr: '' }
+      }
+    })
+
+    assert.strictEqual(result.pass, true)
+    assert.match(prompt, /--- context_files\[0\]: \.prove_it\/rules\/testing\.md ---\nTesting standards first\./)
+    assert.match(prompt, /--- context_files\[1\]: docs\/review\.md ---\nReview standards second\./)
+    assert.ok(prompt.indexOf('Testing standards first.') < prompt.indexOf('Review standards second.'))
+  })
+
   it('passes an explicit task model to Pi without changing harnesses', () => {
     let command
     const result = runPiReviewerTask({

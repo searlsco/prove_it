@@ -22,6 +22,10 @@ describe('Claude clean-runtime reviewer backend', () => {
         },
         timeout_ms: 1234
       },
+      contextFiles: [
+        { path: '.prove_it/rules/testing.md', content: 'Prefer integration tests.\n' },
+        { path: 'docs/review.md', content: 'Review public behavior.\n' }
+      ],
       event: {
         adapterId: 'claude',
         rawEventName: 'Stop',
@@ -60,6 +64,10 @@ describe('Claude clean-runtime reviewer backend', () => {
     assert.strictEqual(received.context.taskBypassPermissions, true)
     assert.deepStrictEqual(received.context.configEnv, { FOO: 'bar' })
     assert.strictEqual(received.context.hookEvent, 'Stop')
+    assert.deepStrictEqual(received.context.reviewerContextFiles, [
+      { path: '.prove_it/rules/testing.md', content: 'Prefer integration tests.\n' },
+      { path: 'docs/review.md', content: 'Review public behavior.\n' }
+    ])
   })
 
   it('rejects Codex-shaped models instead of crossing harnesses from Claude sessions', () => {

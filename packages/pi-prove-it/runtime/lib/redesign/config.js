@@ -207,7 +207,7 @@ const TASK_TYPE_KEYS = {
   config_guard: new Set(['protected_paths']),
   script: new Set(['command', 'params', 'env', 'timeout_ms']),
   agent: new Set(['prompt', 'model']),
-  reviewer: new Set(['intent', 'prompt', 'model', 'provider', 'provider_options', 'timeout_ms'])
+  reviewer: new Set(['intent', 'prompt', 'model', 'provider', 'provider_options', 'timeout_ms', 'context_files'])
 }
 const TASK_TYPES = new Set(Object.keys(TASK_TYPE_KEYS))
 const ADAPTER_KEYS = new Set(['pi', 'claude', 'codex'])
@@ -431,6 +431,7 @@ function validateTask (name, task, filePath) {
       throw new Error(`${filePath}: tasks.${name}.provider must be one of ${Array.from(VALID_REVIEWER_PROVIDERS).join(', ')}`)
     }
     validateOptionalNonNegativeInteger(task.timeout_ms, `tasks.${name}.timeout_ms`, filePath)
+    if (task.context_files !== undefined) validateStringArray(task.context_files, `tasks.${name}.context_files`, filePath)
     validateReviewerProviderOptions(task.provider_options, `tasks.${name}.provider_options`, filePath)
   }
 

@@ -1,6 +1,7 @@
 const { shellEscape, tryRun } = require('../../io')
 const { parseVerdict } = require('../../reviewer')
 const { createScriptTaskPort } = require('../../redesign/script_task_port')
+const { reviewerContextFilesBlock } = require('../../redesign/reviewer_context_files')
 
 const REVIEWER_VERDICT_INSTRUCTIONS = `
 
@@ -14,7 +15,9 @@ function rootDirFromContext (context = {}) {
 }
 
 function buildPiReviewerPrompt (context) {
-  return `${context.task.prompt || context.task.intent || ''}${REVIEWER_VERDICT_INSTRUCTIONS}`
+  const contextFilesBlock = reviewerContextFilesBlock(context.contextFiles || context.reviewerContextFiles)
+  const contextBlock = contextFilesBlock ? `\n\n${contextFilesBlock}` : ''
+  return `${context.task.prompt || context.task.intent || ''}${contextBlock}${REVIEWER_VERDICT_INSTRUCTIONS}`
 }
 
 function piReviewerCommand (task = {}) {

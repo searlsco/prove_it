@@ -309,7 +309,7 @@ Task fields currently accepted by strict config are intentionally narrow:
 - common: `type`, `description`, `matcher`, `triggers`, `when`, `async`, `parallel`, `failure_behavior`, `appeal`, `output`;
 - `config_guard`: `protected_paths`;
 - `script`: `command`, `params`, `env`, `timeout_ms`;
-- `reviewer`: `intent`, `prompt`, `model`, `provider`, `provider_options`, `timeout_ms`;
+- `reviewer`: `intent`, `prompt`, `model`, `provider`, `provider_options`, `timeout_ms`, `context_files`;
 - `agent`: `prompt`, `model`.
 
 Strict `script` task execution options are clean Workflow Engine capabilities:
@@ -341,7 +341,7 @@ Accepted values are:
 
 The policy is Workflow Engine behavior and applies across adapters that render engine effects, including Claude, Git, and Pi runtime paths.
 
-Legacy Claude Runtime fields such as `quiet`, `briefing`, `enabled`, `promptType`, `ruleFile`, `taskEnv`, `taskAllowedTools`, `taskBypassPermissions`, `fileEditingTools`, and `timeout` are not valid strict `.prove_it/config.json` fields. Use `output: "failures_only"` for clean failures-only task output and `timeout_ms` for strict task timeouts.
+Legacy Claude Runtime fields such as `quiet`, `briefing`, `enabled`, `promptType`, `ruleFile`, `taskEnv`, `taskAllowedTools`, `taskBypassPermissions`, `fileEditingTools`, and `timeout` are not valid strict `.prove_it/config.json` fields. Use `output: "failures_only"` for clean failures-only task output, `timeout_ms` for strict task timeouts, and reviewer `context_files` for project-specific review standards.
 
 To customize config protection, use `config_guard` instead of the retired `guard-config` script/`params.paths` pattern:
 
@@ -562,7 +562,25 @@ Active-harness enforcement is intentional. A Claude session must not invoke Code
 
 ### Reviewer prompt context
 
-The clean reviewer abstraction supplies provider-owned evidence such as session changes, git status, recent commits, Signal messages, and task context where available. The old README documented legacy template variables and `ruleFile`; those legacy config fields are not strict Clean Runtime API today. If you need reusable project-specific reviewer policy now, put it in a custom skill or directly in the reviewer `prompt`/`intent`.
+The clean reviewer abstraction supplies provider-owned evidence such as session changes, git status, recent commits, Signal messages, and task context where available. Reviewer tasks can also include project-specific review standards from committed files with `context_files`:
+
+```json
+{
+  "tasks": {
+    "coverage_review": {
+      "type": "reviewer",
+      "prompt": "skill:prove-coverage",
+      "provider": "claude",
+      "context_files": [
+        ".prove_it/rules/testing.md",
+        "docs/review-guidelines.md"
+      ]
+    }
+  }
+}
+```
+
+`context_files` entries are project-relative paths, read in the listed order, and must stay inside the project root. Missing or unreadable files fail the reviewer task with a message naming the file. This is the clean replacement for project-specific reviewer rules; legacy `ruleFile` remains retired and is not accepted in strict `.prove_it/config.json`.
 
 ### Async reviews
 
@@ -625,7 +643,7 @@ That path is Claude Adapter-owned Session State, not Workflow Engine config. Whe
 
 ## Retired legacy task features
 
-The Legacy Runtime had additional Claude-only config features such as `env` tasks, `ruleFile`, `promptType`, task-level `quiet`, task-level `enabled`, task-level `briefing`, top-level reviewer tool defaults, and `fileEditingTools`. They are not valid strict `.prove_it/config.json` fields after the Claude hard break. Strict `script` task `params`, task-local `env`, `timeout_ms`, and task `output` policy are clean core options, not legacy compatibility aliases.
+The Legacy Runtime had additional Claude-only config features such as `env` tasks, `ruleFile`, `promptType`, task-level `quiet`, task-level `enabled`, task-level `briefing`, top-level reviewer tool defaults, and `fileEditingTools`. They are not valid strict `.prove_it/config.json` fields after the Claude hard break. Strict reviewer `context_files`, `script` task `params`, task-local `env`, `timeout_ms`, and task `output` policy are clean core options, not legacy compatibility aliases.
 
 ## Built-in task implementations
 

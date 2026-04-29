@@ -143,6 +143,129 @@ describe('clean-runtime reviewer tasks', () => {
     assert.strictEqual(reviewerCalls[0].task.type, 'reviewer')
   })
 
+  it('loads configured context_files into reviewer context in order', () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_reviewer_context_'))
+    fs.mkdirSync(path.join(repo, '.prove_it', 'rules'), { recursive: true })
+    fs.mkdirSync(path.join(repo, 'docs'), { recursive: true })
+    fs.writeFileSync(path.join(repo, '.prove_it', 'rules', 'testing.md'), 'Testing standards first.\n')
+    fs.writeFileSync(path.join(repo, 'docs', 'review.md'), 'Review standards second.\n')
+
+    try {
+      const effectiveConfig = config({
+        tasks: {
+          review: {
+            type: 'reviewer',
+            prompt: 'Review this.',
+            context_files: ['.prove_it/rules/testing.md', 'docs/review.md']
+          }
+        }
+      })
+      const statePort = createMemoryStatePort()
+      statePort.writeSignal('session-123', { type: 'done', message: 'ready', at: 123 })
+      let received
+
+      const effect = runWorkflowEngine({
+        event: stopEvent(repo, 'claude'),
+        effectiveConfig,
+        adapterCapabilities: completionCapabilities('claude'),
+        statePort,
+        reviewerPort: {
+          run (context) {
+            received = context.contextFiles
+            return { pass: true, reason: 'review passed' }
+          }
+        }
+      })
+
+      assert.strictEqual(effect.effect, 'approve')
+      assert.deepStrictEqual(received.map(file => [file.path, file.content]), [
+        ['.prove_it/rules/testing.md', 'Testing standards first.\n'],
+        ['docs/review.md', 'Review standards second.\n']
+      ])
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('fails reviewer tasks when a context file is missing or unreadable', () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_missing_context_'))
+
+    try {
+      const effectiveConfig = config({
+        tasks: {
+          review: { type: 'reviewer', prompt: 'Review this.', context_files: ['docs/missing.md'] }
+        }
+      })
+      const statePort = createMemoryStatePort()
+      statePort.writeSignal('session-123', { type: 'done', message: 'ready', at: 123 })
+
+      const effect = runWorkflowEngine({
+        event: stopEvent(repo, 'claude'),
+        effectiveConfig,
+        adapterCapabilities: completionCapabilities('claude'),
+        statePort,
+        reviewerPort: { run: () => assert.fail('missing context files must fail before invoking reviewer') }
+      })
+
+      assert.strictEqual(effect.effect, 'fail')
+      assert.match(effect.reason, /context file not found: docs\/missing\.md/)
+
+      fs.mkdirSync(path.join(repo, 'docs', 'as-directory'), { recursive: true })
+      const unreadableConfig = config({
+        tasks: {
+          review: { type: 'reviewer', prompt: 'Review this.', context_files: ['docs/as-directory'] }
+        }
+      })
+      statePort.writeSignal('session-123', { type: 'done', message: 'ready', at: 123 })
+
+      const unreadableEffect = runWorkflowEngine({
+        event: stopEvent(repo, 'claude'),
+        effectiveConfig: unreadableConfig,
+        adapterCapabilities: completionCapabilities('claude'),
+        statePort,
+        reviewerPort: { run: () => assert.fail('unreadable context files must fail before invoking reviewer') }
+      })
+
+      assert.strictEqual(unreadableEffect.effect, 'fail')
+      assert.match(unreadableEffect.reason, /context file error: docs\/as-directory/)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects reviewer context_files that escape the project root', () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_escape_context_'))
+
+    try {
+      for (const [contextFile, expected] of [
+        ['../outside.md', /context_files\[0\] must stay within the project root/],
+        [path.join(repo, 'docs', 'review.md'), /context_files\[0\] must be a project-relative path/]
+      ]) {
+        const effectiveConfig = config({
+          tasks: {
+            review: { type: 'reviewer', prompt: 'Review this.', context_files: [contextFile] }
+          }
+        })
+        const statePort = createMemoryStatePort()
+        statePort.writeSignal('session-123', { type: 'done', message: 'ready', at: 123 })
+
+        const effect = runWorkflowEngine({
+          event: stopEvent(repo, 'claude'),
+          effectiveConfig,
+          adapterCapabilities: completionCapabilities('claude'),
+          statePort,
+          reviewerPort: { run: () => assert.fail('escaping context files must fail before invoking reviewer') }
+        })
+
+        assert.strictEqual(effect.effect, 'fail')
+        assert.match(effect.reason, expected)
+        assert.match(effect.reason, new RegExp(contextFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+      }
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
   it('normalizes reviewer fail and skip verdicts into completion lifecycle outcomes', () => {
     for (const [rawResult, expectedEffect, expectedReason] of [
       [{ pass: false, reason: 'missing edge case', body: 'src/app.js:10' }, 'fail', /missing edge case/],
@@ -232,7 +355,7 @@ describe('clean-runtime reviewer tasks', () => {
   it('does not allow reviewer tasks to request a different harness than the active adapter', () => {
     const effectiveConfig = config({
       tasks: {
-        review: { type: 'reviewer', prompt: 'Review this.', provider: 'pi' }
+        review: { type: 'reviewer', prompt: 'Review this.', provider: 'pi', context_files: ['docs/review.md'] }
       }
     })
     const statePort = createMemoryStatePort()

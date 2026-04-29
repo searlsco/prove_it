@@ -57,9 +57,9 @@ Before failing, verify by reading the actual test files on disk. Tests must spec
 exercise the changed behavior—a test file merely existing for the module is not enough.
 If the test file exists but does not cover the new or changed behavior, that is a gap.
 
-When a ruleFile is provided, respect the project's testing conventions. The project
-team knows their framework constraints and what constitutes meaningful test coverage
-in their domain.
+When project reviewer context files are provided, respect the project's testing
+conventions. The project team knows their framework constraints and what constitutes
+meaningful test coverage in their domain.
 
 Files to review (most recent first):
 {{files_changed_since_last_run}}
