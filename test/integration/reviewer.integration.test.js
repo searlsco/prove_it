@@ -75,23 +75,24 @@ Be concise. One line only.`
 }
 
 function parseReviewerResult (stdout) {
-  const firstLine = stdout.split('\n')[0].trim()
+  const lines = stdout.split('\n').map(line => line.trim()).filter(Boolean)
+  const verdict = lines.find(line => line === 'PASS' || line === 'FAIL' || line.startsWith('FAIL:'))
 
-  if (firstLine === 'PASS') {
+  if (verdict === 'PASS') {
     return { pass: true }
   }
 
-  if (firstLine.startsWith('FAIL:')) {
-    return { pass: false, reason: firstLine.slice(5).trim() }
+  if (verdict?.startsWith('FAIL:')) {
+    return { pass: false, reason: verdict.slice(5).trim() }
   }
 
-  if (firstLine === 'FAIL') {
-    const lines = stdout.split('\n')
-    const reason = lines.length > 1 ? lines[1].trim() : 'No reason provided'
+  if (verdict === 'FAIL') {
+    const index = lines.indexOf(verdict)
+    const reason = lines[index + 1] || 'No reason provided'
     return { pass: false, reason }
   }
 
-  return { unknown: true, output: firstLine }
+  return { unknown: true, output: lines[0] || '' }
 }
 
 describe('reviewer integration', { skip: !claudeAvailable() }, () => {
