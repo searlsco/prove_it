@@ -9,7 +9,7 @@ const EXAMPLE_DIR = path.join(__dirname, '..', '..', 'example')
 const EXAMPLES = ['basic', 'advanced']
 const STRICT_EXAMPLES = {
   'pi-strict': {
-    profile: 'strict',
+    profile: 'pi',
     adapters: { pi: { enabled: true }, claude: { enabled: false } }
   },
   'multi-adapter': {

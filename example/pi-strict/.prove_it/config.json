@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "profile_version": "prove_it.strict.v1",
-  "profile": "strict",
+  "profile": "pi",
   "adapters": {
     "pi": {
       "enabled": true

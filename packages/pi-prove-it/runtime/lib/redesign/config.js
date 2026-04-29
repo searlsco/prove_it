@@ -28,6 +28,8 @@ const DEFAULT_TEST_GLOBS = [
 ]
 
 const VERIFY_ASSUMPTIONS_COMMAND = "echo 'BLOCKING REQUIREMENT: Before presenting this plan, audit every assumption it relies on. If ANY assumption has not been objectively verified by you or the user, you MUST verify it now. Read the code, build a proof-of-concept, exercise the behavior in a real browser or app, or ask the user. Failure to identify and validate your assumptions prior to implementation will result in your work being discarded and re-attempted by another developer.'"
+const OPTIONAL_FAST_TEST_COMMAND = "if [ -x ./script/test_fast ]; then ./script/test_fast; else echo 'prove_it: ./script/test_fast not found; skipping fast tests.'; fi"
+const OPTIONAL_FULL_TEST_COMMAND = "if [ -x ./script/test ]; then ./script/test; else echo 'prove_it: ./script/test not found; skipping full tests.'; fi"
 
 const BUILT_IN_PROFILE = Object.freeze({
   name: 'strict',
@@ -162,10 +164,59 @@ const CLAUDE_PARITY_PROFILE = Object.freeze({
   })
 })
 
+const PI_METHODOLOGY_PROFILE = Object.freeze({
+  name: 'pi-methodology',
+  selector: 'pi',
+  profile_version: PROFILE_VERSION,
+  config: Object.freeze({
+    schema_version: SCHEMA_VERSION,
+    project: Object.freeze({}),
+    globs: Object.freeze({
+      source: Object.freeze([...DEFAULT_SOURCE_GLOBS]),
+      test: Object.freeze([...DEFAULT_TEST_GLOBS])
+    }),
+    tasks: Object.freeze({
+      protect_prove_it_config: Object.freeze({
+        type: 'config_guard',
+        protected_paths: Object.freeze([...DEFAULT_PROTECTED_PATHS])
+      }),
+      pi_fast_tests: Object.freeze({
+        type: 'script',
+        command: OPTIONAL_FAST_TEST_COMMAND,
+        when: Object.freeze({ signal: 'done' }),
+        output: 'failures_only'
+      }),
+      pi_full_tests: Object.freeze({
+        type: 'script',
+        command: OPTIONAL_FULL_TEST_COMMAND,
+        parallel: true,
+        when: Object.freeze({ signal: 'done' }),
+        output: 'failures_only'
+      })
+    }),
+    agent_workflows: Object.freeze({
+      session_start: Object.freeze([]),
+      pre_tool: Object.freeze(['protect_prove_it_config']),
+      post_tool: Object.freeze([]),
+      post_tool_failure: Object.freeze([]),
+      agent_end: Object.freeze(['pi_fast_tests', 'pi_full_tests'])
+    }),
+    git_workflows: Object.freeze({
+      pre_commit: Object.freeze([]),
+      pre_push: Object.freeze([])
+    }),
+    adapters: Object.freeze({
+      pi: Object.freeze({ enabled: false }),
+      claude: Object.freeze({ enabled: false })
+    })
+  })
+})
+
 const PROFILE_BY_SELECTOR = Object.freeze({
   strict: BUILT_IN_PROFILE,
   claude: CLAUDE_PARITY_PROFILE,
-  'claude-parity': CLAUDE_PARITY_PROFILE
+  'claude-parity': CLAUDE_PARITY_PROFILE,
+  pi: PI_METHODOLOGY_PROFILE
 })
 
 const TOP_LEVEL_KEYS = new Set([
@@ -771,6 +822,7 @@ module.exports = {
   CONFIG_FILE,
   DEFAULT_PROTECTED_PATHS,
   LOCAL_CONFIG_FILE,
+  PI_METHODOLOGY_PROFILE,
   PROFILE_VERSION,
   SCHEMA_VERSION,
   loadEffectiveConfig,

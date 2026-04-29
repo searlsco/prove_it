@@ -619,8 +619,8 @@ describe('redesign strict .prove_it config/profile model', () => {
     })
   })
 
-  it('selects the Claude parity profile without making Pi inherit Claude-only defaults', () => {
-    const { CLAUDE_PARITY_PROFILE, PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
+  it('selects explicit Claude and Pi methodology profiles without leaking harness-specific defaults', () => {
+    const { CLAUDE_PARITY_PROFILE, PI_METHODOLOGY_PROFILE, PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
     const claudeRepo = tmpDir('prove_it_claude_profile_')
     const piRepo = tmpDir('prove_it_pi_profile_')
 
@@ -634,6 +634,7 @@ describe('redesign strict .prove_it config/profile model', () => {
       writeJson(path.join(piRepo, '.prove_it', 'config.json'), {
         schema_version: 1,
         profile_version: PROFILE_VERSION,
+        profile: 'pi',
         adapters: { pi: { enabled: true } }
       })
 
@@ -669,11 +670,28 @@ describe('redesign strict .prove_it config/profile model', () => {
       assert.strictEqual(claude.tasks.done_review.parallel, true)
       assert.strictEqual(claude.tasks.approach_review.when.signal, 'stuck')
 
+      assert.strictEqual(PI_METHODOLOGY_PROFILE.profile_version, PROFILE_VERSION)
       assert.deepStrictEqual(pi.agent_workflows.pre_tool, ['protect_prove_it_config'])
       assert.deepStrictEqual(pi.agent_workflows.post_tool, [])
-      assert.deepStrictEqual(pi.agent_workflows.agent_end, [])
+      assert.deepStrictEqual(pi.agent_workflows.agent_end, ['pi_fast_tests', 'pi_full_tests'])
+      assert.deepStrictEqual(pi.git_workflows.pre_commit, [])
+      assert.strictEqual(pi.profile, 'pi')
+      assert.deepStrictEqual(pi.tasks.protect_prove_it_config.protected_paths, [
+        '.prove_it/config.json',
+        '.prove_it/config.local.json'
+      ])
+      assert.strictEqual(pi.tasks.pi_fast_tests.type, 'script')
+      assert.match(pi.tasks.pi_fast_tests.command, /script\/test_fast/)
+      assert.deepStrictEqual(pi.tasks.pi_fast_tests.when, { signal: 'done' })
+      assert.strictEqual(pi.tasks.pi_fast_tests.output, 'failures_only')
+      assert.strictEqual(pi.tasks.pi_full_tests.type, 'script')
+      assert.match(pi.tasks.pi_full_tests.command, /script\/test/)
+      assert.deepStrictEqual(pi.tasks.pi_full_tests.when, { signal: 'done' })
+      assert.strictEqual(pi.tasks.pi_full_tests.parallel, true)
+      assert.strictEqual(pi.tasks.pi_full_tests.output, 'failures_only')
       assert.ok(!Object.prototype.hasOwnProperty.call(pi.tasks, 'done_review'))
-      assert.strictEqual(pi.profile, 'strict')
+      assert.ok(!Object.prototype.hasOwnProperty.call(pi.tasks, 'approach_review'))
+      assert.ok(Object.values(pi.tasks).every(task => task.provider !== 'claude'))
     } finally {
       fs.rmSync(claudeRepo, { recursive: true, force: true })
       fs.rmSync(piRepo, { recursive: true, force: true })

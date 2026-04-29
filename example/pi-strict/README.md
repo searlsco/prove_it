@@ -1,4 +1,4 @@
-# Pi-first strict `.prove_it` example
+# Pi-first `.prove_it` example
 
 This is the smallest Pi-first Clean Runtime project. It demonstrates prove_it as a methodology/workflow engine, not a Claude-only hook runner.
 
@@ -24,7 +24,7 @@ This example commits the equivalent project setting in `.pi/settings.json`:
 
 ## Files that matter
 
-- `.prove_it/config.json` — strict Workflow Engine Project Config with `profile: "strict"`.
+- `.prove_it/config.json` — strict Workflow Engine Project Config with `profile: "pi"`.
 - `.prove_it/ownership.json` — manifest for prove_it-owned generated files.
 - `.pi/settings.json` — Pi-native package activation for `@davemo/pi-prove-it`.
 
@@ -38,8 +38,8 @@ Pi is first-class. The Pi Adapter provides:
 - hard pre-tool config guard blocking via `tool_call`;
 - model-callable `prove_it_signal` for `done`, `stuck`, and `idle` Signals;
 - Pi Session State integration;
-- Completion Verification from `turn_end`, with `agent_end` settlement as a fallback;
-- remediation follow-up on failure.
+- fast/full script Completion Verification defaults from `turn_end`, with `agent_end` settlement as a fallback;
+- remediation follow-up on failure that preserves the active Done Signal until verification passes.
 
 Completion Verification is remediation-after-turn-end, not Claude Stop hard-block parity. If verification fails after the agent reaches the post-turn completion point, prove_it asks Pi to continue with remediation instead of pretending it can block completion the way Claude Stop can.
 
@@ -61,26 +61,14 @@ cat > .pi/settings.json <<'JSON'
   "packages": ["../../prove_it/packages/pi-prove-it"]
 }
 JSON
-mkdir -p script
+mkdir -p script src
 cat > script/test_fast <<'SH'
 #!/usr/bin/env bash
 echo "intentional completion failure from pp-test" >&2
 exit 1
 SH
 chmod +x script/test_fast
-python3 - <<'PY'
-import json
-from pathlib import Path
-path = Path('.prove_it/config.json')
-config = json.loads(path.read_text())
-config.setdefault('tasks', {})['completion_check'] = {
-    'type': 'script',
-    'command': './script/test_fast'
-}
-config.setdefault('agent_workflows', {})['agent_end'] = ['completion_check']
-path.write_text(json.dumps(config, indent=2) + '\n')
-PY
-pi -p 'Create done_probe.txt with "done probe", then use prove_it_signal with signal="done" and stop.'
+pi -p 'Create src/done_probe.js with a small exported constant, then use prove_it_signal with signal="done" and stop.'
 ```
 
-Expected result: Pi records the `done` signal, runs Completion Verification from `turn_end`, preserves `done` when `script/test_fast` fails, and receives exactly one automatic follow-up user message that starts with `prove_it completion verification failed:` and asks the agent to remediate before signaling `done` again. It should not loop forever without a fresh `prove_it_signal(done)` call.
+Expected result: Pi records the `done` signal, runs the Pi profile's Completion Verification from `turn_end`, preserves `done` when `script/test_fast` fails, and receives exactly one automatic follow-up user message that starts with `prove_it completion verification failed:` and asks the agent to remediate before signaling `done` again. It should not loop forever without a fresh `prove_it_signal(done)` call.

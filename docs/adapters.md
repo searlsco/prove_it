@@ -77,7 +77,7 @@ See [`example/claude-fast-follow/`](../example/claude-fast-follow/) for a Claude
 
 ## Pi behavior
 
-`prove_it init --adapter pi` writes strict `.prove_it/config.json` with `profile: "strict"`. Install the Pi package in a project or globally:
+`prove_it init --adapter pi` writes strict `.prove_it/config.json` with `profile: "pi"`. Install the Pi package in a project or globally:
 
 ```bash
 pi install -l npm:@davemo/pi-prove-it
@@ -92,16 +92,17 @@ A project-local `.pi/settings.json` can declare it directly:
 }
 ```
 
-Pi is first-class. Its behavior differs by Capability Profile, not by an experimental support label. The Pi Adapter currently provides:
+Pi is first-class. Its behavior differs by Capability Profile, not by an experimental support label. The Pi methodology profile currently provides:
 
 - methodology prompt injection before the Primary Agent starts;
 - hard pre-tool config guard blocking through Pi `tool_call`;
-- model-callable `prove_it_signal` for shared Signal semantics;
+- model-callable `prove_it_signal` for shared Done/Stuck/Idle Signal semantics;
 - Pi Session State integration;
+- fast/full script Completion Verification defaults when `./script/test_fast` or `./script/test` exist;
 - Completion Verification from Pi `turn_end`, with `agent_end` settlement as a fallback;
-- remediation follow-up when Completion Verification fails.
+- remediation follow-up when Completion Verification fails, preserving the active Done Signal until verification passes.
 
-Pi Completion Verification is remediation from `turn_end`, not Claude-style hard Stop blocking. When verification fails, prove_it asks Pi to continue and remediate; it does not claim that Pi has a hard Stop primitive.
+Pi Completion Verification is remediation from `turn_end`, not Claude-style hard Stop blocking. When verification fails, prove_it asks Pi to continue and remediate; it does not claim that Pi has a hard Stop primitive. The Pi profile does not include Claude-only reviewer/backchannel, TaskCompleted, or plan-file mechanics.
 
 See [`example/pi-strict/`](../example/pi-strict/) for the smallest Pi-first strict `.prove_it` project.
 

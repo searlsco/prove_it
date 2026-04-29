@@ -217,6 +217,17 @@ describe('init/deinit', () => {
     assert.match(r3.stdout, /\[x\] script\/test_fast records results/)
   })
 
+  it('selects the Pi methodology profile for Pi-only strict init', () => {
+    const r = runCli(['init', '--adapter', 'pi'], { cwd: tmpDir })
+    assert.strictEqual(r.exitCode, 0)
+    assert.match(r.stdout, /Strict \.prove_it initialized/)
+
+    const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, '.prove_it', 'config.json'), 'utf8'))
+    assert.strictEqual(cfg.profile, 'pi')
+    assert.strictEqual(cfg.adapters.pi.enabled, true)
+    assert.ok(!fs.existsSync(path.join(tmpDir, '.claude', 'settings.json')))
+  })
+
   it('supports scriptable strict init with explicit adapters without creating legacy clean-runtime input', () => {
     const r1 = runCli(['init', '--adapter', 'pi', '--adapter', 'claude'], { cwd: tmpDir })
     assert.strictEqual(r1.exitCode, 0)

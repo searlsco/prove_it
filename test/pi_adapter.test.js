@@ -296,6 +296,42 @@ describe('pi adapter pre-tool config guard', () => {
     assert.strictEqual(pi.sentUserMessages.length, 1)
   })
 
+  it('runs Pi profile completion verification defaults from turn_end and preserves done on failure', async () => {
+    const registerPiExtension = require('../lib/adapters/pi/extension')
+    const { PROFILE_VERSION } = require('../lib/redesign/config')
+    const { createPiStatePort } = require('../lib/adapters/pi/bridge')
+    const { readSignal } = require('../lib/redesign/signal_lifecycle')
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_pi_profile_completion_'))
+    fs.mkdirSync(path.join(repo, '.prove_it'), { recursive: true })
+    fs.writeFileSync(path.join(repo, '.prove_it', 'config.json'), JSON.stringify({
+      schema_version: 1,
+      profile_version: PROFILE_VERSION,
+      profile: 'pi',
+      adapters: { pi: { enabled: true } }
+    }, null, 2))
+    const pi = fakePi()
+    registerPiExtension(pi)
+    const state = {}
+    const taskNames = []
+    const ctx = fakePiCtx(pi, repo, {
+      state,
+      taskPort: {
+        run (context) {
+          taskNames.push(context.taskName)
+          return { pass: false, reason: `${context.taskName} failed` }
+        }
+      }
+    })
+    await pi.tools.prove_it_signal.execute('tool-call-1', { signal: 'done', message: 'ready' }, undefined, undefined, ctx)
+
+    const effect = await pi.handlers.turn_end({ message: {}, toolResults: [] }, ctx)
+
+    assert.strictEqual(effect.effect, 'remediation')
+    assert.deepStrictEqual(taskNames, ['pi_fast_tests'])
+    assert.match(pi.sentUserMessages[0].content, /pi_fast_tests failed/)
+    assert.strictEqual(readSignal(createPiStatePort(pi, ctx), null).type, 'done')
+  })
+
   it('prefers and awaits ctx.sendUserMessage when queueing remediation', async () => {
     const { queueRemediation } = require('../lib/adapters/pi/bridge')
     const repo = tmpCompletionRepo()

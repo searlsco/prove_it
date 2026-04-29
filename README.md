@@ -42,7 +42,7 @@ prove_it doctor
 prove_it explain
 ```
 
-`prove_it init --adapter pi` writes strict `.prove_it/config.json` with `profile: "strict"` and Pi package activation artifacts.
+`prove_it init --adapter pi` writes strict `.prove_it/config.json` with `profile: "pi"`. Install `@davemo/pi-prove-it` to activate the Pi Adapter in Pi.
 
 Multi-adapter project:
 
@@ -64,7 +64,7 @@ Depending on adapter support, prove_it can:
 - **Protect Workflow Engine config** — hard-block Primary Agent edits to `.prove_it/config.json` and `.prove_it/config.local.json` unless the workflow explicitly allows them.
 - **Guide test-first work** — nudge the Primary Agent toward red-green TDD and assumption verification before implementation.
 - **Gate tasks on Signals** — run heavyweight Tasks only when the Primary Agent sets a `done`, `stuck`, or `idle` Signal.
-- **Run fast/full tests** — run `./script/test_fast` on Completion Verification and `./script/test` when a Done Signal and source edits make the full suite relevant.
+- **Run fast/full tests** — run `./script/test_fast` and `./script/test` during Completion Verification when the selected profile conditions make them relevant.
 - **Run Reviewer Tasks** — run Done, Stuck/Approach, coverage, and testing-pattern reviewers as configured Tasks, with async/parallel execution where supported.
 - **Support reviewer appeals** — create a Claude backchannel for FAIL verdict appeals, then feed the appeal back into the next review cycle.
 - **Track phases and plans** — support `prove_it phase ...`, phase-aware TDD guidance, and automatic Done/phase instructions in plan files where the Claude Harness exposes the required mechanics.
@@ -75,7 +75,7 @@ Depending on adapter support, prove_it can:
 
 `prove_it init --adapter claude` selects the Claude parity profile. The Workflow Engine still reads `.prove_it/config.json`; the Claude Adapter owns the Claude hook API mechanics, including `.claude/settings.json`, `CLAUDE_ENV_FILE`, Claude-specific hook JSON, Claude Stop hard blocks, and Claude backchannel paths.
 
-`prove_it init --adapter pi` selects the strict profile. Pi is first-class, but its Capability Profile differs: Pi can hard-block pre-tool config edits and expose model-callable Signals, while failed Completion Verification is delivered as a remediation follow-up after `turn_end` instead of a Claude Stop hard block.
+`prove_it init --adapter pi` selects the Pi methodology profile. Pi is first-class, but its Capability Profile differs: Pi can hard-block pre-tool config edits, expose model-callable Signals, and run Done-gated fast/full script verification from `turn_end`; failed Completion Verification is delivered as a remediation follow-up instead of a Claude Stop hard block.
 
 ## Setup
 
@@ -105,7 +105,7 @@ The adapter flag determines the profile and adapter artifacts:
 | Command | Project Config | Adapter artifacts |
 |---|---|---|
 | `prove_it init --adapter claude` | `.prove_it/config.json` with `profile: "claude"` | `.claude/settings.json` hook registrations for `prove_it hook claude:*` |
-| `prove_it init --adapter pi` | `.prove_it/config.json` with `profile: "strict"` | Pi package activation artifacts; install `@davemo/pi-prove-it` in Pi |
+| `prove_it init --adapter pi` | `.prove_it/config.json` with `profile: "pi"` | install `@davemo/pi-prove-it` in Pi |
 | `prove_it init --adapter pi --adapter claude` | `.prove_it/config.json` with `profile: "strict"` | both adapter activations |
 
 `.prove_it/config.json` is the strict source of truth for Workflow Engine config. `.claude/settings.json` is a Claude Adapter Artifact: it activates Claude hooks and contains hook commands, not workflow policy.
@@ -221,14 +221,14 @@ Key ideas:
 - `tasks` define named units of work.
 - `agent_workflows` and `git_workflows` define Pipelines for normalized Workflow Stages.
 - `adapters` declares which Adapters are active; it does not make adapter-native files into workflow config.
-- `profile: "claude"` selects retained Claude parity defaults. `profile: "strict"` selects the smaller harness-neutral strict defaults.
+- `profile: "claude"` selects retained Claude parity defaults. `profile: "pi"` selects Pi methodology defaults. `profile: "strict"` selects the smaller harness-neutral strict defaults.
 - `profile_version` pins built-in profile semantics independently from `schema_version`.
 
 ### Config layers
 
 Strict config layers merge in this order:
 
-1. built-in Profile (`strict` or `claude`);
+1. built-in Profile (`strict`, `claude`, or `pi`);
 2. optional global `.prove_it` config layer when present;
 3. project `.prove_it/config.json` (commit this);
 4. developer-local `.prove_it/config.local.json` (gitignored).

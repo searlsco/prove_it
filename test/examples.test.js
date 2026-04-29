@@ -147,6 +147,7 @@ describe('example projects', () => {
       const settings = readJson(path.join(dir, '.pi', 'settings.json'))
       assert.strictEqual(cfg.adapters.pi.enabled, true)
       assert.strictEqual(cfg.adapters.claude.enabled, false)
+      assert.strictEqual(cfg.profile, 'pi')
       assert.ok(settings.packages.includes('npm:@davemo/pi-prove-it'))
     })
 
