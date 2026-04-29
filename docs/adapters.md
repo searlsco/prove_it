@@ -4,7 +4,7 @@ prove_it is a methodology/workflow engine. The Clean Runtime evaluates strict `.
 
 Adapter mechanics differ by Harness capability, but product behavior should be described in Workflow Engine terms: Project Config, Tasks, Pipelines, Signals, Completion Verification, Session State, Evidence, Hard Blocks, and Remediation.
 
-Codex is deferred for future capability discovery and is not documented here as an implemented adapter.
+Codex is not implemented as an adapter. See [Codex capability discovery](codex-capability-discovery.md) for the current research report and experimental-adapter feasibility recommendation.
 
 ## Strict setup
 
@@ -154,7 +154,7 @@ Do not treat current adapter-specific paths as the final Worktree boundary model
 
 ## What is not implemented here
 
-- Codex support is deferred.
+- Codex Adapter support is not implemented; capability discovery is documented separately.
 - A legacy config migration command is not implemented.
 - A dual-runtime compatibility mode is not supported.
 - Human review is downstream/external to prove_it core, not a built-in prove_it gate.
