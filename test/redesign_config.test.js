@@ -581,6 +581,14 @@ describe('redesign strict .prove_it config/profile model', () => {
       writeJson(path.join(repo, '.prove_it', 'config.json'), {
         schema_version: 1,
         profile_version: PROFILE_VERSION,
+        tasks: { bad_enabled: { type: 'script', command: 'npm test', enabled: false } },
+        agent_workflows: { pre_tool: ['bad_enabled'] }
+      })
+      assert.throws(() => loadEffectiveConfig(repo, { homeDir: home }), /unknown tasks\.bad_enabled key "enabled"/)
+
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
         tasks: {},
         agent_workflows: { pre_tool: { append: ['missing_task'] } }
       })
@@ -669,6 +677,73 @@ describe('redesign strict .prove_it config/profile model', () => {
     } finally {
       fs.rmSync(claudeRepo, { recursive: true, force: true })
       fs.rmSync(piRepo, { recursive: true, force: true })
+    }
+  })
+
+  it('lets local strict config remove and shadow Claude parity defaults without copying the profile', () => {
+    const { PROFILE_VERSION, loadEffectiveConfig } = require('../lib/redesign/config')
+    const home = tmpDir('prove_it_home_')
+    const repo = tmpDir('prove_it_claude_overrides_')
+
+    try {
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        profile: 'claude',
+        tasks: {
+          project_post: { type: 'script', command: 'echo project post' }
+        },
+        agent_workflows: {
+          post_tool: { append: ['project_post'] }
+        },
+        adapters: { claude: { enabled: true } }
+      })
+      writeJson(path.join(repo, '.prove_it', 'config.local.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: {
+          fast_tests: {
+            type: 'script',
+            command: 'npm test -- --runInBand',
+            when: { sourcesModifiedSinceLastRun: true, sourceFilesEdited: true },
+            output: 'failures_only'
+          }
+        },
+        agent_workflows: {
+          pre_tool: { remove: ['test_first'] },
+          post_tool: ['fast_tests']
+        },
+        git_workflows: {
+          pre_commit: { remove: ['git_full_tests'] }
+        }
+      })
+
+      const explained = loadEffectiveConfig(repo, { homeDir: home, explain: true })
+
+      assert.deepStrictEqual(explained.effective.agent_workflows.pre_tool, [
+        'protect_prove_it_config',
+        'verify_assumptions'
+      ])
+      assert.deepStrictEqual(explained.effective.git_workflows.pre_commit, [])
+      assert.deepStrictEqual(explained.effective.agent_workflows.agent_end, [
+        'fast_tests',
+        'full_tests',
+        'coverage_review',
+        'done_review',
+        'approach_review'
+      ])
+      assert.strictEqual(explained.effective.tasks.fast_tests.command, 'npm test -- --runInBand')
+      assert.strictEqual(explained.effective.tasks.fast_tests.output, 'failures_only')
+
+      assert.deepStrictEqual(explained.effective.agent_workflows.post_tool, ['fast_tests'])
+      assert.ok(explained.lineage.agent_workflows.post_tool.some(entry => entry.kind === 'local' && entry.operation === 'replace_tasks' && entry.tasks.includes('fast_tests')))
+      assert.ok(explained.lineage.agent_workflows.pre_tool.some(entry => entry.kind === 'local' && entry.operation === 'remove' && entry.tasks.includes('test_first')))
+      assert.ok(explained.lineage.git_workflows.pre_commit.some(entry => entry.kind === 'local' && entry.operation === 'remove' && entry.tasks.includes('git_full_tests')))
+      assert.deepStrictEqual(explained.task_shadowing.fast_tests.map(entry => entry.kind), ['profile', 'local'])
+      assert.ok(explained.source_layers.some(layer => layer.kind === 'local' && layer.present && layer.path.endsWith('.prove_it/config.local.json')))
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+      fs.rmSync(repo, { recursive: true, force: true })
     }
   })
 
@@ -762,6 +837,14 @@ describe('redesign strict .prove_it config/profile model', () => {
         },
         agent_workflows: { pre_tool: { append: ['explain_check'] } }
       })
+      writeJson(path.join(repo, '.prove_it', 'config.local.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: {
+          explain_check: { type: 'script', command: 'echo local explain', output: 'failures_only' }
+        },
+        agent_workflows: { pre_tool: { remove: ['test_first'] } }
+      })
 
       process.env.HOME = home
       process.chdir(repo)
@@ -772,7 +855,6 @@ describe('redesign strict .prove_it config/profile model', () => {
       assert.strictEqual(explained.source_layers[0].name, 'claude-parity')
       assert.deepStrictEqual(explained.effective.agent_workflows.pre_tool, [
         'protect_prove_it_config',
-        'test_first',
         'verify_assumptions',
         'explain_check'
       ])
@@ -783,8 +865,11 @@ describe('redesign strict .prove_it config/profile model', () => {
         'local'
       ])
       assert.ok(explained.lineage.tasks.protect_prove_it_config.length >= 2)
+      assert.ok(explained.lineage.agent_workflows.pre_tool.some(entry => entry.kind === 'local' && entry.operation === 'remove' && entry.tasks.includes('test_first')))
       assert.ok(explained.task_shadowing.protect_prove_it_config)
-      assert.deepStrictEqual(explained.effective.tasks.explain_check.when, { signal: 'done', sourceFilesEdited: true })
+      assert.deepStrictEqual(explained.task_shadowing.explain_check.map(entry => entry.kind), ['project', 'local'])
+      assert.strictEqual(explained.effective.tasks.explain_check.command, 'echo local explain')
+      assert.strictEqual(explained.effective.tasks.explain_check.output, 'failures_only')
       assert.doesNotMatch(stdout, /legacy/)
       assert.doesNotMatch(stdout, /\.claude\/prove_it/)
     } finally {

@@ -12,6 +12,11 @@ const { readSignal } = require('../lib/redesign/signal_lifecycle')
 const { readPhase, setPhase } = require('../lib/redesign/phase_state')
 const { createMemoryStatePort } = require('../lib/redesign/state_port')
 
+function writeJson (filePath, value) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+  fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + '\n')
+}
+
 function tmpRepo (tasks = {
   protect_custom_config: {
     type: 'config_guard',
@@ -19,8 +24,7 @@ function tmpRepo (tasks = {
   }
 }, preTool = ['protect_custom_config'], agentEnd = []) {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_engine_'))
-  fs.mkdirSync(path.join(repo, '.prove_it'), { recursive: true })
-  fs.writeFileSync(path.join(repo, '.prove_it', 'config.json'), JSON.stringify({
+  writeJson(path.join(repo, '.prove_it', 'config.json'), {
     schema_version: 1,
     profile_version: PROFILE_VERSION,
     tasks,
@@ -31,7 +35,7 @@ function tmpRepo (tasks = {
     adapters: {
       pi: { enabled: true }
     }
-  }, null, 2))
+  })
   return repo
 }
 
@@ -147,6 +151,103 @@ describe('shared workflow engine', () => {
 
       assert.deepStrictEqual(effect, { effect: 'allow' })
       assert.strictEqual(calls.length, 1)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('does not run a Claude parity pre_tool task removed by local strict config', () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_engine_claude_remove_'))
+
+    try {
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        profile: 'claude',
+        adapters: { claude: { enabled: true } }
+      })
+      writeJson(path.join(repo, '.prove_it', 'config.local.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        agent_workflows: {
+          pre_tool: { remove: ['test_first'] }
+        }
+      })
+
+      const effectiveConfig = loadProjectConfig(repo)
+      const event = normalizeLifecycleEvent({
+        adapterId: 'claude',
+        rawEventName: 'PreToolUse',
+        rawEvent: { session_id: 'session-1', tool_name: 'Write', tool_input: { file_path: 'src/app.js' } },
+        cwd: repo,
+        projectDir: repo,
+        rootDir: repo
+      })
+      const calls = []
+      const effect = runWorkflowEngine({
+        event,
+        effectiveConfig,
+        taskPort: {
+          run (context) {
+            calls.push(context)
+            return { pass: true }
+          }
+        }
+      })
+
+      assert.deepStrictEqual(effect, { effect: 'allow' })
+      assert.deepStrictEqual(calls, [])
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('runs a locally shadowed Claude parity task definition at the inherited pipeline position', () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_engine_claude_shadow_'))
+
+    try {
+      writeJson(path.join(repo, '.prove_it', 'config.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        profile: 'claude',
+        adapters: { claude: { enabled: true } }
+      })
+      writeJson(path.join(repo, '.prove_it', 'config.local.json'), {
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: {
+          test_first: {
+            type: 'script',
+            command: 'echo local test_first',
+            matcher: 'Write',
+            output: 'failures_only'
+          }
+        }
+      })
+
+      const effectiveConfig = loadProjectConfig(repo)
+      const event = normalizeLifecycleEvent({
+        adapterId: 'claude',
+        rawEventName: 'PreToolUse',
+        rawEvent: { session_id: 'session-1', tool_name: 'Write', tool_input: { file_path: 'src/app.js' } },
+        cwd: repo,
+        projectDir: repo,
+        rootDir: repo
+      })
+      const calls = []
+      const effect = runWorkflowEngine({
+        event,
+        effectiveConfig,
+        taskPort: {
+          run (context) {
+            calls.push({ taskName: context.taskName, command: context.task.command })
+            return { pass: true, reason: 'ok' }
+          }
+        }
+      })
+
+      assert.strictEqual(effect.effect, 'allow')
+      assert.deepStrictEqual(calls, [{ taskName: 'test_first', command: 'echo local test_first' }])
     } finally {
       fs.rmSync(repo, { recursive: true, force: true })
     }

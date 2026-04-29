@@ -235,6 +235,64 @@ Strict config layers merge in this order:
 
 After the Claude hard break, `.claude/prove_it/config.json` and `.claude/prove_it/config.local.json` are retired Claude Legacy Config. They are ignored by normal Claude hook dispatch and by normal Git hook dispatch as workflow config, and `prove_it doctor` reports them as stale if they are present. Legacy Claude characterization paths remain quarantined behind a test-only oracle guard and are not user-facing runtime behavior.
 
+### Local overrides for built-in profile tasks
+
+Use `.prove_it/config.local.json` for developer-local policy. You do not need to copy the whole built-in profile to remove or replace one Claude parity default.
+
+Pipeline patch operations are strict config semantics:
+
+- `remove` removes matching task names from the inherited pipeline;
+- `append` adds tasks after the inherited pipeline;
+- `prepend` adds tasks before the inherited pipeline;
+- `replace_tasks` replaces the inherited pipeline completely.
+
+An array pipeline value is shorthand for full replacement: `"agent_end": []` means `"agent_end": { "replace_tasks": [] }`.
+
+Disable one built-in Claude parity task locally:
+
+```json
+{
+  "schema_version": 1,
+  "profile_version": "prove_it.strict.v1",
+  "agent_workflows": {
+    "pre_tool": { "remove": ["test_first"] }
+  }
+}
+```
+
+Replace one built-in task definition locally without copying or restating the inherited pipeline:
+
+```json
+{
+  "schema_version": 1,
+  "profile_version": "prove_it.strict.v1",
+  "tasks": {
+    "fast_tests": {
+      "type": "script",
+      "command": "npm test -- --runInBand",
+      "when": { "sourcesModifiedSinceLastRun": true, "sourceFilesEdited": true },
+      "output": "failures_only"
+    }
+  }
+}
+```
+
+Because the task name is unchanged and `fast_tests` is already in the Claude parity `agent_workflows.agent_end` pipeline, the local task definition shadows the profile task while preserving pipeline placement.
+
+Disable a built-in Git workflow task locally:
+
+```json
+{
+  "schema_version": 1,
+  "profile_version": "prove_it.strict.v1",
+  "git_workflows": {
+    "pre_commit": { "remove": ["git_full_tests"] }
+  }
+}
+```
+
+Source precedence, from lowest to highest, is: built-in profile, global config, project config, local config. Run `prove_it explain` to inspect the effective result; its JSON includes source layers, pipeline patch lineage, and task shadowing. Do not use legacy task-level `enabled: false` in strict config; remove the task from a pipeline or shadow the task definition instead. Keep generic script/reviewer examples out of `agent_workflows.session_start`, which only accepts `session_env` tasks.
+
 ### Source and test globs
 
 `globs.source` defines which files prove_it considers "your code" — these globs drive conditions like `sourcesModifiedSinceLastRun`, `sourceFilesEdited`, and `linesChanged`. Test files should be included in `globs.source` so that edits to tests are tracked as source changes.
