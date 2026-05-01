@@ -37,7 +37,8 @@
     "test": "node --test --test-reporter=dot test/*.test.js",
     "test:integration": "node --test --test-reporter=dot $(ls test/integration/*.integration.test.js | grep -v reviewer.integration)",
     "test:reviewer": "node --test --test-reporter=dot test/integration/reviewer.integration.test.js",
-    "test:all": "node --test --test-reporter=dot test/*.test.js test/integration/*.integration.test.js"
+    "test:all": "node --test --test-reporter=dot test/*.test.js test/integration/*.integration.test.js",
+    "visualize:architecture": "bun tools/visualizer/generate.js"
   },
   "devDependencies": {
     "standard": "^17.1.2"

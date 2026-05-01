@@ -32,6 +32,9 @@ describe('adapter capability profiles', () => {
         diagnostic: 'Claude Stop supports hard completion blocking.'
       }
     )
+    assert.strictEqual(ADAPTER_CAPABILITY_PROFILES.claude.capabilities.post_tool_observation.strength, 'observe_only')
+    assert.strictEqual(ADAPTER_CAPABILITY_PROFILES.claude.capabilities.prompt_injection.strength, 'available')
+    assert.strictEqual(ADAPTER_CAPABILITY_PROFILES.claude.capabilities.session_state.strength, 'available')
 
     const pi = ADAPTER_CAPABILITY_PROFILES.pi.capabilities
     assert.strictEqual(pi.pre_tool_blocking.strength, 'hard_block')
@@ -66,6 +69,7 @@ describe('adapter capability profiles', () => {
 
   it('selects hard-block, observe-only, and remediation behaviors', () => {
     assert.ok(isHardBlock(behaviorForCapability('claude', 'pre_tool_blocking')))
+    assert.ok(isObserveOnly(behaviorForCapability('claude', 'post_tool_observation')))
     assert.ok(isHardBlock(behaviorForCapability('claude', 'completion_verification')))
     assert.ok(isObserveOnly(behaviorForCapability('pi', 'post_tool_observation')))
     assert.ok(isRemediation(behaviorForCapability('pi', 'completion_verification')))

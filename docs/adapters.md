@@ -6,6 +6,8 @@ Adapter mechanics differ by Harness capability, but product behavior should be d
 
 Codex is not implemented as an adapter. See [Codex capability discovery](codex-capability-discovery.md) for the current research report and experimental-adapter feasibility recommendation.
 
+For a generated, source-driven overview of the clean runtime boundaries and adapter capability matrix, see the [architecture visualizer](architecture.md). Regenerate it with `bun tools/visualizer/generate.js`.
+
 ## Strict setup
 
 Use explicit adapters for new projects:

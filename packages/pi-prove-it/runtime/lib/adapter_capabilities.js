@@ -41,6 +41,20 @@ const ADAPTER_CAPABILITY_PROFILES = {
         hook: 'PreToolUse',
         diagnostic: 'Claude PreToolUse supports hard pre-tool blocking.'
       },
+      post_tool_observation: {
+        strength: 'observe_only',
+        hook: 'PostToolUse',
+        diagnostic: 'Claude post-tool hooks observe completed tool calls without changing the completed tool result.'
+      },
+      prompt_injection: {
+        strength: 'available',
+        hook: 'SessionStart',
+        diagnostic: 'Claude SessionStart can inject prove_it guidance into the active session.'
+      },
+      session_state: {
+        strength: 'available',
+        diagnostic: 'Claude uses adapter-owned filesystem-backed Session State.'
+      },
       completion_verification: {
         strength: 'hard_block',
         hook: 'Stop',

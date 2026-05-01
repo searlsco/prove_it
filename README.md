@@ -10,7 +10,7 @@ Out-of-the-box, coding agents happily declare work complete before they have pro
 
 **prove_it** is a methodology/workflow engine for making agents prove their work. The Clean Runtime stores workflow intent in strict `.prove_it/config.json`; that Project Config is the source of truth for Workflow Engine behavior.
 
-Claude Code and Pi are Harnesses. The Claude Adapter and Pi Adapter translate harness-native events into Workflow Engine stages, then render Workflow Engine Effects back to each harness. Adapter mechanics differ by harness capability, but product behavior is described in terms of Methodology, Signals, Tasks, Pipelines, Completion Verification, and Evidence. See [Adapter capabilities](docs/adapters.md) for the current capability matrix.
+Claude Code and Pi are Harnesses. The Claude Adapter and Pi Adapter translate harness-native events into Workflow Engine stages, then render Workflow Engine Effects back to each harness. Adapter mechanics differ by harness capability, but product behavior is described in terms of Methodology, Signals, Tasks, Pipelines, Completion Verification, and Evidence. See the generated [architecture visualizer](docs/architecture.md) and [Adapter capabilities](docs/adapters.md) for the current architecture and capability matrix.
 
 ## Quick start
 
