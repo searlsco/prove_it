@@ -1,0 +1,365 @@
+const { describe, it } = require('node:test')
+const assert = require('node:assert')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+const { spawnSync } = require('node:child_process')
+
+const { behaviorForCapability } = require('../lib/adapter_capabilities')
+
+function tmpRepo () {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'prove_it_redesign_init_'))
+}
+
+function readJson (filePath) {
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'))
+}
+
+function withGitConfigHookSupport (fn) {
+  const previous = process.env.PROVE_IT_TEST_GIT_VERSION
+  process.env.PROVE_IT_TEST_GIT_VERSION = '2.54.0'
+  try {
+    return fn()
+  } finally {
+    if (previous === undefined) delete process.env.PROVE_IT_TEST_GIT_VERSION
+    else process.env.PROVE_IT_TEST_GIT_VERSION = previous
+  }
+}
+
+describe('redesign adapter-aware init/deinit', () => {
+  function initGitRepo (repo) {
+    spawnSync('git', ['init'], { cwd: repo, encoding: 'utf8' })
+    spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: repo, encoding: 'utf8' })
+    spawnSync('git', ['config', 'user.name', 'Test'], { cwd: repo, encoding: 'utf8' })
+  }
+
+  function gitConfigValues (repo, key) {
+    const result = spawnSync('git', ['config', '--local', '--get-all', key], { cwd: repo, encoding: 'utf8' })
+    return result.status === 0 ? result.stdout.trim().split('\n').filter(Boolean) : []
+  }
+
+  it('creates strict .prove_it config with explicit adapters and owned Claude-native settings', () => {
+    const { PROFILE_VERSION, validateConfig } = require('../lib/redesign/config')
+    const { initStrictProject } = require('../lib/redesign/init')
+    const repo = tmpRepo()
+
+    try {
+      const result = initStrictProject(repo, { adapters: ['pi', 'claude'] })
+      const cfg = readJson(path.join(repo, '.prove_it', 'config.json'))
+      const manifest = readJson(path.join(repo, '.prove_it', 'ownership.json'))
+      const claudeSettings = readJson(path.join(repo, '.claude', 'settings.json'))
+
+      assert.strictEqual(result.config.created, true)
+      assert.strictEqual(cfg.profile_version, PROFILE_VERSION)
+      assert.strictEqual(cfg.profile, 'strict')
+      assert.strictEqual(cfg.adapters.pi.enabled, true)
+      assert.strictEqual(cfg.adapters.claude.enabled, true)
+      assert.doesNotThrow(() => validateConfig(cfg, '.prove_it/config.json'))
+      assert.ok(!fs.existsSync(path.join(repo, '.claude', 'prove_it', 'config.json')))
+      assert.match(JSON.stringify(claudeSettings), /prove_it hook claude:PreToolUse/)
+      assert.match(JSON.stringify(claudeSettings), /prove_it hook claude:Stop/)
+      assert.deepStrictEqual(
+        manifest.artifacts.map(artifact => artifact.path).sort(),
+        [
+          '.claude/settings.json',
+          '.prove_it/.gitignore',
+          '.prove_it/config.json',
+          '.prove_it/config.local.json'
+        ]
+      )
+      assert.ok(manifest.artifacts.every(artifact => artifact.owner === 'prove_it'))
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('can safely re-run init to add adapters without losing ownership of existing artifacts', () => {
+    const { initStrictProject, deinitStrictProject } = require('../lib/redesign/init')
+    const repo = tmpRepo()
+
+    try {
+      initStrictProject(repo, { adapters: ['pi'] })
+      initStrictProject(repo, { adapters: ['pi', 'claude'] })
+      const cfg = readJson(path.join(repo, '.prove_it', 'config.json'))
+      const manifest = readJson(path.join(repo, '.prove_it', 'ownership.json'))
+
+      assert.strictEqual(cfg.profile, 'strict')
+      assert.strictEqual(cfg.adapters.pi.enabled, true)
+      assert.strictEqual(cfg.adapters.claude.enabled, true)
+      assert.ok(manifest.artifacts.some(artifact => artifact.path === '.prove_it/config.json'))
+      assert.ok(manifest.artifacts.some(artifact => artifact.path === '.claude/settings.json'))
+
+      deinitStrictProject(repo)
+      assert.ok(!fs.existsSync(path.join(repo, '.prove_it', 'config.json')))
+      assert.ok(!fs.existsSync(path.join(repo, '.claude', 'settings.json')))
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('uses the strict profile for multi-adapter init so Pi does not inherit Claude-only defaults', () => {
+    const { loadEffectiveConfig } = require('../lib/redesign/config')
+    const { initStrictProject } = require('../lib/redesign/init')
+    const repo = tmpRepo()
+
+    try {
+      initStrictProject(repo, { adapters: ['pi', 'claude'] })
+      const cfg = loadEffectiveConfig(repo).effective
+
+      assert.strictEqual(cfg.profile, 'strict')
+      assert.deepStrictEqual(cfg.agent_workflows.pre_tool, ['protect_prove_it_config'])
+      assert.deepStrictEqual(cfg.agent_workflows.agent_end, [])
+      assert.ok(!Object.prototype.hasOwnProperty.call(cfg.tasks, 'done_review'))
+      assert.strictEqual(cfg.adapters.pi.enabled, true)
+      assert.strictEqual(cfg.adapters.claude.enabled, true)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('activates Claude parity profile defaults for initialized Claude strict projects', () => {
+    const { loadEffectiveConfig } = require('../lib/redesign/config')
+    const { runWorkflowEngine } = require('../lib/redesign/engine')
+    const { normalizeLifecycleEvent } = require('../lib/redesign/events')
+    const { initStrictProject } = require('../lib/redesign/init')
+    const { createMemoryStatePort } = require('../lib/redesign/state_port')
+    const repo = tmpRepo()
+
+    try {
+      initStrictProject(repo, { adapters: ['claude'] })
+      const explained = loadEffectiveConfig(repo)
+      const cfg = explained.effective
+
+      assert.deepStrictEqual(explained.source_layers[0].kind, 'profile')
+      assert.strictEqual(explained.source_layers[0].name, 'claude-parity')
+      assert.deepStrictEqual(cfg.agent_workflows.pre_tool.slice(0, 2), [
+        'protect_prove_it_config',
+        'test_first'
+      ])
+      assert.strictEqual(cfg.tasks.protect_prove_it_config.type, 'config_guard')
+      assert.strictEqual(cfg.tasks.full_tests.parallel, true)
+      assert.deepStrictEqual(cfg.tasks.full_tests.when, { signal: 'done', sourceFilesEdited: true })
+      assert.strictEqual(cfg.tasks.done_review.type, 'reviewer')
+      assert.strictEqual(cfg.tasks.done_review.provider, 'claude')
+      assert.strictEqual(cfg.tasks.done_review.parallel, true)
+      assert.strictEqual(cfg.tasks.testing_antipatterns_review.type, 'reviewer')
+      assert.strictEqual(cfg.tasks.testing_antipatterns_review.async, true)
+      assert.ok(!fs.existsSync(path.join(repo, '.claude', 'prove_it', 'config.json')))
+
+      const guardEffect = runWorkflowEngine({
+        event: normalizeLifecycleEvent({
+          adapterId: 'claude',
+          rawEventName: 'PreToolUse',
+          rawEvent: { session_id: 'session-guard', tool_name: 'Write', tool_input: { file_path: path.join(repo, '.prove_it', 'config.json') } },
+          cwd: repo
+        }),
+        effectiveConfig: cfg
+      })
+      assert.strictEqual(guardEffect.effect, 'block')
+      assert.match(guardEffect.reason, /\.prove_it\/config\.json/)
+
+      const planEffect = runWorkflowEngine({
+        event: normalizeLifecycleEvent({
+          adapterId: 'claude',
+          rawEventName: 'PreToolUse',
+          rawEvent: { session_id: 'session-plan', tool_name: 'ExitPlanMode', tool_input: { plan: '### 1. Build' } },
+          cwd: repo
+        }),
+        effectiveConfig: cfg,
+        taskPort: {
+          run ({ taskName }) {
+            if (taskName !== 'verify_assumptions') return { pass: true, reason: 'ok', output: '' }
+            return { pass: true, reason: 'verified', output: 'BLOCKING REQUIREMENT: audit every assumption' }
+          }
+        }
+      })
+      assert.strictEqual(planEffect.effect, 'allow')
+      assert.match(planEffect.reason, /BLOCKING REQUIREMENT/)
+
+      const statePort = createMemoryStatePort()
+      statePort.writeSignal('session-done', { type: 'done', message: 'ready', at: 123 })
+      const startedScripts = []
+      const startedReviewers = []
+      const taskPort = {
+        startParallelTask ({ taskName }) {
+          startedScripts.push(taskName)
+          return { id: `${taskName}-parallel` }
+        },
+        settleParallelBatch (handles) {
+          return handles.map(handle => ({ id: handle.id, taskName: handle.taskName, task: handle.task, result: { pass: true, reason: `${handle.taskName} passed` } }))
+        },
+        cleanupTasks () {}
+      }
+      const reviewerPort = {
+        startParallelTask ({ taskName }) {
+          startedReviewers.push(taskName)
+          return { id: `${taskName}-parallel` }
+        },
+        settleParallelBatch (handles) {
+          return handles.map(handle => ({ id: handle.id, taskName: handle.taskName, task: handle.task, result: { pass: true, reason: `${handle.taskName} passed` } }))
+        },
+        cleanupTasks () {}
+      }
+      const doneEffect = runWorkflowEngine({
+        event: normalizeLifecycleEvent({
+          adapterId: 'claude',
+          rawEventName: 'Stop',
+          rawEvent: { session_id: 'session-done' },
+          cwd: repo
+        }),
+        effectiveConfig: cfg,
+        adapterCapabilities: {
+          completion_verification: behaviorForCapability('claude', 'completion_verification')
+        },
+        statePort,
+        taskPort,
+        reviewerPort,
+        observationPort: {
+          facts: {
+            editedFiles: ['src/app.js']
+          }
+        }
+      })
+      assert.strictEqual(doneEffect.effect, 'approve')
+      assert.deepStrictEqual(startedScripts, ['full_tests'])
+      assert.deepStrictEqual(startedReviewers, ['done_review'])
+      assert.strictEqual(doneEffect.signalLifecycle.action, 'clear')
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('configures Git 2.54 config hooks for owned Git workflow activation', () => withGitConfigHookSupport(() => {
+    const { initStrictProject } = require('../lib/redesign/init')
+    const repo = tmpRepo()
+
+    try {
+      initGitRepo(repo)
+      const result = initStrictProject(repo, { adapters: ['claude'] })
+      const manifest = readJson(path.join(repo, '.prove_it', 'ownership.json'))
+
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.prove-it-pre-commit.command'), ['prove_it hook git:pre-commit'])
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.prove-it-pre-commit.event'), ['pre-commit'])
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.prove-it-pre-commit.enabled'), ['true'])
+      assert.ok(!fs.existsSync(path.join(repo, '.git', 'hooks', 'pre-commit')), 'strict init must not write legacy hook shim files')
+      assert.ok(manifest.git_hooks.some(hook => hook.name === 'prove-it-pre-commit' && hook.event === 'pre-commit'))
+      assert.ok(result.gitConfigHooks.preCommit.configured)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  }))
+
+  it('configures pre-push Git config hooks when an existing strict workflow declares one', () => withGitConfigHookSupport(() => {
+    const { PROFILE_VERSION } = require('../lib/redesign/config')
+    const { initStrictProject } = require('../lib/redesign/init')
+    const repo = tmpRepo()
+
+    try {
+      initGitRepo(repo)
+      fs.mkdirSync(path.join(repo, '.prove_it'), { recursive: true })
+      fs.writeFileSync(path.join(repo, '.prove_it', 'config.json'), JSON.stringify({
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        tasks: { push_check: { type: 'script', command: './script/test' } },
+        git_workflows: { pre_push: ['push_check'] },
+        adapters: { claude: { enabled: true } }
+      }, null, 2) + '\n')
+
+      const result = initStrictProject(repo, { adapters: ['claude'] })
+
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.prove-it-pre-push.command'), ['prove_it hook git:pre-push'])
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.prove-it-pre-push.event'), ['pre-push'])
+      assert.ok(result.gitConfigHooks.prePush.configured)
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  }))
+
+  it('deinitializes only prove_it-owned Git config hooks and preserves unrelated hook config', () => withGitConfigHookSupport(() => {
+    const { initStrictProject, deinitStrictProject } = require('../lib/redesign/init')
+    const repo = tmpRepo()
+
+    try {
+      initGitRepo(repo)
+      spawnSync('git', ['config', '--local', 'hook.unrelated.command', './other-hook'], { cwd: repo, encoding: 'utf8' })
+      spawnSync('git', ['config', '--local', '--add', 'hook.unrelated.event', 'pre-commit'], { cwd: repo, encoding: 'utf8' })
+
+      initStrictProject(repo, { adapters: ['claude'] })
+      const result = deinitStrictProject(repo)
+
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.prove-it-pre-commit.command'), [])
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.prove-it-pre-commit.event'), [])
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.unrelated.command'), ['./other-hook'])
+      assert.deepStrictEqual(gitConfigValues(repo, 'hook.unrelated.event'), ['pre-commit'])
+      assert.ok(result.removed.includes('git config hook.prove-it-pre-commit'))
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  }))
+
+  it('deinitializes only manifest-owned artifacts and preserves modified files', () => {
+    const { initStrictProject, deinitStrictProject } = require('../lib/redesign/init')
+    const repo = tmpRepo()
+
+    try {
+      initStrictProject(repo, { adapters: ['claude'] })
+      fs.writeFileSync(path.join(repo, '.claude', 'settings.json'), JSON.stringify({ custom: true }, null, 2) + '\n')
+
+      const result = deinitStrictProject(repo)
+
+      assert.ok(fs.existsSync(path.join(repo, '.claude', 'settings.json')))
+      assert.ok(!fs.existsSync(path.join(repo, '.prove_it', 'config.json')))
+      assert.ok(!fs.existsSync(path.join(repo, '.prove_it', 'config.local.json')))
+      assert.ok(result.removed.includes('.prove_it/config.json'))
+      assert.ok(result.skipped.some(entry => entry.path === '.claude/settings.json' && entry.reason === 'modified'))
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses manifest paths that escape the repository', () => {
+    const { deinitStrictProject } = require('../lib/redesign/init')
+    const repo = tmpRepo()
+    const outside = path.join(os.tmpdir(), `prove_it_outside_${process.pid}_${Date.now()}`)
+
+    try {
+      fs.writeFileSync(outside, 'do not remove')
+      fs.mkdirSync(path.join(repo, '.prove_it'), { recursive: true })
+      fs.writeFileSync(path.join(repo, '.prove_it', 'ownership.json'), JSON.stringify({
+        owner: 'prove_it',
+        artifacts: [{ owner: 'prove_it', path: path.relative(repo, outside).split(path.sep).join('/') }]
+      }, null, 2) + '\n')
+
+      const result = deinitStrictProject(repo)
+
+      assert.ok(fs.existsSync(outside))
+      assert.ok(result.skipped.some(entry => entry.reason === 'unsafe path'))
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+      fs.rmSync(outside, { force: true })
+    }
+  })
+
+  it('refuses to remove unowned strict config when no ownership manifest exists', () => {
+    const { PROFILE_VERSION } = require('../lib/redesign/config')
+    const { deinitStrictProject } = require('../lib/redesign/init')
+    const repo = tmpRepo()
+
+    try {
+      fs.mkdirSync(path.join(repo, '.prove_it'), { recursive: true })
+      fs.writeFileSync(path.join(repo, '.prove_it', 'config.json'), JSON.stringify({
+        schema_version: 1,
+        profile_version: PROFILE_VERSION,
+        adapters: { pi: { enabled: true } }
+      }, null, 2) + '\n')
+
+      const result = deinitStrictProject(repo)
+
+      assert.ok(fs.existsSync(path.join(repo, '.prove_it', 'config.json')))
+      assert.deepStrictEqual(result.removed, [])
+      assert.ok(result.skipped.some(entry => entry.path === '.prove_it/' && entry.reason === 'missing ownership manifest'))
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true })
+    }
+  })
+})

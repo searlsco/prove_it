@@ -381,6 +381,83 @@ describe('doctor', () => {
     assert.ok(!result.stdout.includes('Git hook shim'))
   })
 
+  it('reports enabled strict .prove_it adapters when present', () => {
+    writeSettings(tmpHome, correctSettings())
+    writeTeamConfig(tmpRepo, {
+      enabled: true,
+      sources: ['**/*.js'],
+      hooks: {}
+    })
+    const { initStrictProject } = require('../../lib/redesign/init')
+    initStrictProject(tmpRepo, { adapters: ['pi', 'claude'] })
+
+    const result = run()
+
+    assert.match(result.stdout, /Strict \.prove_it adapters enabled: pi, claude/)
+  })
+
+  it('reports Git 2.54 config hook activation for strict Git workflows', () => {
+    writeSettings(tmpHome, correctSettings())
+    const { initStrictProject } = require('../../lib/redesign/init')
+    initStrictProject(tmpRepo, { adapters: ['claude'] })
+
+    let result = run()
+    assert.match(result.stdout, /\[x\] Git config hook active: pre-commit \(hook\.prove-it-pre-commit\)/)
+
+    spawnSync('git', ['config', '--local', '--unset-all', 'hook.prove-it-pre-commit.command'], { cwd: tmpRepo })
+    result = run()
+    assert.match(result.stdout, /\[ \] Git config hook missing: pre-commit \(hook\.prove-it-pre-commit\)/)
+    assert.match(result.stdout, /Git config hook missing for pre-commit/)
+  })
+
+  it('reports unsupported Git versions for strict Git config hooks', () => {
+    writeSettings(tmpHome, correctSettings())
+    const { initStrictProject } = require('../../lib/redesign/init')
+    initStrictProject(tmpRepo, { adapters: ['claude'] })
+
+    const result = run({ PROVE_IT_TEST_GIT_VERSION: '2.53.0' })
+
+    assert.match(result.stdout, /\[!\] Git config hooks unavailable: Git 2\.53\.0 detected; Git 2\.54\+ is required/)
+    assert.match(result.stdout, /Unsupported Git version for config hooks/)
+  })
+
+  it('reports legacy Claude config as stale state rather than a fallback runtime source', () => {
+    writeSettings(tmpHome, correctSettings())
+    writeTeamConfig(tmpRepo, {
+      enabled: true,
+      sources: ['**/*.js'],
+      hooks: {}
+    })
+    fs.writeFileSync(path.join(tmpRepo, '.claude', 'prove_it', 'config.local.json'), JSON.stringify({ enabled: false }))
+
+    const result = run()
+
+    assert.match(result.stdout, /Stale legacy Claude config present: \.claude\/prove_it\/config\.json/)
+    assert.match(result.stdout, /Stale legacy Claude config present: \.claude\/prove_it\/config\.local\.json/)
+    assert.match(result.stdout, /Normal Claude hook dispatch ignores this file after the hard break/)
+    assert.match(result.stdout, /legacy \.claude\/prove_it config is not a fallback runtime source/)
+    assert.match(result.stdout, /Stale legacy Claude config ignored by normal hooks/)
+  })
+
+  it('surfaces adapter capability diagnostics without changing install checks', () => {
+    writeSettings(tmpHome, correctSettings())
+    writeTeamConfig(tmpRepo, {
+      enabled: true,
+      sources: ['**/*.js'],
+      hooks: {}
+    })
+
+    const result = run()
+    assert.match(result.stdout, /Adapter capability diagnostics:/)
+    assert.match(result.stdout, /Claude adapter capabilities:/)
+    assert.match(result.stdout, /pre-tool blocking: hard block/)
+    assert.match(result.stdout, /completion verification: hard block/)
+    assert.match(result.stdout, /Pi adapter capabilities:/)
+    assert.match(result.stdout, /completion verification: remediation after turn_end/)
+    assert.match(result.stdout, /Pi cannot hard-block completion; prove_it prompts remediation from turn_end and preserves agent_end settlement/)
+    assert.doesNotMatch(result.stdout, /Issues found:[\s\S]*Pi cannot hard-block completion/)
+  })
+
   it('config validation warnings', () => {
     writeSettings(tmpHome, correctSettings())
     // matcher on a Stop task triggers a warning
@@ -402,18 +479,10 @@ describe('doctor', () => {
   it('summary', () => {
     // All checks passed
     writeSettings(tmpHome, correctSettings())
-    writeTeamConfig(tmpRepo, {
-      enabled: true,
-      sources: ['src/**/*.js'],
-      hooks: {}
-    })
-    spawnSync('git', ['add', '.claude/prove_it/config.json'], { cwd: tmpRepo, stdio: 'ignore' })
-    spawnSync('git', ['commit', '-m', 'add config'], { cwd: tmpRepo, stdio: 'ignore' })
+    const { initStrictProject } = require('../../lib/redesign/init')
+    initStrictProject(tmpRepo, { adapters: ['claude'] })
     fs.mkdirSync(path.join(tmpRepo, 'script'), { recursive: true })
     fs.writeFileSync(path.join(tmpRepo, 'script', 'test'), '#!/bin/bash\nexit 0\n')
-    const proveItGitignore = path.join(tmpRepo, '.claude', 'prove_it', '.gitignore')
-    fs.mkdirSync(path.dirname(proveItGitignore), { recursive: true })
-    fs.writeFileSync(proveItGitignore, 'sessions/\nconfig.local.json\n')
     for (const name of ['prove', 'prove-approach', 'prove-coverage', 'prove-done', 'prove-dry', 'prove-test-validity', 'prove-testing-patterns', 'prove-ui-design']) {
       const skillDir = path.join(tmpHome, '.claude', 'skills', name)
       fs.mkdirSync(skillDir, { recursive: true })

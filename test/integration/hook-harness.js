@@ -39,6 +39,17 @@ function invokeHook (hookSpec, input, options = {}) {
   if (options.projectDir) {
     env.CLAUDE_PROJECT_DIR = options.projectDir
   }
+  if (hookSpec.startsWith('claude:') && env.PROVE_IT_LEGACY_CLAUDE_ORACLE === undefined) {
+    const projectDir = options.projectDir || env.CLAUDE_PROJECT_DIR || options.cwd || process.cwd()
+    const strictConfig = path.join(projectDir, '.prove_it', 'config.json')
+    const legacyConfig = path.join(projectDir, '.claude', 'prove_it', 'config.json')
+    const globalLegacyConfig = env.PROVE_IT_DIR ? path.join(env.PROVE_IT_DIR, 'config.json') : null
+    if (!fs.existsSync(strictConfig) && (fs.existsSync(legacyConfig) || (globalLegacyConfig && fs.existsSync(globalLegacyConfig)))) {
+      env.NODE_ENV = 'test'
+      env.PROVE_IT_LEGACY_CLAUDE_ORACLE = '1'
+      env.PROVE_IT_TEST_LEGACY_CLAUDE_ORACLE = '1'
+    }
+  }
 
   const result = spawnSync('node', [CLI_PATH, 'hook', hookSpec], {
     input: JSON.stringify(input),
@@ -81,6 +92,17 @@ async function invokeDispatcher (hookSpec, input, options = {}) {
   }
   const envOverrides = { ...options.env }
   if (options.projectDir) envOverrides.CLAUDE_PROJECT_DIR = options.projectDir
+  if (hookSpec.startsWith('claude:') && envOverrides.PROVE_IT_LEGACY_CLAUDE_ORACLE === undefined) {
+    const projectDir = options.projectDir || envOverrides.CLAUDE_PROJECT_DIR || options.cwd || process.cwd()
+    const strictConfig = path.join(projectDir, '.prove_it', 'config.json')
+    const legacyConfig = path.join(projectDir, '.claude', 'prove_it', 'config.json')
+    const globalLegacyConfig = envOverrides.PROVE_IT_DIR ? path.join(envOverrides.PROVE_IT_DIR, 'config.json') : null
+    if (!fs.existsSync(strictConfig) && (fs.existsSync(legacyConfig) || (globalLegacyConfig && fs.existsSync(globalLegacyConfig)))) {
+      envOverrides.NODE_ENV = 'test'
+      envOverrides.PROVE_IT_LEGACY_CLAUDE_ORACLE = '1'
+      envOverrides.PROVE_IT_TEST_LEGACY_CLAUDE_ORACLE = '1'
+    }
+  }
   for (const [k, v] of Object.entries(envOverrides)) {
     savedEnv[k] = process.env[k]
     process.env[k] = v

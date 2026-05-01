@@ -3,15 +3,49 @@ const assert = require('node:assert')
 const path = require('path')
 const { spawnSync } = require('child_process')
 
+const fs = require('fs')
+
 const EXAMPLE_DIR = path.join(__dirname, '..', '..', 'example')
 const EXAMPLES = ['basic', 'advanced']
+const STRICT_EXAMPLES = {
+  'pi-strict': {
+    profile: 'pi',
+    adapters: { pi: { enabled: true }, claude: { enabled: false } }
+  },
+  'multi-adapter': {
+    profile: 'strict',
+    adapters: { pi: { enabled: true }, claude: { enabled: true } }
+  },
+  'claude-fast-follow': {
+    profile: 'claude',
+    adapters: { pi: { enabled: false }, claude: { enabled: true } }
+  }
+}
+
+describe('strict example configs', () => {
+  for (const [name, expected] of Object.entries(STRICT_EXAMPLES)) {
+    it(`${name} declares the init profile and omits legacy Claude workflow config`, () => {
+      const dir = path.join(EXAMPLE_DIR, name)
+      const config = JSON.parse(fs.readFileSync(path.join(dir, '.prove_it', 'config.json'), 'utf8'))
+
+      assert.deepStrictEqual(config, {
+        schema_version: 1,
+        profile_version: 'prove_it.strict.v1',
+        profile: expected.profile,
+        adapters: expected.adapters
+      })
+      assert.ok(!fs.existsSync(path.join(dir, '.claude', 'prove_it', 'config.json')))
+      assert.ok(!fs.existsSync(path.join(dir, '.claude', 'prove_it', 'config.local.json')))
+    })
+  }
+})
 
 describe('example hook dispatch', () => {
   const supportDir = path.join(EXAMPLE_DIR, 'support')
   const shimPath = path.join(supportDir, 'prove_it')
   const testBinDir = path.join(__dirname, '..', 'bin')
   const fixturesDir = path.join(__dirname, '..', 'fixtures')
-  const dispatchEnv = { ...process.env, PATH: `${fixturesDir}:${testBinDir}:${process.env.PATH}`, PROVE_IT_DISABLED: '', PROVE_IT_DIR: path.join(supportDir, '_no_global') }
+  const dispatchEnv = { ...process.env, NODE_ENV: 'test', PATH: `${fixturesDir}:${testBinDir}:${process.env.PATH}`, PROVE_IT_DISABLED: '', PROVE_IT_DIR: path.join(supportDir, '_no_global'), PROVE_IT_LEGACY_CLAUDE_ORACLE: '1', PROVE_IT_TEST_LEGACY_CLAUDE_ORACLE: '1' }
 
   for (const name of EXAMPLES) {
     describe(name, () => {

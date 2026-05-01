@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+# Run a single GitHub issue through pi in a human-in-the-loop workflow.
+#
+# Usage:
+#   script/pi-issue 1
+#   script/pi-issue --commit 1
+#   script/pi-issue next --label pi --assignee @me
+#   script/pi-issue --model sonnet --thinking high 1
+#
+# Defaults: pi edits the working tree but does not commit, close, or push.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: script/pi-issue [options] <issue-number|next>
+
+Run pi non-interactively against one GitHub issue, then return control to you
+for review/commit/close.
+
+Options:
+  --commit              Ask pi to create one commit when tests pass
+  --allow-dirty         Do not prompt when the working tree already has changes
+  --label LABEL         Label used by "next" lookup (default: pi)
+  --assignee USER       Assignee used by "next" lookup (default: @me)
+  --model MODEL         Pass --model MODEL to pi
+  --thinking LEVEL      Pass --thinking LEVEL to pi (default: high)
+  --dry-run             Print the generated prompt and exit without running pi
+  -h, --help            Show this help
+
+Examples:
+  script/pi-issue 1
+  script/pi-issue --commit 1
+  script/pi-issue next --label ralph
+EOF
+}
+
+commit_mode=0
+allow_dirty=0
+label="${PI_ISSUE_LABEL:-pi}"
+assignee="${PI_ISSUE_ASSIGNEE:-@me}"
+model="${PI_MODEL:-}"
+thinking="${PI_THINKING:-high}"
+dry_run=0
+issue=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --commit)
+      commit_mode=1
+      shift
+      ;;
+    --allow-dirty)
+      allow_dirty=1
+      shift
+      ;;
+    --label)
+      label="${2:?--label requires a value}"
+      shift 2
+      ;;
+    --assignee)
+      assignee="${2:?--assignee requires a value}"
+      shift 2
+      ;;
+    --model)
+      model="${2:?--model requires a value}"
+      shift 2
+      ;;
+    --thinking)
+      thinking="${2:?--thinking requires a value}"
+      shift 2
+      ;;
+    --dry-run)
+      dry_run=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -* )
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+    *)
+      if [[ -n "$issue" ]]; then
+        echo "Unexpected extra argument: $1" >&2
+        usage >&2
+        exit 2
+      fi
+      issue="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$issue" ]]; then
+  usage >&2
+  exit 2
+fi
+
+for cmd in git gh pi; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "Missing required command: $cmd" >&2
+    exit 1
+  fi
+done
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+if [[ "$issue" == "next" ]]; then
+  issue="$(gh issue list \
+    --state open \
+    --assignee "$assignee" \
+    --label "$label" \
+    --json number \
+    --jq 'sort_by(.number) | .[0].number // empty')"
+  if [[ -z "$issue" ]]; then
+    echo "No open issues found for assignee=$assignee label=$label" >&2
+    exit 0
+  fi
+fi
+
+if ! [[ "$issue" =~ ^[0-9]+$ ]]; then
+  echo "Issue must be a number or 'next', got: $issue" >&2
+  exit 2
+fi
+
+branch="$(git branch --show-current)"
+status_short="$(git status --short)"
+if [[ -n "$status_short" && "$allow_dirty" -eq 0 ]]; then
+  echo "Working tree is not clean:"
+  echo "$status_short"
+  echo
+  read -r -p "Continue and let pi treat this as in-progress work? [y/N] " answer
+  case "$answer" in
+    y|Y|yes|YES) ;;
+    *) echo "Aborted."; exit 1 ;;
+  esac
+fi
+
+issue_tmp="$(mktemp)"
+prompt_tmp="$(mktemp)"
+trap 'rm -f "$issue_tmp" "$prompt_tmp"' EXIT
+
+gh issue view "$issue" \
+  --json number,title,url,state,body,comments,labels,assignees \
+  --jq '"# #\(.number): \(.title)\n\nURL: \(.url)\nState: \(.state)\nLabels: \([.labels[].name] | join(", "))\nAssignees: \([.assignees[].login] | join(", "))\n\n## Body\n\n\(.body // "")\n\n## Comments\n\n\((.comments // []) | map("### Comment by \(.author.login) at \(.createdAt)\n\n\(.body)") | join("\n\n"))"' \
+  > "$issue_tmp"
+
+commit_instruction="Do NOT commit, close the issue, or push. Leave all changes in the working tree for human review."
+if [[ "$commit_mode" -eq 1 ]]; then
+  commit_instruction="If and only if verification passes, create exactly one focused git commit for issue #$issue. Do NOT close the issue or push."
+fi
+
+cat > "$prompt_tmp" <<EOF
+You are pi running non-interactively in repository:
+
+$repo_root
+
+Current branch: $branch
+GitHub issue: #$issue
+
+# Mission
+
+Work on exactly GitHub issue #$issue. Do not start any other issue. Keep the
+slice narrow and reviewable.
+
+# Required workflow
+
+1. Read the issue content below and inspect the repository before editing.
+2. Read project guidance, especially AGENTS.md and CLAUDE.md if present.
+3. If the working tree already has changes, treat them as existing in-progress
+   work for this issue unless they are clearly unrelated. Do not overwrite or
+   discard user changes without first proving they are irrelevant.
+4. Use TDD where practical:
+   - Add or update a failing behavior test first for new behavior or bug fixes.
+   - Make the smallest production change that passes the test.
+   - Refactor only with tests green.
+5. Run focused tests as you work. Before stopping, run the strongest reasonable
+   verification command for this repo. For this repo, prefer:
+   - ./script/test_fast for the fast verification loop
+   - ./script/test when the work is ready for full verification
+6. $commit_instruction
+7. If blocked, stop and explain the blocker honestly. Do not fake completion.
+
+# Final response contract
+
+End with a concise report containing:
+
+- Issue number and title
+- Summary of changes
+- Files changed
+- Tests/commands run and whether they passed
+- Any blockers or follow-up work
+- Whether you committed changes
+- Suggested human review checklist
+
+# Issue content
+
+$(cat "$issue_tmp")
+EOF
+
+if [[ "$dry_run" -eq 1 ]]; then
+  cat "$prompt_tmp"
+  exit 0
+fi
+
+pi_args=()
+if [[ -n "$model" ]]; then
+  pi_args+=(--model "$model")
+fi
+if [[ -n "$thinking" ]]; then
+  pi_args+=(--thinking "$thinking")
+fi
+pi_args+=(-p "Work the GitHub issue using the full instructions from stdin. When finished, stop and report according to the final response contract.")
+
+echo "Starting pi for issue #$issue on branch $branch..."
+echo "Commit mode: $([[ "$commit_mode" -eq 1 ]] && echo yes || echo no)"
+echo
+
+pi "${pi_args[@]}" < "$prompt_tmp"
+
+rc=$?
+echo
+echo "pi exited with status $rc"
+echo
+echo "Current git status:"
+git status --short
+
+echo
+echo "Useful next commands:"
+echo "  git diff --stat"
+echo "  git diff"
+echo "  ./script/test_fast"
+echo "  ./script/test"
+if [[ "$commit_mode" -eq 0 ]]; then
+  echo "  git add -A && git commit -m \"<summary> (#$issue)\""
+fi
+echo "  gh issue view $issue --comments"
+echo "  gh issue close $issue --comment \"Completed in <commit/branch>.\" --reason completed"
+
+exit "$rc"

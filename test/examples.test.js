@@ -3,9 +3,35 @@ const assert = require('node:assert')
 const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
+const crypto = require('crypto')
+const { validateConfig } = require('../lib/redesign/config')
 
-const EXAMPLE_DIR = path.join(__dirname, '..', 'example')
+const ROOT = path.join(__dirname, '..')
+const EXAMPLE_DIR = path.join(ROOT, 'example')
 const EXAMPLES = ['basic', 'advanced']
+const STRICT_EXAMPLES = ['pi-strict', 'claude-fast-follow', 'multi-adapter']
+
+function readJson (filePath) {
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'))
+}
+
+function sha256 (filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex')
+}
+
+function assertNoGeneratedSessionArtifacts (dir) {
+  const forbidden = []
+  function walk (current) {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const absolute = path.join(current, entry.name)
+      const relative = path.relative(dir, absolute).split(path.sep).join('/')
+      if (/sessions\//.test(relative) || /backchannel\//.test(relative)) forbidden.push(relative)
+      if (entry.isDirectory()) walk(absolute)
+    }
+  }
+  walk(dir)
+  assert.deepStrictEqual(forbidden, [], 'examples must not include generated sessions/backchannel artifacts')
+}
 
 describe('example projects', () => {
   for (const name of EXAMPLES) {
@@ -80,6 +106,104 @@ describe('example projects', () => {
       })
     })
   }
+
+  describe('strict adapter examples', () => {
+    for (const name of STRICT_EXAMPLES) {
+      describe(name, () => {
+        const dir = path.join(EXAMPLE_DIR, name)
+
+        it('has valid strict shared .prove_it config and ownership manifest', () => {
+          const cfgPath = path.join(dir, '.prove_it', 'config.json')
+          const manifestPath = path.join(dir, '.prove_it', 'ownership.json')
+          assert.ok(fs.existsSync(cfgPath), `${name} should have .prove_it/config.json`)
+          assert.ok(fs.existsSync(manifestPath), `${name} should have .prove_it/ownership.json`)
+
+          const cfg = readJson(cfgPath)
+          assert.doesNotThrow(() => validateConfig(cfg, '.prove_it/config.json'))
+          assert.ok(cfg.profile_version, 'strict examples should declare profile_version')
+          assert.ok(!fs.existsSync(path.join(dir, '.claude', 'prove_it', 'config.json')), 'strict examples must not include legacy .claude/prove_it config')
+
+          const manifest = readJson(manifestPath)
+          assert.strictEqual(manifest.owner, 'prove_it')
+          for (const artifact of manifest.artifacts) {
+            const artifactPath = path.join(dir, ...artifact.path.split('/'))
+            assert.ok(fs.existsSync(artifactPath), `${artifact.path} should exist`)
+            assert.strictEqual(artifact.sha256, sha256(artifactPath), `${artifact.path} manifest hash should match`)
+          }
+        })
+
+        it('documents adapter-native activation without generated runtime artifacts', () => {
+          const readme = fs.readFileSync(path.join(dir, 'README.md'), 'utf8')
+          assert.match(readme, /prove_it init --adapter/)
+          assert.match(readme, /Normal Claude hook dispatch.*ignores stale `\.claude\/prove_it\/config\.json`/s)
+          assertNoGeneratedSessionArtifacts(dir)
+        })
+      })
+    }
+
+    it('pi-first example uses the Pi package and Pi adapter only', () => {
+      const dir = path.join(EXAMPLE_DIR, 'pi-strict')
+      const cfg = readJson(path.join(dir, '.prove_it', 'config.json'))
+      const settings = readJson(path.join(dir, '.pi', 'settings.json'))
+      assert.strictEqual(cfg.adapters.pi.enabled, true)
+      assert.strictEqual(cfg.adapters.claude.enabled, false)
+      assert.strictEqual(cfg.profile, 'pi')
+      assert.ok(settings.packages.includes('npm:@davemo/pi-prove-it'))
+    })
+
+    it('claude parity example uses Claude-native settings without legacy workflow config fallback', () => {
+      const dir = path.join(EXAMPLE_DIR, 'claude-fast-follow')
+      const cfg = readJson(path.join(dir, '.prove_it', 'config.json'))
+      const settings = readJson(path.join(dir, '.claude', 'settings.json'))
+      const readme = fs.readFileSync(path.join(dir, 'README.md'), 'utf8')
+      assert.strictEqual(cfg.adapters.pi.enabled, false)
+      assert.strictEqual(cfg.adapters.claude.enabled, true)
+      assert.ok(settings.hooks.PreToolUse, 'Claude native PreToolUse hook should be configured')
+      assert.ok(settings.hooks.Stop, 'Claude native Stop hook should be configured')
+      assert.strictEqual(cfg.profile, 'claude')
+      assert.match(readme, /completed Claude Parity Cutover/)
+      assert.match(readme, /Normal Claude hook dispatch uses strict `\.prove_it\/config\.json`/)
+      assert.match(readme, /no supported dual-runtime compatibility mode/)
+      assert.doesNotMatch(readme, /does not yet generally consume strict `\.prove_it\/config\.json`/)
+    })
+
+    it('multi-adapter example keeps the strict profile so Pi avoids Claude-only defaults', () => {
+      const dir = path.join(EXAMPLE_DIR, 'multi-adapter')
+      const cfg = readJson(path.join(dir, '.prove_it', 'config.json'))
+      const readme = fs.readFileSync(path.join(dir, 'README.md'), 'utf8')
+      assert.strictEqual(cfg.adapters.pi.enabled, true)
+      assert.strictEqual(cfg.adapters.claude.enabled, true)
+      assert.strictEqual(cfg.profile, 'strict')
+      assert.match(readme, /profile: "strict"/)
+      assert.match(readme, /Pi does not inherit Claude-only default mechanics/)
+      assert.match(readme, /Human review is downstream\/external/)
+      assert.doesNotMatch(readme, /partial\/fast-follow/i)
+    })
+  })
+
+  describe('adapter documentation', () => {
+    it('publishes an honest capability comparison matrix and policy notes', () => {
+      const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8')
+      const adaptersDoc = fs.readFileSync(path.join(ROOT, 'docs', 'adapters.md'), 'utf8')
+      const combined = `${readme}\n${adaptersDoc}`
+
+      assert.match(combined, /methodology\/workflow engine/)
+      assert.match(combined, /Pi is first-class/)
+      assert.match(combined, /@davemo\/pi-prove-it/)
+      assert.match(combined, /remediation-after-turn-end|remediation after `turn_end`|remediation from `turn_end`/)
+      assert.match(combined, /Claude Parity Cutover|Claude parity behavior/)
+      assert.match(combined, /Normal `prove_it hook claude:<Event>` dispatch uses strict `\.prove_it\/config\.json`/)
+      assert.match(combined, /ignored by normal Claude hook dispatch/)
+      assert.match(combined, /no supported dual-runtime compatibility mode/i)
+      assert.match(combined, /Multi-adapter init currently (keeps|writes) `profile: "strict"`/)
+      assert.match(combined, /Human review is downstream\/external/)
+      assert.match(combined, /Codex.*deferred/i)
+      assert.match(combined, /Worktree support is future Platform Capability work/)
+      assert.match(adaptersDoc, /\| Capability \| Pi \| Claude \|/)
+      assert.match(adaptersDoc, /hard block/)
+      assert.match(adaptersDoc, /remediation/)
+    })
+  })
 
   describe('support infrastructure', () => {
     const supportDir = path.join(EXAMPLE_DIR, 'support')

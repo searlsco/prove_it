@@ -5,7 +5,12 @@ const path = require('path')
 const os = require('os')
 const { spawnSync } = require('child_process')
 
-const { readDisabledSentinel, writeDisabledSentinel } = require('../lib/session')
+const {
+  readDisabledSentinel,
+  writeDisabledSentinel,
+  getSessionControl,
+  disableSessionControl
+} = require('../lib/session')
 
 describe('prove_it disable / enable commands', () => {
   let tmpDir
@@ -50,6 +55,8 @@ describe('prove_it disable / enable commands', () => {
       assert.strictEqual(r.status, 0, `stderr: ${r.stderr}`)
       assert.strictEqual(readDisabledSentinel(sessionId), true,
         'Disabled sentinel should exist after disable')
+      assert.strictEqual(getSessionControl(sessionId).disabled?.active, true,
+        'Clean session control state should mark the session disabled')
     })
 
     it('prints warning banner with enable instructions', () => {
@@ -73,11 +80,15 @@ describe('prove_it disable / enable commands', () => {
     it('clears disabled sentinel when previously disabled', () => {
       const sessionId = 'enable-test-clear'
       writeDisabledSentinel(sessionId)
+      disableSessionControl(sessionId)
       assert.strictEqual(readDisabledSentinel(sessionId), true)
+      assert.strictEqual(getSessionControl(sessionId).disabled?.active, true)
       const r = run('enable', { PROVE_IT_SESSION_ID: sessionId })
       assert.strictEqual(r.status, 0, `stderr: ${r.stderr}`)
       assert.strictEqual(readDisabledSentinel(sessionId), false,
         'Disabled sentinel should be cleared')
+      assert.strictEqual(getSessionControl(sessionId).disabled, null,
+        'Clean disabled state should be cleared')
     })
 
     it('is idempotent when session was already enabled', () => {

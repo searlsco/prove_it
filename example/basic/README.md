@@ -1,18 +1,20 @@
-# prove_it basic example
+# prove_it basic legacy-characterization example
 
-A minimal project showing prove_it's default configuration.
+A minimal project retained to exercise the quarantined Legacy Runtime oracle in tests. It is not the recommended setup for new projects after the Claude hard break.
+
+For current Claude behavior, use `prove_it init --adapter claude`, which writes strict `.prove_it/config.json` as the Workflow Engine source of truth and `.claude/settings.json` only as Claude Adapter activation.
 
 ## What's included
 
-- `src/greet.js`—a simple greeting module
-- `test/greet.test.js`—tests using `node:test`
-- `script/test` and `script/test_fast`—test runners
-- `.claude/prove_it/config.json`—default prove_it config (output of `prove_it init`)
+- `src/greet.js` — a simple greeting module
+- `test/greet.test.js` — tests using `node:test`
+- `script/test` and `script/test_fast` — test runners
+- `.claude/prove_it/config.json` — retired Claude Legacy Config used only by test-only legacy characterization paths
 
 ## Prerequisites
 
 - Node.js >= 18
-- `prove_it install` (global hooks registered)
+- `prove_it install` if you intentionally want global Claude hook registration for legacy characterization
 
 ## Try it
 
@@ -23,18 +25,22 @@ cd example/basic
 ./script/test          # run tests
 ```
 
-Or copy the config to your own project:
+Do not copy `.claude/prove_it/config.json` into new projects as active workflow config. For new Claude projects, run:
 
 ```bash
-cp .claude/prove_it/config.json /path/to/your/project/.claude/prove_it/config.json
+prove_it init --adapter claude
 ```
 
 ## Testing hooks manually
 
-Pipe simulated hook input to the dispatcher:
+The normal Claude hook path ignores `.claude/prove_it/config.json` after the hard break. Repository tests that still exercise this example set the test-only legacy oracle guard explicitly.
 
 ```bash
-echo '{"hook_event_name":"Stop","session_id":"test","cwd":"."}' | prove_it hook claude:Stop
+printf '%s' '{"hook_event_name":"Stop","session_id":"test","cwd":"."}' | \
+  NODE_ENV=test \
+  PROVE_IT_LEGACY_CLAUDE_ORACLE=1 \
+  PROVE_IT_TEST_LEGACY_CLAUDE_ORACLE=1 \
+  prove_it hook claude:Stop
 ```
 
 ## Running from the local repo
@@ -43,10 +49,5 @@ To use the development version instead of the Homebrew install, prepend `test/bi
 
 ```bash
 # From this directory
-PATH="../../test/bin:$PATH" prove_it hook claude:Stop < input.json
 PATH="../../test/bin:$PATH" prove_it doctor
-
-# Run Claude Code against this example with the local prove_it
-cd example/basic
-PATH="../../test/bin:$PATH" claude
 ```

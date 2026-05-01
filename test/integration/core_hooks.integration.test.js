@@ -18,6 +18,18 @@ const {
   cleanRepo
 } = require('./hook-harness')
 
+function writeStrictGitConfig (repo, task, workflow = 'pre_commit') {
+  const { PROFILE_VERSION } = require('../../lib/redesign/config')
+  fs.mkdirSync(path.join(repo, '.prove_it'), { recursive: true })
+  fs.writeFileSync(path.join(repo, '.prove_it', 'config.json'), JSON.stringify({
+    schema_version: 1,
+    profile_version: PROFILE_VERSION,
+    tasks: { full_tests: task },
+    git_workflows: { [workflow]: ['full_tests'] },
+    adapters: { claude: { enabled: true } }
+  }, null, 2) + '\n')
+}
+
 describe('v2 dispatcher: core hook behaviors', () => {
   let tmpDir
 
@@ -204,7 +216,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
   describe('git hook CLAUDECODE guard', () => {
     it('exits 0 immediately when CLAUDECODE is absent', () => {
       createTestScript(tmpDir, false) // would fail if checks ran
-      writeConfig(tmpDir, makeConfig({ git: { 'pre-commit': [{ name: 'full-tests', type: 'script', command: './script/test' }] } }))
+      writeStrictGitConfig(tmpDir, { type: 'script', command: './script/test' })
 
       const result = invokeHook('git:pre-commit', {}, {
         projectDir: tmpDir,
@@ -219,7 +231,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
     it('runs checks when CLAUDECODE is set', () => {
       createTestScript(tmpDir, false)
-      writeConfig(tmpDir, makeConfig({ git: { 'pre-commit': [{ name: 'full-tests', type: 'script', command: './script/test' }] } }))
+      writeStrictGitConfig(tmpDir, { type: 'script', command: './script/test' })
 
       const result = invokeHook('git:pre-commit', {}, {
         projectDir: tmpDir,
@@ -230,13 +242,13 @@ describe('v2 dispatcher: core hook behaviors', () => {
 
       assert.strictEqual(result.exitCode, 1,
         'Git hook should exit 1 when CLAUDECODE is set and checks fail')
-      assert.ok(result.stderr.includes('full-tests'),
+      assert.ok(result.stderr.includes('full_tests'),
         `Stderr should mention failing check, got: ${result.stderr}`)
     })
 
     it('exits 0 when CLAUDECODE is set and checks pass', () => {
       createTestScript(tmpDir, true)
-      writeConfig(tmpDir, makeConfig({ git: { 'pre-commit': [{ name: 'full-tests', type: 'script', command: './script/test' }] } }))
+      writeStrictGitConfig(tmpDir, { type: 'script', command: './script/test' })
 
       const result = invokeHook('git:pre-commit', {}, {
         projectDir: tmpDir,
@@ -252,22 +264,20 @@ describe('v2 dispatcher: core hook behaviors', () => {
     })
   })
 
-  describe('git hook taskEnv propagation', () => {
-    it('git pre-commit script task sees config taskEnv vars', () => {
-      const fs = require('fs')
-      const path = require('path')
+  describe('git hook strict config isolation', () => {
+    it('git pre-commit ignores stale legacy taskEnv and runs strict script task', () => {
       createFile(tmpDir, 'script/test', [
         '#!/usr/bin/env bash',
         'if [ "$TURBOCOMMIT_DISABLED" = "1" ]; then',
-        '  exit 0',
-        'else',
-        '  echo "TURBOCOMMIT_DISABLED was not set" >&2',
+        '  echo "legacy taskEnv leaked" >&2',
         '  exit 1',
-        'fi'
+        'fi',
+        'exit 0'
       ].join('\n'))
       fs.chmodSync(path.join(tmpDir, 'script', 'test'), 0o755)
 
-      writeConfig(tmpDir, makeConfig({ git: { 'pre-commit': [{ name: 'full-tests', type: 'script', command: './script/test' }] } }, { taskEnv: { TURBOCOMMIT_DISABLED: '1' } }))
+      writeConfig(tmpDir, makeConfig({}, { taskEnv: { TURBOCOMMIT_DISABLED: '1' } }))
+      writeStrictGitConfig(tmpDir, { type: 'script', command: './script/test' })
 
       const result = invokeHook('git:pre-commit', {}, {
         projectDir: tmpDir,
@@ -277,7 +287,7 @@ describe('v2 dispatcher: core hook behaviors', () => {
       })
 
       assert.strictEqual(result.exitCode, 0,
-        `Git hook should pass when config taskEnv var is set, stderr: ${result.stderr}`)
+        `Git hook should pass because legacy taskEnv is ignored, stderr: ${result.stderr}`)
       assert.ok(result.stderr.includes('all checks passed'),
         `Stderr should confirm pass, got: ${result.stderr}`)
     })
