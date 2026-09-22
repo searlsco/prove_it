@@ -1,10 +1,117 @@
-# Agent Testing
+# prove_it Development Guide
 
-## The problem
+## Architecture
+
+prove_it is a config-driven hook framework for Claude Code. It reads `.claude/prove_it/config.json` from a project directory and runs matching tasks when Claude Code fires lifecycle events (SessionStart, PreToolUse, Stop). It also dispatches git hooks (pre-commit, pre-push).
+
+### Key modules
+
+- `cli.js`—CLI entry point, commands: install, uninstall, init, deinit, doctor, monitor, hook, prefix
+- `lib/dispatcher/claude.js`—Main dispatcher for Claude Code events
+- `lib/dispatcher/git.js`—Dispatcher for git hooks
+- `lib/dispatcher/protocol.js`—Output formatting for Claude Code hook API
+- `lib/checks/script.js`—Runs shell commands as tasks
+- `lib/checks/agent.js`—Runs AI agent reviewer tasks
+- `lib/checks/env.js`—Runs env tasks that inject environment variables via CLAUDE_ENV_FILE
+- `libexec/guard-config`—Standalone script: blocks edits to prove_it config files
+- `libexec/briefing`—Standalone script: renders session orientation on SessionStart
+- `lib/defaults.js`—Single source of truth for config defaults (`CONFIG_DEFAULTS`, `DEFAULT_MODELS`, `DEFAULT_ALLOWED_TOOLS`)
+- `lib/config.js`—Config loading, merging, and `buildConfig()` for init
+- `lib/init.js`—Project initialization, git hook shim management
+- `lib/template.js`—Template variable expansion for agent prompts
+- `lib/globs.js`—File matching, source detection, config path detection
+- `lib/monitor.js`—`prove_it monitor` CLI: tails session logs in human-readable format
+
+### Claude Code Hook API
+
+- PreToolUse: `permissionDecision` valid values are `"allow"`, `"deny"`, `"ask"` (inside `hookSpecificOutput`). Never use `"block"` or `"approve"`—Claude Code silently ignores them.
+- Stop: uses top-level `decision: "block"` or `"approve"` (different schema from PreToolUse).
+- SessionStart: outputs JSON with `additionalContext` and optionally `systemMessage`.
+- `session_id` is available in hook input for all events.
+
+## Testing
+
+```bash
+./script/test          # lint + unit tests + integration tests (the verification oracle)
+./script/test_fast     # lint + unit tests only (runs on Stop hook)
+npm run test:integration  # integration tests
+```
+
+- Unit tests: `test/*.test.js`
+- Integration tests: `test/integration/*.test.js`
+- Example validation: `test/examples.test.js`
+- Hook harness: `test/integration/hook-harness.js`
+
+## Running from source (local development)
+
+Use `./script/agent` to launch Claude Code with the local prove_it on PATH:
+
+```bash
+./script/agent                    # interactive
+./script/agent -p "fix the bug"  # with prompt
+```
+
+This prepends `test/bin/prove_it` (a shim to `cli.js`) to PATH so all hook dispatchers, libexec scripts, and transitive `prove_it` calls use the working tree. A `local-shim-check` runs on SessionStart to confirm the shim is active.
+
+The full agent testing workflow is in the Agent testing section below.
+
+## Releasing
+
+Use the `/release` skill. It reads `RELEASE.md` for the full process.
+
+## Two-tier installation model
+
+prove_it uses a two-tier activation model: `enabled` defaults to `false` in the
+dispatcher, so prove_it does nothing unless explicitly opted in.
+
+- **`install`/`uninstall`** manage global hook registrations in `~/.claude/settings.json`
+  and global config in `~/.claude/prove_it/config.json` (which sets `enabled: true`).
+  These never touch project files.
+- **`init`/`deinit`** manage project-level files only (`.claude/prove_it/config.json`, git shims).
+  These never touch `~/.claude/settings.json`.
+
+Because the global config sets `enabled: true`, prove_it runs in any project once
+installed globally. Deleting a project's `.claude/prove_it/config.json` does not stop
+prove_it if the global config has `enabled: true`—it just means no project-specific
+tasks are configured.
+
+### Config defaults cascade
+
+All config defaults live in `lib/defaults.js`. This is the single source of truth.
+
+The runtime config cascade (each layer overrides the previous):
+
+1. `configDefaults()` from `lib/defaults.js` — fully-qualified base config
+2. `~/.claude/prove_it/config.json` — global user config (written by `prove_it install`)
+3. Ancestor `.claude/prove_it/config.json` files — walked root-to-cwd
+4. `cwd/.claude/prove_it/config.local.json` — local project overrides
+
+By the time dispatcher code reads `cfg.maxAgentTurns`, it already has the
+default value of 10. No `|| fallback` patterns are needed downstream.
+
+**Rules:**
+- Never add `|| <default>` when reading from the merged config — add the
+  default to `CONFIG_DEFAULTS` in `lib/defaults.js` instead
+- `buildGlobalConfig()` and `baseConfig()` in `lib/config.js` reference
+  `CONFIG_DEFAULTS` so generated config files stay in sync with runtime
+- `DEFAULT_MODELS` and `DEFAULT_ALLOWED_TOOLS` also live in `lib/defaults.js`
+  (code-level constants, not user config, but same canonical location)
+
+## Conventions
+
+- No dependencies beyond Node.js stdlib (devDependencies: standard for linting only)
+- Linter: `npx standard --fix` (run automatically by `./script/test_fast`)
+- Config format: `hooks` is a two-level object `{ type: { event: [tasks] } }` where type is `claude` or `git`, event is the lifecycle event name, and tasks carry their own `matcher`/`source`/`triggers`. Hooks merge across config layers by task `name` (same-name = full replacement, new-name = append).
+- Infrastructure scripts live in `libexec/` and are referenced via `$(prove_it prefix)/libexec/<name>`
+- Agent reviewer prompts are distributed as Claude Code skills (`lib/skills/prove-coverage.md`, `lib/skills/prove-done.md`), resolved via `promptType: 'skill'`
+
+## Agent testing
+
+### The problem
 
 prove_it's hooks reference `prove_it` by name (e.g., `$(prove_it prefix)/libexec/guard-config`). When Claude Code fires hooks, the `prove_it` on PATH determines which version runs. During development, that's usually the Homebrew install—not your working tree.
 
-## The solution
+### The solution
 
 `script/agent` launches Claude Code with `test/bin/prove_it` prepended to PATH. This shim resolves to the repo's `cli.js`, so every `prove_it` invocation—hooks, libexec scripts, transitive calls—uses your local source.
 
@@ -13,7 +120,7 @@ prove_it's hooks reference `prove_it` by name (e.g., `$(prove_it prefix)/libexec
 ./script/agent -p "fix the bug"  # with prompt
 ```
 
-## How it works
+### How it works
 
 ```
 script/agent
@@ -27,7 +134,7 @@ script/agent
 
 All child processes inherit the modified PATH: hook dispatchers, libexec scripts, test scripts, agent reviewers.
 
-## Verification
+### Verification
 
 The project's `.claude/prove_it/config.json` includes a `local-shim-check` as the first SessionStart task. On every session start, it runs:
 
@@ -40,7 +147,7 @@ which prove_it | grep -q test/bin/prove_it
 
 This is a SessionStart task, so it warns but doesn't block—the agent sees the message and knows whether it's running against local source or the installed version.
 
-## When to use what
+### When to use what
 
 | Scenario | Command |
 |----------|---------|
@@ -49,3 +156,7 @@ This is a SessionStart task, so it warns but doesn't block—the agent sees the 
 | Test a single hook manually | `PATH="$(pwd)/test/bin:$PATH" prove_it hook claude:Stop <<< '{...}'` |
 | Test an example project | `cd example/basic && PATH="../../test/bin:$PATH" claude` |
 | Use the installed (released) version | `claude` (normal) |
+
+## Multi-machine sync
+
+This repository is edited from more than one Mac. Before starting work, fetch and integrate `origin/main` (fast-forward when possible). After finishing, commit everything uncommitted, including changes that are not yours unless another agent is actively working in this checkout, then fetch, integrate `origin/main`, and push. The full rule is in the global agent instructions (`~/icloud-drive/dotfiles/AGENTS.md`).
